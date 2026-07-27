@@ -1,0 +1,115 @@
+# ⚔️ MOR'IA — REALM OF SHADOWS (MMORPG)
+
+<div align="center">
+  <img src="public/images/logo.png" alt="Mor'ia Logo" width="280" />
+  <p><b>Um MMORPG completo com combate autoritativo, inspiração em Tibia & WoW, 100% no navegador.</b></p>
+</div>
+
+---
+
+## 🌟 O que é o Mor'ia?
+
+**Mor'ia** é um MMORPG moderno baseado em web que combina a progressão hardcore clássica do **Tibia** (skills por uso, sistema de bênçãos, perda de XP, Caveiras PvP, Depot) com mecânicas modernas do **World of Warcraft** (Cast Bar, Auto-Attack, Talent Trees, Dungeons em Ondas, Raid Warnings e Companions/Pets).
+
+O jogo foi arquitetado de forma **Data-Driven** com um servidor autoritativo em **Node.js + WebSockets** (anti-cheat real), painéis administrativos na web (`/admin`) e ferramentas ingame para criação de itens, feitiços, monstros, NPCs e missões em tempo real!
+
+---
+
+## ✨ Principais Funcionalidades
+
+### ⚔️ 14 Classes (Vocações) Únicas
+- **Knight, Paladin, Sorcerer, Druid, Warlock, Rogue, Priest, Death Knight, Monk, Ranger, Necromancer, Berserker, Shaman, Templar**.
+- **56 Magias** dedicadas, com escalonamento mágico, coeficientes, custos de mana, tempo de recarga e progressão por nível.
+
+### 🛡️ Progresso & Equipamentos
+- **13 Slots de Equipamento:** Weapon, Armor, Helmet, Legs, Boots, Shield, Ring L, Ring R, Amulet, Cloak, Belt, Gloves, Relic.
+- **5 Raridades:** Common, Uncommon, Rare, Epic, Legendary.
+- **7 Set Bonuses:** Conjuntos que ativam poderes ocultos (+dano, +XP, +lifesteal, +thorns) ao equipar peças compatíveis.
+- **12 Gemas & Socketing:** Insira gemas para personalizar seus atributos.
+- **Progresso Tibia-Style:** Skills de `Sword`, `Magic`, `Shielding` e `Distance` aumentam **com o uso real** durante as batalhas.
+- **14 Talentos em 4 Tiers:** Árvore de talentos customizável com pontos ganhos a cada nível.
+
+### 🐾 Companions, Dungeons & Eventos
+- **6 Pets / Companions:** Seguem o jogador, atacam o alvo selecionado automaticamente e causam dano em combate.
+- **Dungeon Portal:** Instância em 10 ondas (*Waves*) com dificuldade crescente e chefes desafiadores.
+- **Eventos Mundiais:** Invasões globais e chefes mundiais coordenados para todos os jogadores online.
+- **Sistema de Quests & Enigmas (Mystery Quests):** Missões com charadas estilo clássico de RPG.
+
+### 💀 Sistema PvP & Economia
+- **Sistema de Caveiras (Tibia):** Lawful 🟢, Suspect ⚪, Aggressor 🟡, Outlaw 🟠, Murderer 🔴, Wanted ⚫.
+- **Auction House Completa:** Compre e venda itens com outros jogadores.
+- **Depot Chest:** 40 slots seguros onde itens nunca são perdidos em caso de morte.
+- **Correio (Mailbox):** Envie mensagens, ouro e pacotes com itens para outros jogadores.
+
+---
+
+## 🎮 Controles e Atalhos
+
+| Tecla | Ação |
+| :--- | :--- |
+| **WASD / Setas** | Movimentar personagem |
+| **1 - 4** | Lançar feitiços rápidos |
+| **I** | Abrir Mochila (Itens / Crafting / Socketing) |
+| **C** | Painel do Personagem (13 Slots / Atributos / Sets) |
+| **T** | Árvore de Talentos |
+| **Q** | Livro de Missões (Quests) / Conquistas |
+| **B** | Bestiário (14 Entradas e Lore) |
+| **D** | DPS Meter |
+| **R** | Ativar / Desativar Auto-Attack |
+| **P / M** | Poção de HP / Poção de MP |
+| **E** | Interagir com NPC próximo |
+| **Espaço** | Montar / Desmontar (5 Montarias disponíveis) |
+| **Ctrl + Shift + A** | Painel Administrativo / Editor de Conteúdo In-Game |
+| **+ / -** | Zoom In / Zoom Out no mapa |
+
+---
+
+## 🚀 Como Rodar o Jogo Localmente
+
+### Pré-requisitos
+- **Node.js** 18 ou superior ([nodejs.org](https://nodejs.org))
+
+### 1. Iniciar em Modo Completo (Servidor MMO + Cliente Web)
+
+Abra seu terminal e execute:
+
+```bash
+# 1. Instalar dependências e compilar o cliente
+npm install
+npm run build
+
+# 2. Instalar e rodar o Servidor MMO Autoritativo
+cd server
+npm install
+npm start
+```
+
+Seu servidor iniciará na porta `3000`:
+- **Jogo:** [http://localhost:3000](http://localhost:3000)
+- **Painel Admin Web:** [http://localhost:3000/admin](http://localhost:3000/admin)
+- **Status / Health:** [http://localhost:3000/health](http://localhost:3000/health)
+
+> Abra o endereço `http://localhost:3000` em **múltiplas abas** do navegador — os jogadores aparecerão na tela e se movimentarão em tempo real!
+
+---
+
+## 🌍 Como Publicar Online para o Mundo (Grátis)
+
+Para a melhor experiência, o projeto está pré-configurado para uma arquitetura híbrida de custo zero:
+- **Cliente Web na Vercel** (CDN Global Instantânea) via arquivo `vercel.json`.
+- **Servidor MMO no Render.com** (WebSocket 24/7 + Node.js) via arquivo `render.yaml`.
+
+Para instruções completas de deploy, publicação de servidor e como criar novos itens, monstros e mapas usando o painel admin, consulte nosso guia em:
+👉 **[Guia Definitivo de Deploy & Criação de Conteúdo](docs/DEPLOY_AND_MODDING_GUIDE.md)**
+
+---
+
+## 📚 Documentação Adicional
+
+- 📖 **[Manual Completo e Lore de Mor'ia](docs/MORIA_DOCUMENTATION.md)** — Explicação detalhada sobre cada feitiço, classe, monstro, bênção, sistema de reputação e economia.
+- 🛠️ **[Guia do Servidor & Arquitetura](server/README.md)** — Detalhes sobre o protocolo WebSocket, Heartbeat, Rate-Limiting e estrutura de persistência.
+
+---
+
+## 📜 Licença
+Distribuído sob a Licença MIT. Veja `LICENSE` para mais informações.

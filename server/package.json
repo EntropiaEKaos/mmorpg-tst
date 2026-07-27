@@ -1,0 +1,20 @@
+{
+  "name": "moria-mmo-server",
+  "version": "2.0.0",
+  "description": "Production MMO server for Mor'ia - serves client + WebSocket real-time multiplayer",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "cd .. && npm install && npm run build",
+    "build:start": "npm run build && npm start",
+    "tunnel": "npx localtunnel --port 3000"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

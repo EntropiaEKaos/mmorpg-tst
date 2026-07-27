@@ -1,0 +1,25 @@
+# Render.com deployment config — FREE TIER
+# 1. Push this repo to GitHub
+# 2. Go to render.com → New → Web Service → connect your repo
+# 3. Render will auto-detect this file, OR use these settings manually:
+#
+#    Build Command:  cd server && npm install && cd .. && npm install && npm run build
+#    Start Command:  node server/server.js
+#    Environment:    Node 18+
+#    Plan:           Free
+#
+# The server serves both the game (dist/) and WebSocket on one port.
+
+services:
+  - type: web
+    name: moria-mmo
+    runtime: node
+    plan: free
+    buildCommand: cd server && npm install && cd .. && npm install && npm run build
+    startCommand: node server/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 18.17.0
+      - key: PORT
+        value: 3000

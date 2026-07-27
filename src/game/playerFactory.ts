@@ -1,0 +1,58 @@
+import type { Player } from './types';
+import { VOCATIONS } from './classes';
+
+export function createPlayer(name: string, vocationId: string): Player {
+  const v = VOCATIONS[vocationId] || VOCATIONS.knight;
+  return {
+    pos: { x: 40, y: 40 },
+    hp: v.baseHp,
+    maxHp: v.baseHp,
+    mana: v.baseMana,
+    maxMana: v.baseMana,
+    level: 1,
+    xp: 0,
+    xpNext: 100,
+    attack: v.baseAttack,
+    defense: v.baseDefense,
+    speed: 180,
+    magic: v.baseMagic,
+    gold: 100,
+    bankGold: 0,
+    lastAttack: 0,
+    lastRegen: 0,
+    direction: 'down',
+    name,
+    vocation: vocationId,
+    skills: {
+      fist: { level: 10, progress: 0 },
+      sword: { level: 10, progress: 0 },
+      axe: { level: 10, progress: 0 },
+      club: { level: 10, progress: 0 },
+      distance: { level: 10, progress: 0 },
+      shielding: { level: 10, progress: 0 },
+      magic: { level: 10, progress: 0 },
+      fishing: { level: 10, progress: 0 },
+    },
+    equipment: {},
+    buffs: [],
+    mounted: false,
+    blessings: 0,
+    aol: false,
+    quests: [],
+    activeQuests: [],
+    reputation: { town: 0 },
+    stats: {
+      monstersKilled: 0,
+      bossesKilled: 0,
+      damageDealt: 0,
+      damageTaken: 0,
+      healingDone: 0,
+      goldEarned: 0,
+      distanceWalked: 0,
+      spellsCast: 0,
+      deaths: 0,
+      levelUps: 0,
+    },
+    achievements: [],
+  };
+}

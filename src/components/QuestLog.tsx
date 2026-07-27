@@ -1,0 +1,200 @@
+import type { ActiveQuest, Quest } from '../game/types';
+import { QUESTS } from '../game/quests';
+import { ACHIEVEMENTS } from '../game/achievements';
+
+interface Props {
+  activeQuests: ActiveQuest[];
+  completedQuests: string[];
+  availableQuests: Quest[];
+  achievements: string[];
+  stats: {
+    monstersKilled: number;
+    bossesKilled: number;
+    damageDealt: number;
+    damageTaken: number;
+    healingDone: number;
+    goldEarned: number;
+    distanceWalked: number;
+    spellsCast: number;
+    deaths: number;
+    levelUps: number;
+  };
+  onClose: () => void;
+  onAcceptQuest?: (questId: string) => void;
+  onCompleteQuest?: (questId: string) => void;
+}
+
+export default function QuestLog({ activeQuests, completedQuests, availableQuests, achievements, stats, onClose, onAcceptQuest, onCompleteQuest }: Props) {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center p-4 z-20"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="rounded-lg border-2 p-4 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        style={{
+          background: 'linear-gradient(180deg, rgba(60,40,20,0.98) 0%, rgba(30,20,10,0.98) 100%)',
+          borderColor: '#8b6914',
+          boxShadow: '0 0 40px rgba(255,150,50,0.2)',
+        }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2
+            className="text-xl font-bold tracking-widest text-transparent bg-clip-text"
+            style={{ backgroundImage: 'linear-gradient(180deg, #f4e04d 0%, #8b6914 100%)' }}
+          >
+            📜 QUEST LOG
+          </h2>
+          <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-xl">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          {/* Active Quests */}
+          <section>
+            <h3 className="text-amber-300 font-bold text-sm mb-2 tracking-wider">🔥 ACTIVE ({activeQuests.length})</h3>
+            {activeQuests.length === 0 ? (
+              <div className="text-amber-200/40 text-xs italic p-2">No active quests. Talk to NPCs!</div>
+            ) : (
+              <div className="space-y-2">
+                {activeQuests.map((aq) => {
+                  const quest = QUESTS.find((q) => q.id === aq.questId);
+                  if (!quest) return null;
+                  const progress = aq.objectives.reduce((s, o) => s + o.current, 0) /
+                                   aq.objectives.reduce((s, o) => s + o.count, 0);
+                  return (
+                    <div key={aq.questId} className="p-3 rounded border border-amber-700/50 bg-amber-900/20">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="text-amber-100 font-bold">{quest.name}</div>
+                          <div className="text-amber-200/70 text-xs italic mt-0.5">{quest.description}</div>
+                        </div>
+                        <div className="text-right text-[10px] text-amber-300">
+                          <div>+{quest.rewards.xp} XP</div>
+                          <div>+{quest.rewards.gold} 🪙</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {aq.objectives.map((o, i) => (
+                          <div key={i} className="text-xs flex justify-between">
+                            <span className={o.current >= o.count ? 'text-green-400' : 'text-amber-200/80'}>
+                              {o.current >= o.count ? '✅' : '○'} {o.targetName}
+                            </span>
+                            <span className="text-amber-300 font-mono">{o.current}/{o.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="h-1 bg-black/60 rounded mt-2 overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-amber-500 to-amber-300"
+                             style={{ width: `${Math.min(100, progress * 100)}%` }} />
+                      </div>
+                      {onCompleteQuest && aq.objectives.every((o: any) => o.current >= o.count) && (
+                        <button onClick={() => onCompleteQuest(aq.questId)}
+                                className="mt-2 px-3 py-1 text-xs rounded bg-green-700/50 text-green-200 border border-green-600">
+                          ✅ Complete Quest
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Available */}
+          <section>
+            <h3 className="text-blue-300 font-bold text-sm mb-2 tracking-wider">📋 AVAILABLE ({availableQuests.length})</h3>
+            {availableQuests.length === 0 ? (
+              <div className="text-amber-200/40 text-xs italic p-2">No quests available right now.</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {availableQuests.map((q) => (
+                  <div key={q.id} className="p-2 rounded border border-blue-700/40 bg-blue-900/10 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="text-amber-100 font-bold">{q.name}</div>
+                      {onAcceptQuest && (
+                        <button onClick={() => onAcceptQuest(q.id)}
+                                className="px-2 py-0.5 text-[9px] rounded bg-blue-700/50 text-blue-200 border border-blue-600">
+                          ✓ Accept
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-amber-200/60 text-[10px] mt-0.5">Lv {q.levelRequired}+</div>
+                    <div className="text-amber-200/80 text-[10px] mt-1">{q.description}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Completed */}
+          <section>
+            <h3 className="text-green-300 font-bold text-sm mb-2 tracking-wider">✅ COMPLETED ({completedQuests.length})</h3>
+            <div className="grid grid-cols-3 gap-1.5">
+              {completedQuests.map((qid) => {
+                const q = QUESTS.find((qq) => qq.id === qid);
+                return q ? (
+                  <div key={qid} className="p-1.5 rounded border border-green-700/40 bg-green-900/10 text-xs text-green-300">
+                    ✅ {q.name}
+                  </div>
+                ) : null;
+              })}
+              {completedQuests.length === 0 && <div className="text-amber-200/40 text-xs italic">None yet</div>}
+            </div>
+          </section>
+
+          {/* Achievements */}
+          <section>
+            <h3 className="text-orange-300 font-bold text-sm mb-2 tracking-wider">🏆 ACHIEVEMENTS ({achievements.length}/{ACHIEVEMENTS.length})</h3>
+            <div className="grid grid-cols-3 gap-1.5">
+              {ACHIEVEMENTS.map((a) => {
+                const unlocked = achievements.includes(a.id);
+                return (
+                  <div
+                    key={a.id}
+                    className={`p-1.5 rounded border text-xs ${unlocked ? 'border-orange-500/60 bg-orange-900/20' : 'border-gray-700/40 bg-black/40 opacity-50'}`}
+                  >
+                    <div className="flex items-center gap-1">
+                      <span className="text-base">{a.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className={unlocked ? 'text-orange-200 font-bold' : 'text-gray-400 font-bold truncate'}>
+                          {a.name}
+                        </div>
+                        <div className="text-amber-200/60 text-[10px] truncate">{a.description}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Stats */}
+          <section>
+            <h3 className="text-purple-300 font-bold text-sm mb-2 tracking-wider">📊 STATISTICS</h3>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { label: 'Monsters Killed', value: stats.monstersKilled, icon: '🗡' },
+                { label: 'Bosses Killed', value: stats.bossesKilled, icon: '👑' },
+                { label: 'Damage Dealt', value: stats.damageDealt, icon: '💥' },
+                { label: 'Damage Taken', value: stats.damageTaken, icon: '🩸' },
+                { label: 'Healing Done', value: stats.healingDone, icon: '💚' },
+                { label: 'Gold Earned', value: stats.goldEarned, icon: '🪙' },
+                { label: 'Distance', value: stats.distanceWalked, icon: '🥾' },
+                { label: 'Spells Cast', value: stats.spellsCast, icon: '🔮' },
+                { label: 'Deaths', value: stats.deaths, icon: '☠' },
+                { label: 'Level Ups', value: stats.levelUps, icon: '⭐' },
+              ].map((s) => (
+                <div key={s.label} className="p-1.5 rounded border border-purple-700/40 bg-purple-900/10 text-xs">
+                  <div className="text-amber-200/60 text-[10px]">{s.icon} {s.label}</div>
+                  <div className="text-purple-200 font-bold">{s.value.toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
