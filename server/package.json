@@ -1,7 +1,7 @@
 {
   "name": "moria-mmo-server",
-  "version": "3.2.0",
-  "description": "Production authoritative MMO server for Mor'ia with account sessions and character ownership",
+  "version": "3.3.0",
+  "description": "Production authoritative MMO server for Mor'ia with secure sessions, world authority and persistent quest state",
   "main": "server.js",
   "type": "module",
   "scripts": {
