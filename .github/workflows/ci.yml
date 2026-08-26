@@ -21,11 +21,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            server/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install client dependencies
         run: npm ci
@@ -34,7 +32,7 @@ jobs:
         run: npm run build
 
       - name: Install server dependencies
-        run: npm ci --prefix server
+        run: npm install --prefix server --no-audit --no-fund
 
       - name: Check server syntax
         run: npm run check --prefix server
