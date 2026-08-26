@@ -31,21 +31,9 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
   const socketableItems = items.filter((i) => i.type === 'equipment' && i.equipment);
   const gemsInInventory = items.filter((i) => GEMS.some((g) => g.name === i.name));
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center p-4 z-20"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="rounded-lg border-2 p-4 max-w-2xl w-full max-h-[85vh] overflow-y-auto"
-        style={{
-          background: 'linear-gradient(180deg, rgba(60,40,20,0.98) 0%, rgba(30,20,10,0.98) 100%)',
-          borderColor: '#8b6914',
-          boxShadow: '0 0 40px rgba(255,150,50,0.2)',
-        }}
-      >
-        <div className="flex items-center justify-between mb-3">
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/65 p-4 backdrop-blur-md" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="moria-panel moria-scrollbar moria-fade-up max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-amber-200/20 p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex gap-2">
             <button
               onClick={() => setTab('items')}
@@ -72,7 +60,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
               💎 SOCKET
             </button>
           </div>
-          <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-xl">✕</button>
+          <button onClick={onClose} className="moria-button flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm text-slate-400" aria-label="Close inventory">✕</button>
         </div>
 
         {tab === 'socket' && onSocketGem && (
@@ -182,7 +170,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
         {tab === 'items' && showShop && shopItems && onBuy && (
           <div className="mb-4 p-3 rounded border-2"
                style={{ borderColor: '#f4e04d', background: 'rgba(244,224,77,0.05)' }}>
-            <div className="text-xs text-amber-300 tracking-widest mb-2">🛒 {shopName}'S SHOP</div>
+            <div className="moria-eyebrow mb-2">🛒 {shopName || 'MERCHANT'} · SHOP</div>
             <div className="grid grid-cols-2 gap-1.5">
               {shopItems.map((item, i) => (
                 <button
@@ -205,7 +193,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
         )}
 
         {tab === 'items' && (
-        <div className="grid grid-cols-8 gap-1.5">
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8">
           {items.map((item) => {
             const isEquipment = item.type === 'equipment' && item.equipment;
             const isPotion = item.type === 'potion';
@@ -224,9 +212,9 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                     }`}
                     style={{
                       background: isEquipment
-                        ? `linear-gradient(180deg, ${RARITY_COLORS[item.equipment!.rarity]}30 0%, rgba(20,10,5,0.9) 100%)`
-                        : 'linear-gradient(180deg, rgba(40,30,15,0.8) 0%, rgba(20,10,5,0.9) 100%)',
-                      borderColor: isEquipment ? RARITY_COLORS[item.equipment!.rarity] : '#8b6914',
+                        ? `linear-gradient(180deg, ${RARITY_COLORS[item.equipment!.rarity]}24 0%, rgba(7,11,18,0.96) 100%)`
+                        : 'linear-gradient(180deg, rgba(25,34,48,0.86) 0%, rgba(7,11,18,0.96) 100%)',
+                      borderColor: isEquipment ? RARITY_COLORS[item.equipment!.rarity] : 'rgba(229,196,119,0.22)',
                     }}
                   >
                   <div className="text-2xl">{item.icon}</div>
@@ -244,7 +232,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                   {/* Mastery percentage bar (like skills) - shown for equipment when playerName provided */}
                   {isEquipment && playerName && item.equipment && (() => {
                     const mastery = getItemMastery(playerName, item.equipment.id);
-                    const mPct = (mastery.progress / (mastery.level * 10)) * 100;
+                    const mPct = Math.max(0, Math.min(100, (mastery.progress / Math.max(1, mastery.level * 10)) * 100));
                     return mastery.level > 1 ? (
                       <div className="absolute bottom-0 left-0 right-0 px-0.5 pb-0.5 pointer-events-none">
                         <div className="text-[7px] text-amber-300 text-center font-bold leading-tight" style={{ textShadow: '0 0 2px #000' }}>Lv{mastery.level}</div>

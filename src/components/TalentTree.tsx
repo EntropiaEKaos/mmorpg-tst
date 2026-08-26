@@ -68,7 +68,7 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
 
   const totalPoints = player.level;
   const spentPoints = Object.values(effectiveRanks).reduce((s, v) => s + v, 0);
-  const availablePoints = totalPoints - spentPoints;
+  const availablePoints = Math.max(0, totalPoints - spentPoints);
   const talents = getTalents(player.vocation, effectiveRanks);
 
   const canSpend = (talent: Talent): boolean => {
@@ -145,20 +145,8 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
   ];
 
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center p-4 z-20"
-      style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="rounded-lg border-2 p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
-        style={{
-          background: 'linear-gradient(180deg, rgba(50,25,10,0.98) 0%, rgba(25,12,5,0.98) 100%)',
-          borderColor: vocation?.color || '#8b6914',
-          boxShadow: `0 0 40px ${vocation?.color || '#8b6914'}30`,
-        }}
-      >
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="moria-panel moria-scrollbar moria-fade-up max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border p-4 sm:p-6" style={{ borderColor: `${vocation?.color || '#e5c477'}55`, boxShadow: `0 30px 90px rgba(0,0,0,.55), 0 0 40px ${vocation?.color || '#e5c477'}12` }}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold tracking-widest text-transparent bg-clip-text"
@@ -173,12 +161,12 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
             <button
               onClick={resetTalents}
               disabled={player.gold < 500}
-              className="px-3 py-1 text-xs rounded bg-red-900/40 hover:bg-red-700/60 text-red-200 border border-red-700/50 disabled:opacity-40"
+              className="moria-button rounded-lg px-3 py-1.5 text-[10px] font-bold text-rose-200 disabled:opacity-40"
               title="Reset all talents (500 gold)"
             >
               🔄 Reset (500🪙)
             </button>
-            <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-xl">✕</button>
+            <button onClick={onClose} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400" aria-label="Close talent tree">✕</button>
           </div>
         </div>
 
@@ -194,7 +182,7 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
               <div className="text-[10px] text-amber-200/50 tracking-widest mb-2 border-b border-amber-900/30 pb-1">
                 TIER {tierIdx + 1} {tierIdx === 3 ? '(ULTIMATE)' : tierIdx >= 2 ? '(ADVANCED)' : tierIdx === 1 ? '(IMPROVED)' : '(BASIC)'}
               </div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {tier.map((talent) => {
                   const available = canSpend(talent);
                   const maxed = talent.currentRank >= talent.maxRank;

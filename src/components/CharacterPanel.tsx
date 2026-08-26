@@ -30,26 +30,14 @@ const SLOTS: Array<{ slot: EquipmentSlot; label: string; icon: string }> = [
 
 export default function CharacterPanel({ player, onClose, onUnequip }: Props) {
   const vocation = VOCATIONS[player.vocation];
-  const hpPct = (player.hp / player.maxHp) * 100;
-  const mpPct = (player.mana / player.maxMana) * 100;
-  const xpPct = (player.xp / player.xpNext) * 100;
   const derived = computeDerivedStats(player);
+  const hpPct = Math.max(0, Math.min(100, (player.hp / Math.max(1, derived.totalMaxHp)) * 100));
+  const mpPct = Math.max(0, Math.min(100, (player.mana / Math.max(1, derived.totalMaxMana)) * 100));
+  const xpPct = Math.max(0, Math.min(100, (player.xp / Math.max(1, player.xpNext)) * 100));
 
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center p-4 z-20"
-      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="rounded-xl border-2 p-5 max-w-5xl w-full max-h-[92vh] overflow-y-auto"
-        style={{
-          background: 'linear-gradient(180deg, rgba(60,40,20,0.98) 0%, rgba(30,20,10,0.99) 100%)',
-          borderColor: vocation?.color || '#8b6914',
-          boxShadow: `0 0 50px ${vocation?.color || '#8b6914'}30`,
-        }}
-      >
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/68 p-4 backdrop-blur-md" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="moria-panel moria-scrollbar moria-fade-up max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border p-4 sm:p-6" style={{ borderColor: `${vocation?.color || '#e5c477'}55`, boxShadow: `0 30px 90px rgba(0,0,0,.55), 0 0 45px ${vocation?.color || '#e5c477'}14` }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -65,14 +53,14 @@ export default function CharacterPanel({ player, onClose, onUnequip }: Props) {
               <div className="text-amber-200/70 text-xs">{vocation?.name || 'Unknown'} · Level {player.level}</div>
             </div>
           </div>
-          <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-2xl">✕</button>
+          <button onClick={onClose} className="moria-button flex h-9 w-9 items-center justify-center rounded-xl text-sm text-slate-400" aria-label="Close character panel">✕</button>
         </div>
 
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
           {/* Left: Paper Doll Equipment */}
-          <div className="col-span-5">
+          <div className="xl:col-span-5">
             <div className="text-[10px] text-amber-200/60 tracking-widest mb-2">⚔ EQUIPMENT (13 SLOTS)</div>
-            <div className="rounded-lg p-3 border border-amber-900/40" style={{ background: 'rgba(0,0,0,0.3)' }}>
+            <div className="moria-card rounded-2xl p-3">
               <div className="grid grid-cols-3 gap-2">
                 {SLOTS.map(({ slot, label, icon }) => {
                   const eq = player.equipment[slot];
@@ -91,9 +79,9 @@ export default function CharacterPanel({ player, onClose, onUnequip }: Props) {
                         className={`aspect-square rounded-lg border-2 flex flex-col items-center justify-center text-xs transition-all ${eq ? 'cursor-pointer hover:scale-105' : 'cursor-default'}`}
                         style={{
                           background: eq
-                            ? `linear-gradient(180deg, ${RARITY_COLORS[eq.rarity]}40 0%, rgba(20,10,5,0.95) 100%)`
-                            : 'linear-gradient(180deg, rgba(40,30,15,0.5) 0%, rgba(15,8,4,0.8) 100%)',
-                          borderColor: eq ? RARITY_COLORS[eq.rarity] : 'rgba(139,105,20,0.3)',
+                            ? `linear-gradient(180deg, ${RARITY_COLORS[eq.rarity]}28 0%, rgba(7,11,18,0.96) 100%)`
+                            : 'linear-gradient(180deg, rgba(25,34,48,0.72) 0%, rgba(7,11,18,0.96) 100%)',
+                          borderColor: eq ? RARITY_COLORS[eq.rarity] : 'rgba(150,170,202,0.18)',
                           boxShadow: eq ? `0 0 10px ${RARITY_COLORS[eq.rarity]}40` : 'none',
                         }}
                       >
@@ -108,14 +96,14 @@ export default function CharacterPanel({ player, onClose, onUnequip }: Props) {
 
             {/* Bars */}
             <div className="mt-3 space-y-1.5">
-              <Bar label="❤ HP" value={player.hp} max={player.maxHp} color="red" pct={hpPct} />
-              <Bar label="✦ MP" value={player.mana} max={player.maxMana} color="blue" pct={mpPct} />
+              <Bar label="❤ HP" value={player.hp} max={derived.totalMaxHp} color="red" pct={hpPct} />
+              <Bar label="✦ MP" value={player.mana} max={derived.totalMaxMana} color="blue" pct={mpPct} />
               <Bar label="★ XP" value={player.xp} max={player.xpNext} color="amber" pct={xpPct} />
             </div>
           </div>
 
           {/* Middle: Core Stats */}
-          <div className="col-span-3 space-y-3">
+          <div className="space-y-3 xl:col-span-3">
             <div>
               <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">📊 STATS</div>
               <div className="space-y-1">
@@ -201,7 +189,7 @@ export default function CharacterPanel({ player, onClose, onUnequip }: Props) {
           </div>
 
           {/* Right: Blessings, Professions, Reputation, Stamina */}
-          <div className="col-span-4 space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+          <div className="moria-scrollbar max-h-[70vh] space-y-3 overflow-y-auto pr-1 xl:col-span-4">
             <div>
               <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">✨ BLESSINGS ({getBlessings(player).length}/{BLESSINGS.length})</div>
               <div className="space-y-1">
