@@ -109,6 +109,35 @@ function customMonsterToRuntime(monster: CustomMonster): Monster {
 const customContentOnMap = <T extends { mapId?: string }>(content: T[], mapId: string) =>
   content.filter((entry) => (entry.mapId || 'eldoria') === mapId);
 
+function serverNpcToClient(raw: any, quests: Quest[]): { mapId: string; npc: NPC } | null {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim()) return null;
+  const x = Math.floor(Number(raw.posX));
+  const y = Math.floor(Number(raw.posY));
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) return null;
+  const mapId = typeof raw.mapId === 'string' && MAPS[raw.mapId] ? raw.mapId : 'eldoria';
+  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper'];
+  const role: NPC['role'] = validRoles.includes(raw.role as NPC['role']) ? raw.role as NPC['role'] : 'guard';
+  const options: NPC['dialogues'][number]['options'] = quests
+    .filter((quest) => quest.npcId === raw.id)
+    .map((quest) => ({ text: `📜 ${quest.name}`, action: 'quest' as const, questId: quest.id }));
+  options.push({ text: 'Farewell.', action: 'bye' });
+  return {
+    mapId,
+    npc: {
+      id: raw.id.trim(),
+      name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : raw.id.trim(),
+      pos: { x, y },
+      emoji: typeof raw.emoji === 'string' && raw.emoji ? raw.emoji.slice(0, 8) : '🧙',
+      color: typeof raw.color === 'string' && raw.color ? raw.color : '#9bd4ff',
+      role,
+      dialogues: [{
+        text: typeof raw.dialogue === 'string' && raw.dialogue.trim() ? raw.dialogue.trim() : 'Greetings, traveler!',
+        options,
+      }],
+    },
+  };
+}
+
 function serverQuestToClient(raw: any): Quest | null {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim()) return null;
   const target = typeof raw.target === 'string' && raw.target.trim() ? raw.target.trim() : 'objective';
@@ -139,6 +168,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [showQuestLog, setShowQuestLog] = useState(false);
   const serverQuestsRef = useRef<{ active: any[]; completed: string[] } | null>(null);
   const [serverQuestCatalog, setServerQuestCatalog] = useState<Quest[]>([]);
+  const serverNpcCatalogRef = useRef<Array<{ mapId: string; npc: NPC }>>([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showTalents, setShowTalents] = useState(false);
   const [showBestiary, setShowBestiary] = useState(false);
@@ -533,7 +563,12 @@ export default function GameScreen({ account, onLogout }: Props) {
               ? content.quests.map(serverQuestToClient).filter((q: Quest | null): q is Quest => Boolean(q))
               : [];
             setServerQuestCatalog(quests);
-            addMessage('System', `📡 Server content synced: ${content.items?.length||0} items, ${content.monsters?.length||0} monsters, ${quests.length} quests`, '#9bd4ff', 'system');
+            const serverNpcs: Array<{ mapId: string; npc: NPC }> = Array.isArray(content.npcs)
+              ? content.npcs.map((npc: any) => serverNpcToClient(npc, quests)).filter((entry: { mapId: string; npc: NPC } | null): entry is { mapId: string; npc: NPC } => Boolean(entry))
+              : [];
+            serverNpcCatalogRef.current = serverNpcs;
+            npcsRef.current = serverNpcs.filter((entry) => entry.mapId === currentMapIdRef.current).map((entry) => entry.npc);
+            addMessage('System', `📡 Server content synced: ${content.items?.length||0} items, ${content.monsters?.length||0} monsters, ${quests.length} quests, ${serverNpcs.length} NPCs`, '#9bd4ff', 'system');
           } catch {}
           break;
         }
@@ -1275,6 +1310,11 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (ground && Math.hypot(tile.x - p.pos.x, tile.y - p.pos.y) <= 2) { serverSync.sendPickup(ground.id); return; }
       const monster = serverMonstersRef.current.find((m: any) => m.x === tile.x && m.y === tile.y && m.hp > 0);
       if (monster) { p.targetId = monster.id; serverSync.sendAttack(monster.id); return; }
+      const npc = npcsRef.current.find((candidate) => candidate.pos.x === tile.x && candidate.pos.y === tile.y);
+      if (npc && Math.abs(npc.pos.x - p.pos.x) <= 2 && Math.abs(npc.pos.y - p.pos.y) <= 2) {
+        setActiveDialog(npc);
+        return;
+      }
       p.targetId = undefined;
       return;
     }
@@ -1640,6 +1680,11 @@ export default function GameScreen({ account, onLogout }: Props) {
             setCurrentMapId(sp.mapId);
             worldRef.current = generateMap(sp.mapId);
             buildingsRef.current = getTownBuildings(MAPS[sp.mapId].biome);
+            if (serverNpcCatalogRef.current.length > 0) {
+              npcsRef.current = serverNpcCatalogRef.current
+                .filter((entry) => entry.mapId === sp.mapId)
+                .map((entry) => entry.npc);
+            }
             audio.teleport();
           }
           serverMonstersRef.current = renderState.monsters;
