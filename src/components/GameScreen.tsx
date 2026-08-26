@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type {
   Player, Monster, Projectile, FloatingText, Particle, ChatMessage,
-  Item, Spell, Account, NPC, Toast, ActiveQuest, Equipment,
+  Item, Spell, Account, NPC, Toast, ActiveQuest, Equipment, Quest,
 } from '../game/types';
 import { computeDerivedStats } from '../game/types';
 import {
@@ -109,6 +109,25 @@ function customMonsterToRuntime(monster: CustomMonster): Monster {
 const customContentOnMap = <T extends { mapId?: string }>(content: T[], mapId: string) =>
   content.filter((entry) => (entry.mapId || 'eldoria') === mapId);
 
+function serverQuestToClient(raw: any): Quest | null {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim()) return null;
+  const target = typeof raw.target === 'string' && raw.target.trim() ? raw.target.trim() : 'objective';
+  const count = Math.max(1, Math.floor(Number(raw.count) || 1));
+  return {
+    id: raw.id.trim(),
+    name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : raw.id.trim(),
+    description: typeof raw.description === 'string' ? raw.description : '',
+    npcId: typeof raw.npcId === 'string' ? raw.npcId : '',
+    objectives: [{ type: 'kill', target, targetName: target, count, current: 0 }],
+    rewards: {
+      xp: Math.max(0, Math.floor(Number(raw.rewardXp) || 0)),
+      gold: Math.max(0, Math.floor(Number(raw.rewardGold) || 0)),
+    },
+    requires: Array.isArray(raw.requires) ? raw.requires.filter((id: unknown): id is string => typeof id === 'string') : [],
+    levelRequired: Math.max(1, Math.floor(Number(raw.levelRequired) || 1)),
+  };
+}
+
 export default function GameScreen({ account, onLogout }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onlineAccount = Boolean(account.sessionToken && !account.offline);
@@ -119,6 +138,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [showCharacter, setShowCharacter] = useState(false);
   const [showQuestLog, setShowQuestLog] = useState(false);
   const serverQuestsRef = useRef<{ active: any[]; completed: string[] } | null>(null);
+  const [serverQuestCatalog, setServerQuestCatalog] = useState<Quest[]>([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showTalents, setShowTalents] = useState(false);
   const [showBestiary, setShowBestiary] = useState(false);
@@ -509,7 +529,11 @@ export default function GameScreen({ account, onLogout }: Props) {
           try {
             const content = msg.payload;
             localStorage.setItem('moria_server_content', JSON.stringify(content));
-            addMessage('System', `📡 Server content synced: ${content.items?.length||0} items, ${content.monsters?.length||0} monsters`, '#9bd4ff', 'system');
+            const quests = Array.isArray(content.quests)
+              ? content.quests.map(serverQuestToClient).filter((q: Quest | null): q is Quest => Boolean(q))
+              : [];
+            setServerQuestCatalog(quests);
+            addMessage('System', `📡 Server content synced: ${content.items?.length||0} items, ${content.monsters?.length||0} monsters, ${quests.length} quests`, '#9bd4ff', 'system');
           } catch {}
           break;
         }
@@ -2413,7 +2437,17 @@ export default function GameScreen({ account, onLogout }: Props) {
     ctx.restore();
   };
 
-  const availableQuests = getAvailableQuests(player.quests, player.level, player.activeQuests.map((a) => a.questId));
+  const localAvailableQuests = getAvailableQuests(player.quests, player.level, player.activeQuests.map((a) => a.questId));
+  const questCatalog = serverSync.isActive() && serverQuestCatalog.length > 0 ? serverQuestCatalog : QUESTS;
+  const activeQuestIds = new Set(player.activeQuests.map((quest) => quest.questId));
+  const completedQuestIds = new Set(player.quests);
+  const authoritativeAvailableQuests = questCatalog.filter((quest) =>
+    player.level >= quest.levelRequired
+    && !activeQuestIds.has(quest.id)
+    && !completedQuestIds.has(quest.id)
+    && (quest.requires || []).every((required) => completedQuestIds.has(required))
+  );
+  const availableQuests = serverSync.isActive() ? authoritativeAvailableQuests : localAvailableQuests;
 
   const quickActions: Record<string, { icon: string; label: string; hotkey: string; onClick: () => void }> = {
     quests: { icon: '📜', label: 'Quests', hotkey: 'Q', onClick: () => setShowQuestLog((v) => !v) },
@@ -2797,9 +2831,10 @@ export default function GameScreen({ account, onLogout }: Props) {
           <Chat messages={messages} onSendMessage={(text) => { addMessage(player.name, text, '#ffffff', 'world'); broadcastChat(player.name, text, '#ffffff', 'world'); }} />
           {showQuestLog && (
             <QuestLog
-              activeQuests={serverSync.isActive() && serverQuestsRef.current ? serverQuestsRef.current.active : player.activeQuests}
+              activeQuests={player.activeQuests}
               completedQuests={serverSync.isActive() && serverQuestsRef.current ? serverQuestsRef.current.completed : player.quests}
               availableQuests={availableQuests}
+              questCatalog={questCatalog}
               achievements={player.achievements}
               stats={player.stats}
               onClose={() => setShowQuestLog(false)}
