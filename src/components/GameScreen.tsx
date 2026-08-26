@@ -48,7 +48,7 @@ import { getWorldEvents, maybeSpawnSystemEvent, contributeToWorldEvent, generate
 import { net, broadcastPlayer, broadcastChat, type NetPlayer, type NetMessage } from '../game/network';
 import { serverSync } from '../game/ServerSync';
 import { loadLocal, saveLocal, applySave, persistSubSystems } from '../game/SaveManager';
-import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, getUILayout, saveUILayout, type CustomNPC, type CustomMonster } from '../game/content';
+import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, getUILayout, saveUILayout, DEFAULT_UI_PANEL_ORDER, type UILayout, type CustomNPC, type CustomMonster } from '../game/content';
 import { getTownBuildings } from '../game/world';
 import { drawBuilding, type Building } from '../game/render';
 import Weather from './Weather';
@@ -104,6 +104,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [showCoinShop, setShowCoinShop] = useState(false);
   const [showWorldEvents, setShowWorldEvents] = useState(false);
   const [showWorldEventCreator, setShowWorldEventCreator] = useState(false);
+  const [uiLayout, setUILayoutState] = useState<UILayout>(() => getUILayout(account.characterName));
   const simPlayersRef = useRef<SimPlayer[]>(generateSimPlayers(6, MAP_WIDTH, MAP_HEIGHT));
   const lastSimChatRef = useRef(0);
   const lastEventCheckRef = useRef(0);
@@ -2377,6 +2378,25 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   const availableQuests = getAvailableQuests(player.quests, player.level, player.activeQuests.map((a) => a.questId));
 
+  const quickActions: Record<string, { icon: string; label: string; hotkey: string; onClick: () => void }> = {
+    quests: { icon: '📜', label: 'Quests', hotkey: 'Q', onClick: () => setShowQuestLog((v) => !v) },
+    char: { icon: '👤', label: 'Char', hotkey: 'C', onClick: () => setShowCharacter((v) => !v) },
+    talents: { icon: '🌟', label: 'Talents', hotkey: 'T', onClick: () => setShowTalents((v) => !v) },
+    bestiary: { icon: '📖', label: 'Bestiary', hotkey: 'B', onClick: () => setShowBestiary((v) => !v) },
+    dps: { icon: '📊', label: 'DPS', hotkey: 'D', onClick: () => setShowDPS((v) => !v) },
+    dungeon: { icon: '🌀', label: 'Dungeon', hotkey: '', onClick: () => setShowDungeon(true) },
+    pet: { icon: '🐾', label: 'Pet', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Companions are local-only until server support lands.', '#ff9090', 'system') : setShowPetShop(true) },
+    mystery: { icon: '✦', label: 'Mystery', hotkey: '', onClick: () => setShowMysteryBook(true) },
+    depot: { icon: '🗄', label: 'Depot', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Depot is local-only until server support lands.', '#ff9090', 'system') : setShowDepot(true) },
+    books: { icon: '📚', label: 'Books', hotkey: '', onClick: () => setShowBooks(true) },
+    auction: { icon: '🏛', label: 'AH', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Auction House is local-only until server support lands.', '#ff9090', 'system') : setShowAuction(true) },
+    coins: { icon: '💎', label: 'Coins', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Coin Shop is local-only until server support lands.', '#ff9090', 'system') : setShowCoinShop(true) },
+    world: { icon: '🌍', label: 'World', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Browser world events are disabled in authoritative mode.', '#ff9090', 'system') : setShowWorldEvents(true) },
+    mail: { icon: '📮', label: 'Mail', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Mail is local-only until server support lands.', '#ff9090', 'system') : setShowMail(true) },
+    inv: { icon: '📦', label: 'Inv', hotkey: 'I', onClick: () => setShowInventory((v) => !v) },
+  };
+  const orderedQuickActions = uiLayout.panelOrder.map((id) => ({ id, action: quickActions[id] })).filter((entry) => Boolean(entry.action));
+
   return (
     <div className="w-screen h-screen flex flex-col bg-[#05070c] text-slate-100 overflow-hidden select-none">
       {/* Top bar */}
@@ -2387,21 +2407,9 @@ export default function GameScreen({ account, onLogout }: Props) {
           <span className="moria-chip rounded-lg px-2 py-1 text-[9px] font-bold tracking-wider" style={{ color: MAPS[currentMapId]?.biome === 'snow' ? '#9bd4ff' : MAPS[currentMapId]?.biome === 'shadow' ? '#b398ff' : '#71d8ac', borderColor: 'currentColor' }}>◆ {MAPS[currentMapId]?.name}</span>
         </div>
         <div className="moria-scrollbar flex min-w-0 flex-1 items-center justify-end gap-1 overflow-x-auto pb-0.5">
-          <TopButton icon="📜" label="Quests" hotkey="Q" onClick={() => setShowQuestLog((s) => !s)} />
-          <TopButton icon="👤" label="Char" hotkey="C" onClick={() => setShowCharacter((s) => !s)} />
-          <TopButton icon="🌟" label="Talents" hotkey="T" onClick={() => setShowTalents((s) => !s)} />
-          <TopButton icon="📖" label="Bestiary" hotkey="B" onClick={() => setShowBestiary((s) => !s)} />
-          <TopButton icon="📊" label="DPS" hotkey="D" onClick={() => setShowDPS((s) => !s)} />
-          <TopButton icon="🌀" label="Dungeon" hotkey="" onClick={() => setShowDungeon(true)} />
-          <TopButton icon="🐾" label="Pet" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Companions are local-only until server support lands.', '#ff9090', 'system') : setShowPetShop(true)} />
-          <TopButton icon="✦" label="Mystery" hotkey="" onClick={() => setShowMysteryBook(true)} />
-          <TopButton icon="🗄" label="Depot" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Depot is local-only until server support lands.', '#ff9090', 'system') : setShowDepot(true)} />
-          <TopButton icon="📚" label="Books" hotkey="" onClick={() => setShowBooks(true)} />
-          <TopButton icon="🏛" label="AH" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Auction House is local-only until server support lands.', '#ff9090', 'system') : setShowAuction(true)} />
-          <TopButton icon="💎" label="Coins" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Coin Shop is local-only until server support lands.', '#ff9090', 'system') : setShowCoinShop(true)} />
-          <TopButton icon="🌍" label="World" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Browser world events are disabled in authoritative mode.', '#ff9090', 'system') : setShowWorldEvents(true)} />
-          <TopButton icon="📮" label="Mail" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Mail is local-only until server support lands.', '#ff9090', 'system') : setShowMail(true)} />
-          <TopButton icon="📦" label="Inv" hotkey="I" onClick={() => setShowInventory((s) => !s)} />
+          {orderedQuickActions.map(({ id, action }) => (
+            <TopButton key={id} icon={action.icon} label={action.label} hotkey={action.hotkey} onClick={action.onClick} />
+          ))}
           <TopButton icon="⚙" label="UI" hotkey="" onClick={() => setShowUIEditor(true)} />
           <TopButton icon="🐎" label="Mount" hotkey="SPACE" onClick={toggleMount} />
           <button
@@ -2644,7 +2652,7 @@ export default function GameScreen({ account, onLogout }: Props) {
             />
           )}
           {showUIEditor && (
-            <UILayoutEditor player={player} onClose={() => setShowUIEditor(false)} />
+            <UILayoutEditor player={player} layout={uiLayout} onLayoutChange={setUILayoutState} onClose={() => setShowUIEditor(false)} />
           )}
           {showQuestCreator && (
             <QuestCreator onClose={() => setShowQuestCreator(false)} />
@@ -2855,20 +2863,23 @@ export default function GameScreen({ account, onLogout }: Props) {
 }
 
 // ============ UI LAYOUT EDITOR (editable backpacks/panels) ============
-function UILayoutEditor({ player, onClose }: { player: Player; onClose: () => void }) {
-  const [layout, setLayout] = useState(getUILayout(player.name));
-
+function UILayoutEditor({ player, layout, onLayoutChange, onClose }: { player: Player; layout: UILayout; onLayoutChange: (layout: UILayout) => void; onClose: () => void }) {
   const PANELS = [
-    { id: 'inv', label: 'Inventory', icon: '📦' },
-    { id: 'char', label: 'Character', icon: '👤' },
     { id: 'quests', label: 'Quest Log', icon: '📜' },
+    { id: 'char', label: 'Character', icon: '👤' },
     { id: 'talents', label: 'Talents', icon: '🌟' },
     { id: 'bestiary', label: 'Bestiary', icon: '📖' },
     { id: 'dps', label: 'DPS Meter', icon: '📊' },
-    { id: 'mail', label: 'Mail', icon: '📮' },
-    { id: 'books', label: 'Library', icon: '📚' },
-    { id: 'depot', label: 'Depot', icon: '🗄' },
+    { id: 'dungeon', label: 'Dungeon', icon: '🌀' },
+    { id: 'pet', label: 'Companions', icon: '🐾' },
     { id: 'mystery', label: 'Mystery', icon: '✦' },
+    { id: 'depot', label: 'Depot', icon: '🗄' },
+    { id: 'books', label: 'Library', icon: '📚' },
+    { id: 'auction', label: 'Auction House', icon: '🏛' },
+    { id: 'coins', label: 'Coin Shop', icon: '💎' },
+    { id: 'world', label: 'World Events', icon: '🌍' },
+    { id: 'mail', label: 'Mail', icon: '📮' },
+    { id: 'inv', label: 'Inventory', icon: '📦' },
   ];
 
   const move = (idx: number, dir: -1 | 1) => {
@@ -2876,22 +2887,19 @@ function UILayoutEditor({ player, onClose }: { player: Player; onClose: () => vo
     const target = idx + dir;
     if (target < 0 || target >= newOrder.length) return;
     [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
-    const newLayout = { ...layout, panelOrder: newOrder };
-    setLayout(newLayout);
-    saveUILayout(player.name, newLayout);
+    const newLayout = saveUILayout(player.name, { ...layout, panelOrder: newOrder });
+    onLayoutChange(newLayout);
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
-         style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
+    <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="rounded-xl border-2 p-5 max-w-md w-full"
-           style={{ background: 'linear-gradient(180deg, rgba(50,40,20,0.98) 0%, rgba(25,20,8,0.98) 100%)', borderColor: '#9bd4ff', boxShadow: '0 0 40px rgba(155,212,255,0.3)' }}>
+           className="moria-panel w-full max-w-md rounded-3xl border border-sky-300/20 p-4 sm:p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-black tracking-widest text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(180deg, #9bd4ff 0%, #4a90e2 100%)' }}>⚙ UI SETTINGS</h2>
           <button onClick={onClose} className="text-blue-200/60 hover:text-white text-2xl">✕</button>
         </div>
-        <div className="text-xs text-blue-200/60 mb-3">Customize which panels appear and their order. Reorder with the arrows.</div>
+        <div className="text-xs text-blue-200/60 mb-3">Reorder the quick-access buttons in the top bar. Changes apply immediately and persist for this character.</div>
         <div className="space-y-1 mb-4">
           {layout.panelOrder.map((panelId: string, idx: number) => {
             const panel = PANELS.find((p) => p.id === panelId);
@@ -2906,7 +2914,11 @@ function UILayoutEditor({ player, onClose }: { player: Player; onClose: () => vo
             );
           })}
         </div>
-        <div className="text-[10px] text-blue-200/40 text-center">Tip: Use + / − keys or the zoom buttons (bottom-right) to zoom the game map!</div>
+        <button onClick={() => {
+          const reset = saveUILayout(player.name, { ...layout, panelOrder: [...DEFAULT_UI_PANEL_ORDER] });
+          onLayoutChange(reset);
+        }} className="moria-button mb-3 w-full rounded-lg py-2 text-xs text-sky-200">↺ Reset default order</button>
+        <div className="text-[10px] text-blue-200/40 text-center">Operational controls such as UI, Mount, Admin, Audio, Network and Logout stay fixed for safety.</div>
       </div>
     </div>
   );

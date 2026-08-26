@@ -18,14 +18,14 @@ export default function BookLibrary({ player, onClose }: Props) {
     setPage(0);
     markBookRead(player.name, book.id);
   };
+  const pageCount = Math.max(1, active?.pages.length || 0);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
+    <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
          style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
          onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="rounded-xl border-2 p-5 max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-           style={{ background: 'linear-gradient(180deg, rgba(50,35,15,0.98) 0%, rgba(25,18,8,0.98) 100%)', borderColor: '#9b59ff', boxShadow: '0 0 50px rgba(155,89,255,0.3)' }}>
+           className="moria-panel w-full max-w-3xl max-h-[92vh] overflow-hidden rounded-3xl border border-violet-300/20 p-4 sm:p-6 flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
               style={{ backgroundImage: 'linear-gradient(180deg, #9b59ff 0%, #4a2090 100%)' }}>
@@ -35,14 +35,14 @@ export default function BookLibrary({ player, onClose }: Props) {
         </div>
 
         {!active ? (
-          <div className="overflow-y-auto flex-1">
+          <div className="moria-scrollbar overflow-y-auto flex-1 pr-1">
             {books.length === 0 ? (
               <div className="text-center text-purple-200/40 py-12">
                 <div className="text-5xl mb-3">📖</div>
                 <div>The library shelves are empty. An admin can create books to fill them!</div>
               </div>
             ) : (
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {books.map((book) => {
                   const isRead = read.includes(book.id);
                   return (
@@ -71,7 +71,7 @@ export default function BookLibrary({ player, onClose }: Props) {
                 <div className="text-xs text-purple-200/60 italic">by {active.author}</div>
               </div>
               <div className="text-amber-100/90 leading-relaxed text-sm whitespace-pre-wrap" style={{ fontFamily: 'serif' }}>
-                {active.pages[page]}
+                {active.pages[page] || 'This volume has no written pages yet.'}
               </div>
             </div>
             <div className="flex items-center justify-between mt-3">
@@ -79,8 +79,8 @@ export default function BookLibrary({ player, onClose }: Props) {
                       className="px-4 py-1.5 rounded bg-purple-900/50 text-purple-200 text-xs disabled:opacity-30 border border-purple-700/50">
                 ◀ Previous
               </button>
-              <span className="text-purple-200/60 text-xs">Page {page + 1} of {active.pages.length}</span>
-              <button onClick={() => setPage((p) => Math.min(active.pages.length - 1, p + 1))} disabled={page >= active.pages.length - 1}
+              <span className="text-purple-200/60 text-xs">Page {Math.min(page + 1, pageCount)} of {pageCount}</span>
+              <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1}
                       className="px-4 py-1.5 rounded bg-purple-900/50 text-purple-200 text-xs disabled:opacity-30 border border-purple-700/50">
                 Next ▶
               </button>
