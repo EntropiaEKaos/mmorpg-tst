@@ -614,7 +614,7 @@ setInterval(() => engine.tick(), engine.TICK_RATE);
 setInterval(() => sessionManager.prune(), 10 * 60 * 1000);
 
 setInterval(() => {
-  const sentMaps = new Set();
+  const mapsDelivered = new Set();
   for (const [clientId, entry] of wsClients) {
     if (entry.ws.readyState !== WebSocket.OPEN) continue;
     if (entry.sessionKey && !sessionManager.validateKey(entry.sessionKey, { touch: false })) {
@@ -626,10 +626,10 @@ setInterval(() => {
       const vocData = VOCATIONS[snapshot.player.vocation];
       if (vocData) snapshot.player.spells = vocData.spells;
       entry.ws.send(JSON.stringify({ kind: 'snapshot', payload: snapshot, time: Date.now() }));
-      const mapId = snapshot.player.mapId;
-      if (!sentMaps.has(mapId)) { engine.consumeEvents(mapId); sentMaps.add(mapId); }
+      mapsDelivered.add(snapshot.player.mapId);
     }
   }
+  for (const mapId of mapsDelivered) engine.consumeEvents(mapId);
 }, 50);
 
 function broadcastContentUpdate() {

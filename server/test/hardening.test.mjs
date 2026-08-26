@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { engine } from '../engine/GameState.mjs';
 import { VOCATIONS } from '../engine/Vocations.mjs';
+import { WORLD } from '../engine/World.mjs';
 
 let seq = 0;
 function makePlayer(vocation = 'knight') {
@@ -27,19 +28,22 @@ test('movement rejects teleport, diagonal and fractional intents', () => {
   }
 });
 
-test('travel ignores client coordinates and rejects unknown maps', () => {
+test('travel requires a real portal, ignores client coordinates and enforces level gates', () => {
   const { id, player } = makePlayer();
   try {
+    assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'frostpeak', spawnX: 1, spawnY: 1 } }), false);
+    assert.equal(player.mapId, 'eldoria');
+    player.x = 10; player.y = 40;
     assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'frostpeak', spawnX: 1, spawnY: 1 } }), true);
     assert.equal(player.mapId, 'frostpeak');
-    assert.equal(player.x, 40);
-    assert.equal(player.y, 40);
-
-    assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'hacked-map', spawnX: 12, spawnY: 12 } }), false);
-    assert.equal(player.mapId, 'frostpeak');
-  } finally {
-    cleanup(id);
-  }
+    assert.deepEqual({ x: player.x, y: player.y }, { x: 70, y: 40 });
+    assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'hacked-map' } }), false);
+    player.mapId = 'shadowfen'; player.x = 10; player.y = 10; player.level = 24;
+    assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'voidlands' } }), false);
+    player.level = 25;
+    assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'voidlands' } }), true);
+    assert.deepEqual({ x: player.x, y: player.y }, { x: 70, y: 70 });
+  } finally { cleanup(id); }
 });
 
 test('equipment bonuses are applied exactly once', () => {
@@ -112,4 +116,40 @@ test('authoritative talent reset charges gold and rebuilds base stats', () => {
   } finally {
     cleanup(id);
   }
+});
+
+
+test('map events remain available to every snapshot until explicitly consumed', () => {
+  const a = makePlayer(); const b = makePlayer();
+  try {
+    engine.emitEvent('eldoria', { kind: 'system', targetId: 'shared', text: 'shared-event' });
+    assert.equal(engine.getSnapshot(a.id).events.some(e => e.text === 'shared-event'), true);
+    assert.equal(engine.getSnapshot(b.id).events.some(e => e.text === 'shared-event'), true);
+    engine.consumeEvents('eldoria');
+    assert.equal(engine.getSnapshot(a.id).events.length, 0);
+    assert.equal(engine.getSnapshot(b.id).events.length, 0);
+  } finally { cleanup(a.id); cleanup(b.id); }
+});
+
+test('server portal tiles are deterministic and walkable', () => {
+  const map = WORLD.getMap('eldoria');
+  assert.equal(map.tiles[40][10].type, 'path');
+  assert.equal(map.tiles[40][10].walkable, true);
+  assert.equal(map.portals.find(p => p.targetMap === 'frostpeak').targetSpawn.x, 70);
+});
+
+test('authoritative drop and unequip preserve item ownership', () => {
+  const { id, player } = makePlayer();
+  try {
+    const sword = player.inventory.find(i => i.equipment);
+    assert.ok(sword);
+    assert.equal(engine.processIntent(id, { type: 'equip', payload: { itemId: sword.id } }), true);
+    assert.ok(player.equipment.weapon);
+    assert.equal(engine.processIntent(id, { type: 'unequip', payload: { slot: 'weapon' } }), true);
+    const returned = player.inventory.find(i => i.equipment?.slot === 'weapon');
+    assert.ok(returned);
+    assert.equal(engine.processIntent(id, { type: 'drop', payload: { itemId: returned.id } }), true);
+    assert.equal(player.inventory.some(i => i.id === returned.id), false);
+    assert.ok((engine.groundItemsByMap.get(player.mapId) || []).find(g => g.items.some(i => i.name === returned.name)));
+  } finally { cleanup(id); }
 });

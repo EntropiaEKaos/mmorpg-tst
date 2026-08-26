@@ -9,13 +9,6 @@ import { VOCATIONS } from './Vocations.mjs';
 import { rollLoot, getStarterInventory } from './Items.mjs';
 import { questEngine } from './QuestEngine.mjs';
 
-const TRAVEL_SPAWNS = Object.freeze({
-  eldoria: { x: 40, y: 40 },
-  frostpeak: { x: 40, y: 40 },
-  shadowfen: { x: 40, y: 40 },
-  emberhold: { x: 40, y: 40 },
-  voidlands: { x: 40, y: 40 },
-});
 
 const TALENT_RULES = Object.freeze({
   vitality: { maxRank: 5, hp: 10 },
@@ -105,6 +98,8 @@ class GameEngine {
       case 'cast': return this.handleCast(player, payload);
       case 'use_item': return this.handleUseItem(player, payload);
       case 'equip': return this.handleEquip(player, payload);
+      case 'unequip': return this.handleUnequip(player, payload);
+      case 'drop': return this.handleDrop(player, payload);
       case 'pickup': return this.handlePickup(player, payload);
       case 'mount': return this.handleMount(player);
       case 'talent': return this.handleTalent(player, payload);
@@ -139,6 +134,10 @@ class GameEngine {
     else if (dx > 0) player.direction = 'right';
     else if (dy < 0) player.direction = 'up';
     else if (dy > 0) player.direction = 'down';
+
+    // Portals are server-owned. Stepping onto one attempts travel automatically.
+    const portal = map.portals?.find(p => p.pos.x === player.x && p.pos.y === player.y);
+    if (portal) this.travelThroughPortal(player, portal);
     return true;
   }
 
@@ -323,10 +322,54 @@ class GameEngine {
     const slot = item.equipment.slot;
     if (typeof slot !== 'string' || !slot) return false;
     const current = player.equipment[slot];
-    if (current) player.inventory.push({ id: `eq_${Date.now()}`, ...current, type: 'equipment', quantity: 1 });
+    if (current) {
+      player.inventory.push({
+        id: `eq_${Date.now()}_${Math.random()}`,
+        name: current.name,
+        icon: current.icon,
+        type: 'equipment',
+        quantity: 1,
+        value: current.value || 0,
+        equipment: { ...current },
+      });
+    }
 
-    player.equipment[slot] = item.equipment;
+    player.equipment[slot] = { ...item.equipment };
     player.inventory = player.inventory.filter(i => i.id !== payload.itemId);
+    return true;
+  }
+
+  handleUnequip(player, payload) {
+    const slot = typeof payload.slot === 'string' ? payload.slot : '';
+    const equipment = slot ? player.equipment?.[slot] : null;
+    if (!equipment) return false;
+    player.inventory.push({
+      id: `unequip_${Date.now()}_${Math.random()}`,
+      name: equipment.name,
+      icon: equipment.icon,
+      type: 'equipment',
+      quantity: 1,
+      value: equipment.value || 0,
+      equipment: { ...equipment },
+    });
+    delete player.equipment[slot];
+    return true;
+  }
+
+  handleDrop(player, payload) {
+    if (typeof payload.itemId !== 'string') return false;
+    const item = player.inventory.find(i => i.id === payload.itemId);
+    if (!item) return false;
+    const groundItems = this.groundItemsByMap.get(player.mapId) || [];
+    groundItems.push({
+      id: `ground_${Date.now()}_${Math.random()}`,
+      x: player.x,
+      y: player.y,
+      items: [{ ...item }],
+      expireAt: Date.now() + 120000,
+    });
+    player.inventory = player.inventory.filter(i => i.id !== payload.itemId);
+    this.groundItemsByMap.set(player.mapId, groundItems);
     return true;
   }
 
@@ -389,17 +432,40 @@ class GameEngine {
     return true;
   }
 
-  handleTravel(player, payload) {
-    const targetMap = typeof payload.targetMap === 'string' ? payload.targetMap : '';
-    const map = WORLD.getMap(targetMap);
-    const spawn = TRAVEL_SPAWNS[targetMap];
-    if (!map || !spawn || !map.tiles?.[spawn.y]?.[spawn.x]?.walkable) return false;
-
-    player.mapId = targetMap;
+  travelThroughPortal(player, portal) {
+    if (!portal || typeof portal.targetMap !== 'string') return false;
+    const targetMap = WORLD.getMap(portal.targetMap);
+    const spawn = portal.targetSpawn;
+    if (!targetMap || !spawn || !targetMap.tiles?.[spawn.y]?.[spawn.x]?.walkable) return false;
+    if (targetMap.levelRequired && player.level < targetMap.levelRequired) {
+      this.emitEvent(player.mapId, {
+        kind: 'system', targetId: player.id,
+        text: `🔒 ${targetMap.name} requires level ${targetMap.levelRequired}`,
+        color: '#ff6060', pos: { x: player.x, y: player.y },
+      });
+      return false;
+    }
+    player.mapId = portal.targetMap;
     player.x = spawn.x;
     player.y = spawn.y;
     player.targetId = null;
+    this.emitEvent(player.mapId, {
+      kind: 'system', targetId: player.id,
+      text: `🌍 Entered ${targetMap.name}`,
+      color: '#9bd4ff', pos: { x: player.x, y: player.y },
+    });
     return true;
+  }
+
+  handleTravel(player, payload) {
+    const targetMap = typeof payload.targetMap === 'string' ? payload.targetMap : '';
+    const currentMap = WORLD.getMap(player.mapId);
+    if (!currentMap || !WORLD.getMap(targetMap)) return false;
+    const portal = currentMap.portals?.find(p =>
+      p.targetMap === targetMap && p.pos.x === player.x && p.pos.y === player.y
+    );
+    if (!portal) return false;
+    return this.travelThroughPortal(player, portal);
   }
 
   handleQuestAccept(player, payload) {

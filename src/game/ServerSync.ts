@@ -100,6 +100,11 @@ class ServerSyncManager {
     sendIntent({ type: 'equip', payload: { itemId } });
   }
 
+  sendUnequip(slot: string) {
+    if (!this.isActive()) return;
+    sendIntent({ type: 'unequip', payload: { slot } });
+  }
+
   sendPickup(groundId: string) {
     if (!this.isActive()) return;
     sendIntent({ type: 'pickup', payload: { groundId } });

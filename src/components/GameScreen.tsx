@@ -230,6 +230,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   ]);
   const inventoryRef = useRef(inventory);
   inventoryRef.current = inventory;
+  const lastServerInventorySignatureRef = useRef('');
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 'w', sender: 'System', text: `Welcome to Mor'ia, ${account.characterName}!`, color: '#f4e04d', time: Date.now(), channel: 'system' },
@@ -548,6 +549,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   }, []);
 
   const toggleMount = () => {
+    if (serverSync.isActive()) { serverSync.sendMount(); return; }
     const p = playerRef.current;
     const ownedMounts = MOUNTS.filter((m) => m.levelRequired <= p.level);
     if (ownedMounts.length === 0) {
@@ -581,6 +583,14 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const usePotion = (type: 'hp' | 'mp' | 'hpg') => {
+    if (serverSync.isActive()) {
+      const desired = type === 'mp' ? 'Mana Potion' : type === 'hpg' ? 'Greater Health Potion' : 'Health Potion';
+      const serverItems = serverSync.getRenderState()?.player?.inventory;
+      const item = Array.isArray(serverItems) ? serverItems.find((i: any) => i?.name === desired && i.quantity > 0) : null;
+      if (!item) addMessage('System', `No ${desired}.`, '#ff9090', 'system');
+      else serverSync.sendUseItem(item.id);
+      return;
+    }
     const inv = inventoryRef.current;
     const id = type === 'hp' ? 'hp1' : type === 'mp' ? 'mp1' : 'hpg';
     const potion = inv.find((i) => i.id === id);
@@ -949,6 +959,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const travelToMap = (targetMapId: string, spawn: { x: number; y: number }) => {
+    if (serverSync.isActive()) { serverSync.sendTravel(targetMapId); return; }
     const p = playerRef.current;
     const mapData = MAPS[targetMapId];
     if (!mapData) return;
@@ -975,6 +986,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const pickupGroundItem = (ground: GroundItem) => {
+    if (serverSync.isActive()) { serverSync.sendPickup(ground.id); return; }
     const p = playerRef.current;
     let pickedUp: string[] = [];
     for (const item of ground.items) {
@@ -1016,6 +1028,10 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const handleMysteryComplete = (gold: number, xp: number, itemName?: string, itemIcon?: string) => {
+    if (serverSync.isActive()) {
+      addMessage('System', 'Mystery rewards are disabled in authoritative online mode until server support is available.', '#ff9090', 'system');
+      return;
+    }
     const p = playerRef.current;
     p.gold += gold;
     p.xp += xp;
@@ -1035,6 +1051,11 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const enterDungeon = (totalWaves: number) => {
+    if (serverSync.isActive()) {
+      addMessage('System', 'Dungeons are disabled in authoritative online mode until server support is available.', '#ff9090', 'system');
+      setShowDungeon(false);
+      return;
+    }
     const p = playerRef.current;
     dungeonTotalWavesRef.current = totalWaves;
     dungeonWaveRef.current = 1;
@@ -1152,6 +1173,14 @@ export default function GameScreen({ account, onLogout }: Props) {
     const tile = mouseTileRef.current;
     if (!tile) return;
     const p = playerRef.current;
+    if (serverSync.isActive()) {
+      const ground = serverGroundRef.current.find((g: any) => g.x === tile.x && g.y === tile.y);
+      if (ground && Math.hypot(tile.x - p.pos.x, tile.y - p.pos.y) <= 2) { serverSync.sendPickup(ground.id); return; }
+      const monster = serverMonstersRef.current.find((m: any) => m.x === tile.x && m.y === tile.y && m.hp > 0);
+      if (monster) { p.targetId = monster.id; serverSync.sendAttack(monster.id); return; }
+      p.targetId = undefined;
+      return;
+    }
     // Click corpse to loot (Tibia-style)
     const ground = groundItemsRef.current.find((g) => g.pos.x === tile.x && g.pos.y === tile.y);
     if (ground && Math.hypot(tile.x - p.pos.x, tile.y - p.pos.y) <= 2) {
@@ -1178,6 +1207,12 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const handleNPCAction = (action: string, npc: NPC, questId?: string) => {
+    if (serverSync.isActive()) {
+      if (action === 'quest' && questId) serverSync.sendQuestAccept(questId);
+      else if (action !== 'bye') addMessage('System', `${action} is not available in authoritative online mode yet.`, '#ff9090', 'system');
+      setActiveDialog(null);
+      return;
+    }
     const p = playerRef.current;
       if (action === 'shop' && npc.shop) {
         addMessage('System', `🛒 ${npc.name}'s shop opened.`, '#f4e04d', 'system');
@@ -1261,6 +1296,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const buyItem = (shopItem: { name: string; icon: string; type: Item['type']; price: number; description?: string; equipment?: Equipment }) => {
+    if (serverSync.isActive()) { addMessage('System', 'Server-authoritative shops are not enabled yet.', '#ff9090', 'system'); return; }
     const p = playerRef.current;
     const discount = getShopDiscountFromRep(p);
     const finalPrice = Math.floor(shopItem.price * (1 - discount));
@@ -1294,6 +1330,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   // Drop item on the ground (Tibia-style)
   const dropItemOnGround = (item: Item) => {
+    if (serverSync.isActive()) { serverSync.sendDrop(item.id); return; }
     const p = playerRef.current;
     // Create a loot bag / ground item at player's position
     const bagItems = [];
@@ -1319,6 +1356,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [pvpEnabled, setPvpEnabled] = useState(isPvpEnabled(player.name));
 
   const socketGem = (itemId: string, gemId: string) => {
+    if (serverSync.isActive()) { addMessage('System', 'Gem socketing is disabled online until it is server-authoritative.', '#ff9090', 'system'); return; }
     const inv = inventoryRef.current;
     const item = inv.find((i) => i.id === itemId);
     if (!item?.equipment) return;
@@ -1353,6 +1391,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const craftItem = (name: string, icon: string, value: number, description?: string) => {
+    if (serverSync.isActive()) { addMessage('System', 'Crafting is disabled online until it is server-authoritative.', '#ff9090', 'system'); return; }
     const { RECIPES: recipes, canCraft } = require('../game/crafting');
     const recipe = recipes.find((r: any) => r.result.name === name);
     if (!recipe) return;
@@ -1398,6 +1437,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   const equipItem = (item: Item) => {
     if (!item.equipment) return;
+    if (serverSync.isActive()) { serverSync.sendEquip(item.id); return; }
     const p = playerRef.current;
     // Level requirement check
     if ((item.equipment.level || 1) > p.level) {
@@ -1427,6 +1467,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const unequipItem = (slot: keyof Player['equipment']) => {
+    if (serverSync.isActive()) { serverSync.sendUnequip(String(slot)); return; }
     const p = playerRef.current;
     const eq = p.equipment[slot];
     if (!eq) return;
@@ -1471,13 +1512,37 @@ export default function GameScreen({ account, onLogout }: Props) {
         // Sync player state from server snapshot (THE TRUTH)
         const renderState = serverSync.getRenderState();
         if (renderState) {
-          const sp = renderState.player;
-          playerRef.current = { ...playerRef.current, ...sp };
-          // Sync monsters + nearby players from server
+          const sp = renderState.player || {};
+          const { x, y, inventory: serverInventory, quests: serverQuestState, skills: _serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
+          Object.assign(p, compatibleServerPlayer);
+          if (Number.isFinite(x) && Number.isFinite(y)) p.pos = { x, y };
+          if (serverStats && typeof serverStats === 'object') p.stats = { ...p.stats, ...serverStats };
+          if (serverQuestState && typeof serverQuestState === 'object') {
+            p.quests = Array.isArray(serverQuestState.completed) ? serverQuestState.completed : p.quests;
+            p.activeQuests = Array.isArray(serverQuestState.active) ? serverQuestState.active.map((q: any) => ({
+              questId: q.questId,
+              objectives: [{ type: 'kill', target: q.target, targetName: q.target, count: q.needed, current: q.current }],
+              startedAt: 0,
+            })) : p.activeQuests;
+          }
+          if (Array.isArray(serverInventory)) {
+            const signature = JSON.stringify(serverInventory);
+            if (signature !== lastServerInventorySignatureRef.current) {
+              lastServerInventorySignatureRef.current = signature;
+              inventoryRef.current = serverInventory;
+              setInventory(serverInventory);
+            }
+          }
+          if (typeof sp.mapId === 'string' && MAPS[sp.mapId] && sp.mapId !== currentMapIdRef.current) {
+            currentMapIdRef.current = sp.mapId;
+            setCurrentMapId(sp.mapId);
+            worldRef.current = generateMap(sp.mapId);
+            buildingsRef.current = getTownBuildings(MAPS[sp.mapId].biome);
+            audio.teleport();
+          }
           serverMonstersRef.current = renderState.monsters;
           serverPlayersRef.current = renderState.nearbyPlayers;
           serverGroundRef.current = renderState.groundItems;
-          // Process server events (damage numbers, loot, etc.)
           serverSync.processEvents(addFloatingText, addMessage);
         }
       } else {
@@ -1545,6 +1610,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
       } // end else (local mode)
 
+      if (!serverSync.isActive()) {
       // Auto-loot adjacent corpses (within 1 tile) for fluidity
       const adjacentCorpse = groundItemsRef.current.find((g) => {
         const d = Math.hypot(g.pos.x - p.pos.x, g.pos.y - p.pos.y);
@@ -1841,6 +1907,8 @@ export default function GameScreen({ account, onLogout }: Props) {
         }
       }
 
+      } // end local-only simulation
+
       // Update projectiles & particles
       projectilesRef.current = projectilesRef.current.filter((pp) => now - pp.startTime < pp.duration);
       floatingTextsRef.current = floatingTextsRef.current.filter((ft) => now - ft.startTime < ft.duration);
@@ -1857,7 +1925,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       cameraRef.current.y = Math.max(0, Math.min(MAP_HEIGHT - VIEW_H, p.pos.y - Math.floor(VIEW_H / 2)));
 
       // Broadcast player position to network every ~150ms (throttled)
-      if (net.mode !== 'offline' && now - lastBroadcastRef.current > 150) {
+      if (net.mode === 'local' && now - lastBroadcastRef.current > 150) {
         lastBroadcastRef.current = now;
         const voc = VOCATIONS[p.vocation];
         const mount = p.mountId ? MOUNTS.find((m) => m.id === p.mountId) : null;
