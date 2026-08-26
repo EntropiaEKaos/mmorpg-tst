@@ -1,0 +1,60 @@
+name: Apply authoritative spells 4.1
+
+on:
+  push:
+    branches: [hardening-3.1]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening-3.1
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply authoritative spell runtime
+        run: python3 tools/apply-authoritative-spells-4-1.py
+      - name: Validate spell runtime invariants
+        run: |
+          grep -q "syncContentSpells(spellContent" server/engine/GameState.mjs
+          grep -q "this.getSpellList(player.vocation)" server/engine/GameState.mjs
+          grep -q "engine.syncContentSpells(contentDB.get('spells'))" server/server.js
+          grep -q "mergeServerSpells" src/components/GameScreen.tsx
+          grep -q "\^\[1-8\]\$" src/components/GameScreen.tsx
+          grep -q "authoritative content spells override base slots and execute custom spells" server/test/hardening.test.mjs
+          if grep -RE "require[[:space:]]*\([[:space:]]*['\"]" src --include='*.ts' --include='*.tsx'; then
+            echo "Executable CommonJS require found in browser source"
+            exit 1
+          fi
+      - name: Validate all gates
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm install --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated spell runtime
+        run: |
+          if git diff --quiet -- src server; then
+            echo "No source changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src server
+          git commit -m "feat(spells): make admin spell content authoritative"
+          git restore tools
+          git fetch origin hardening-3.1
+          git rebase origin/hardening-3.1
+          git push origin HEAD:hardening-3.1
