@@ -34,22 +34,18 @@ interface Talent {
 
 function getTalents(_vocation: string, currentRanks: Record<string, number>): Talent[] {
   const base: Talent[] = [
-    // Tier 1 (Level 1+)
     { id: 'vitality', name: 'Vitality', icon: '❤', description: '+10 HP per rank', maxRank: 5, currentRank: currentRanks.vitality || 0, effects: { hpBonus: 10 } },
     { id: 'wisdom', name: 'Wisdom', icon: '✦', description: '+8 Mana per rank', maxRank: 5, currentRank: currentRanks.wisdom || 0, effects: { manaBonus: 8 } },
     { id: 'might', name: 'Might', icon: '⚔', description: '+2 Attack per rank', maxRank: 5, currentRank: currentRanks.might || 0, effects: { attackBonus: 2 } },
     { id: 'toughness', name: 'Toughness', icon: '🛡', description: '+2 Defense per rank', maxRank: 5, currentRank: currentRanks.toughness || 0, effects: { defenseBonus: 2 } },
-    // Tier 2 (requires 3 in any tier 1)
     { id: 'precision', name: 'Precision', icon: '🎯', description: '+1% crit chance per rank', maxRank: 5, currentRank: currentRanks.precision || 0, requires: 'might', effects: { critChance: 1 } },
     { id: 'arcane_mastery', name: 'Arcane Mastery', icon: '🔮', description: '+3 Magic per rank', maxRank: 5, currentRank: currentRanks.arcane_mastery || 0, requires: 'wisdom', effects: { magicBonus: 3 } },
     { id: 'resilience', name: 'Resilience', icon: '💎', description: '+2% damage reduction per rank', maxRank: 3, currentRank: currentRanks.resilience || 0, requires: 'toughness', effects: { damageReduction: 2 } },
     { id: 'bounty', name: 'Bounty Hunter', icon: '🪙', description: '+5% gold per rank', maxRank: 3, currentRank: currentRanks.bounty || 0, requires: 'vitality', effects: { goldBonus: 5 } },
-    // Tier 3 (requires 3 in tier 2)
     { id: 'savant', name: 'Savant', icon: '🌟', description: '+10% XP per rank', maxRank: 3, currentRank: currentRanks.savant || 0, requires: 'bounty', effects: { xpBonus: 10 } },
     { id: 'lethal', name: 'Lethal Strikes', icon: '💀', description: '+3% crit chance per rank', maxRank: 2, currentRank: currentRanks.lethal || 0, requires: 'precision', effects: { critChance: 3 } },
     { id: 'archmage', name: 'Archmage', icon: '✨', description: '+20% heal bonus per rank', maxRank: 2, currentRank: currentRanks.archmage || 0, requires: 'arcane_mastery', effects: { healBonus: 20 } },
     { id: 'fortitude', name: 'Fortitude', icon: '⛰', description: '+5% damage reduction per rank', maxRank: 2, currentRank: currentRanks.fortitude || 0, requires: 'resilience', effects: { damageReduction: 5 } },
-    // Tier 4 (Ultimate - requires 2 in tier 3)
     { id: 'berserker', name: 'Berserker Rage', icon: '🔥', description: '+15 Attack, +5% crit', maxRank: 1, currentRank: currentRanks.berserker || 0, requires: 'lethal', effects: { attackBonus: 15, critChance: 5 } },
     { id: 'transcendence', name: 'Transcendence', icon: '🌈', description: '+50 HP, +30 Mana, +8 Magic', maxRank: 1, currentRank: currentRanks.transcendence || 0, requires: 'archmage', effects: { hpBonus: 50, manaBonus: 30, magicBonus: 8 } },
   ];
@@ -65,13 +61,15 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
     }
   });
   const vocation = VOCATIONS[player.vocation];
+  const authoritative = serverSync.isActive();
+  const effectiveRanks: Record<string, number> = authoritative
+    ? (((player as any).talents || {}) as Record<string, number>)
+    : ranks;
 
-  // Calculate available points (1 per level)
   const totalPoints = player.level;
-  const spentPoints = Object.values(ranks).reduce((s, v) => s + v, 0);
+  const spentPoints = Object.values(effectiveRanks).reduce((s, v) => s + v, 0);
   const availablePoints = totalPoints - spentPoints;
-
-  const talents = getTalents(player.vocation, ranks);
+  const talents = getTalents(player.vocation, effectiveRanks);
 
   const canSpend = (talent: Talent): boolean => {
     if (availablePoints <= 0) return false;
@@ -85,16 +83,15 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
 
   const spendPoint = (talent: Talent) => {
     if (!canSpend(talent)) return;
-    // AUTHORITATIVE MODE: send to server, it applies the effect and returns in snapshot
-    if (serverSync.isActive()) {
+    if (authoritative) {
       serverSync.sendTalent(talent.id);
       return;
     }
+
     const newRanks = { ...ranks, [talent.id]: (ranks[talent.id] || 0) + 1 };
     setRanks(newRanks);
     localStorage.setItem(`tibia_talents_${player.name}`, JSON.stringify(newRanks));
 
-    // Apply effects to player (LOCAL mode only)
     const p = { ...player };
     if (talent.effects.hpBonus) { p.maxHp += talent.effects.hpBonus; p.hp = Math.min(p.hp + talent.effects.hpBonus, p.maxHp); }
     if (talent.effects.manaBonus) { p.maxMana += talent.effects.manaBonus; p.mana = Math.min(p.mana + talent.effects.manaBonus, p.maxMana); }
@@ -105,14 +102,18 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
   };
 
   const resetTalents = () => {
+    if (authoritative) {
+      serverSync.sendTalentReset();
+      return;
+    }
     if (player.gold < 500) return;
+
     const p = { ...player };
-    // Remove all talent effects
     for (const [id, rank] of Object.entries(ranks)) {
       const talent = talents.find((t) => t.id === id);
       if (!talent) continue;
-      if (talent.effects.hpBonus) { p.maxHp -= talent.effects.hpBonus * rank; }
-      if (talent.effects.manaBonus) { p.maxMana -= talent.effects.manaBonus * rank; }
+      if (talent.effects.hpBonus) p.maxHp -= talent.effects.hpBonus * rank;
+      if (talent.effects.manaBonus) p.maxMana -= talent.effects.manaBonus * rank;
       if (talent.effects.attackBonus) p.attack -= talent.effects.attackBonus * rank;
       if (talent.effects.defenseBonus) p.defense -= talent.effects.defenseBonus * rank;
       if (talent.effects.magicBonus) p.magic -= talent.effects.magicBonus * rank;
