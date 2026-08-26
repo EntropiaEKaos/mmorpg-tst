@@ -1,0 +1,44 @@
+name: Refresh patched lockfile
+
+on:
+  push:
+    branches: [hardening-3.1]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: hardening-3.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Refresh lockfile from declared versions
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Apply non-breaking audit fixes to lockfile
+        run: npm audit fix --package-lock-only --ignore-scripts --no-fund
+
+      - name: Verify high severity audit is clean
+        run: npm audit --audit-level=high
+
+      - name: Commit generated lockfile when changed
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore(deps): refresh patched package lock"
+          git push origin HEAD:hardening-3.1
