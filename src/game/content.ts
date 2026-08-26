@@ -117,6 +117,7 @@ export interface CustomNPC {
   posX: number;
   posY: number;
   dialogueText: string;
+  mapId?: string;
   createdAt: number;
 }
 
@@ -124,7 +125,11 @@ const NPC_KEY = 'moria_custom_npcs';
 
 export function getCustomNPCs(): CustomNPC[] {
   try {
-    return JSON.parse(localStorage.getItem(NPC_KEY) || '[]');
+    const data = JSON.parse(localStorage.getItem(NPC_KEY) || '[]');
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter((npc): npc is CustomNPC => Boolean(npc && typeof npc === 'object' && typeof npc.id === 'string' && typeof npc.name === 'string'))
+      .map((npc) => ({ ...npc, mapId: typeof npc.mapId === 'string' && npc.mapId ? npc.mapId : 'eldoria' }));
   } catch { return []; }
 }
 
@@ -156,6 +161,7 @@ export interface CustomMonster {
   level: number;
   posX: number;
   posY: number;
+  mapId?: string;
   createdAt: number;
 }
 
@@ -163,7 +169,11 @@ const MONSTER_KEY = 'moria_custom_monsters';
 
 export function getCustomMonsters(): CustomMonster[] {
   try {
-    return JSON.parse(localStorage.getItem(MONSTER_KEY) || '[]');
+    const data = JSON.parse(localStorage.getItem(MONSTER_KEY) || '[]');
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter((monster): monster is CustomMonster => Boolean(monster && typeof monster === 'object' && typeof monster.id === 'string' && typeof monster.name === 'string'))
+      .map((monster) => ({ ...monster, mapId: typeof monster.mapId === 'string' && monster.mapId ? monster.mapId : 'eldoria' }));
   } catch { return []; }
 }
 

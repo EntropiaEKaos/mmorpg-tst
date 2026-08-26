@@ -78,9 +78,41 @@ interface Props {
 const VIEW_W = 19;
 const VIEW_H = 13;
 
+function customNpcToRuntime(npc: CustomNPC): NPC {
+  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper'];
+  const role: NPC['role'] = validRoles.includes(npc.role as NPC['role']) ? npc.role as NPC['role'] : 'guard';
+  const options: NPC['dialogues'][number]['options'] = [{ text: 'Farewell.', action: 'bye' }];
+  if (role === 'banker') options.unshift({ text: 'Bank & depot', action: 'bank' });
+  if (role === 'trainer') options.unshift({ text: 'Train me', action: 'train' });
+  if (role === 'innkeeper') {
+    options.unshift({ text: 'Food & drinks', action: 'food' });
+    options.unshift({ text: 'Rest (50 gold)', action: 'heal' });
+  }
+  return {
+    id: npc.id, name: npc.name, pos: { x: npc.posX, y: npc.posY },
+    emoji: npc.emoji, color: npc.color, role,
+    dialogues: [{ text: npc.dialogueText || 'Greetings, traveler!', options }],
+  };
+}
+
+function customMonsterToRuntime(monster: CustomMonster): Monster {
+  const pos = { x: monster.posX, y: monster.posY };
+  return {
+    id: monster.id, name: monster.name, pos: { ...pos }, hp: monster.hp, maxHp: monster.hp,
+    attack: monster.attack, defense: monster.defense, speed: monster.speed, xp: monster.xp,
+    color: monster.color, emoji: monster.emoji, lastMove: 0, lastAttack: 0,
+    respawnPos: { ...pos }, dead: false, respawnAt: 0, size: monster.size,
+    level: monster.level, type: monster.type,
+  };
+}
+
+const customContentOnMap = <T extends { mapId?: string }>(content: T[], mapId: string) =>
+  content.filter((entry) => (entry.mapId || 'eldoria') === mapId);
+
 export default function GameScreen({ account, onLogout }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onlineAccount = Boolean(account.sessionToken && !account.offline);
+  const allowLocalAdmin = account.offline === true;
 
   // Panels state
   const [showInventory, setShowInventory] = useState(false);
@@ -134,8 +166,19 @@ export default function GameScreen({ account, onLogout }: Props) {
   const customMonstersRef = useRef<CustomMonster[]>(getCustomMonsters());
   // Force refresh of custom content (used after admin edits)
   const refreshCustomContent = () => {
+    const previousNpcIds = new Set(customNpcsRef.current.map((npc) => npc.id));
+    const previousMonsterIds = new Set(customMonstersRef.current.map((monster) => monster.id));
     customNpcsRef.current = getCustomNPCs();
     customMonstersRef.current = getCustomMonsters();
+    const mapId = currentMapIdRef.current;
+    npcsRef.current = [
+      ...npcsRef.current.filter((npc) => !previousNpcIds.has(npc.id)),
+      ...customContentOnMap(customNpcsRef.current, mapId).map(customNpcToRuntime),
+    ];
+    monstersRef.current = [
+      ...monstersRef.current.filter((monster) => !previousMonsterIds.has(monster.id)),
+      ...customContentOnMap(customMonstersRef.current, mapId).map(customMonsterToRuntime),
+    ];
   };
 
   // Dungeon state
@@ -207,8 +250,14 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [currentMapId, setCurrentMapId] = useState('eldoria');
   const currentMapIdRef = useRef('eldoria');
   const worldRef = useRef(generateMap('eldoria'));
-  const monstersRef = useRef<Monster[]>(spawnInitialMonsters());
-  const npcsRef = useRef<NPC[]>(spawnNPCs());
+  const monstersRef = useRef<Monster[]>([
+    ...spawnInitialMonsters(),
+    ...customContentOnMap(customMonstersRef.current, 'eldoria').map(customMonsterToRuntime),
+  ]);
+  const npcsRef = useRef<NPC[]>([
+    ...spawnNPCs(),
+    ...customContentOnMap(customNpcsRef.current, 'eldoria').map(customNpcToRuntime),
+  ]);
   const groundItemsRef = useRef<GroundItem[]>([]);
   const projectilesRef = useRef<Projectile[]>([]);
   const floatingTextsRef = useRef<FloatingText[]>([]);
@@ -528,7 +577,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable) return;
       keysRef.current.add(e.key.toLowerCase());
       // Admin Panel: Ctrl+Shift+A
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') {
+      if (allowLocalAdmin && e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         setShowAdmin((s) => !s);
         return;
@@ -996,9 +1045,17 @@ export default function GameScreen({ account, onLogout }: Props) {
     setCurrentMapId(targetMapId);
     worldRef.current = generateMap(targetMapId);
     buildingsRef.current = getTownBuildings(mapData.biome);
-    // Reset monsters and NPCs for the new map
-    monstersRef.current = spawnInitialMonsters();
-    npcsRef.current = spawnNPCs();
+    // Reset monsters and NPCs for the new map, including local admin-created content.
+    customNpcsRef.current = getCustomNPCs();
+    customMonstersRef.current = getCustomMonsters();
+    monstersRef.current = [
+      ...spawnInitialMonsters(),
+      ...customContentOnMap(customMonstersRef.current, targetMapId).map(customMonsterToRuntime),
+    ];
+    npcsRef.current = [
+      ...spawnNPCs(),
+      ...customContentOnMap(customNpcsRef.current, targetMapId).map(customNpcToRuntime),
+    ];
     groundItemsRef.current = [];
     p.pos = { ...spawn };
     addMessage('System', `🌍 You traveled to ${mapData.name}. ${mapData.description}`, '#9bd4ff', 'system');
@@ -2068,14 +2125,6 @@ export default function GameScreen({ account, onLogout }: Props) {
       drawBuilding(ctx, sx, sy, b, TILE_SIZE, now);
     }
 
-    // Custom NPCs (from admin creator)
-    for (const n of customNpcsRef.current) {
-      const sx = (n.posX - cam.x) * TILE_SIZE;
-      const sy = (n.posY - cam.y) * TILE_SIZE;
-      if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
-      drawNPC(ctx, sx, sy, TILE_SIZE, { name: n.name, emoji: n.emoji, color: n.color, role: n.role }, now);
-    }
-
     // NPCs
     for (const n of npcsRef.current) {
       const sx = (n.pos.x - cam.x) * TILE_SIZE;
@@ -2412,13 +2461,15 @@ export default function GameScreen({ account, onLogout }: Props) {
           ))}
           <TopButton icon="⚙" label="UI" hotkey="" onClick={() => setShowUIEditor(true)} />
           <TopButton icon="🐎" label="Mount" hotkey="SPACE" onClick={toggleMount} />
-          <button
-            onClick={() => setShowAdmin((s) => !s)}
-            className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-violet-200"
-            title="Admin Panel (Ctrl+Shift+A)"
-          >
-            <span>⚡</span><span className="hidden lg:inline">Admin</span>
-          </button>
+          {allowLocalAdmin && (
+            <button
+              onClick={() => setShowAdmin((s) => !s)}
+              className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-violet-200"
+              title="Offline Debug Admin (Ctrl+Shift+A)"
+            >
+              <span>⚡</span><span className="hidden lg:inline">Debug</span>
+            </button>
+          )}
           <button
             onClick={() => { const m = !muted; setMuted(m); audio.setMuted(m); if (!m) audio.startMusic(MAPS[currentMapId]?.biome || 'plains'); }}
             className={`moria-button shrink-0 rounded-lg px-2 py-1 text-[10px] ${muted ? 'text-slate-600' : 'text-sky-200'}`}
@@ -2598,7 +2649,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               addMessage('System', `🌍 World event reward: +${gold}g, +${xp} XP`, '#ff6a00', 'system');
             }} />
           )}
-          {showWorldEventCreator && (
+          {allowLocalAdmin && showWorldEventCreator && (
             <WorldEventCreator onClose={() => setShowWorldEventCreator(false)} />
           )}
           {showConnect && (
@@ -2653,7 +2704,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           {showUIEditor && (
             <UILayoutEditor player={player} layout={uiLayout} onLayoutChange={setUILayoutState} onClose={() => setShowUIEditor(false)} />
           )}
-          {showQuestCreator && (
+          {allowLocalAdmin && showQuestCreator && (
             <QuestCreator onClose={() => setShowQuestCreator(false)} />
           )}
           {showPetShop && (
@@ -2820,14 +2871,14 @@ export default function GameScreen({ account, onLogout }: Props) {
             </div>
           )}
 
-          {showEditor && (
+          {allowLocalAdmin && showEditor && (
             <GameEditor
               player={player}
               setPlayer={(p) => setPlayer(p)}
               onClose={() => { setShowEditor(false); refreshCustomContent(); }}
             />
           )}
-          {showAdmin && (
+          {allowLocalAdmin && showAdmin && (
             <AdminPanel
               player={player}
               setPlayer={(p) => setPlayer(p)}

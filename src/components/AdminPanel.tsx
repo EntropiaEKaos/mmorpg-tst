@@ -1,4 +1,6 @@
 import type { Player, Monster, Item } from '../game/types';
+import { computeDerivedStats } from '../game/types';
+import { grantAllBlessings } from '../game/systems';
 import { EQUIPMENT_LOOT } from '../game/equipment';
 import { VOCATIONS } from '../game/classes';
 import { dpsMeter } from '../game/dpsMeter';
@@ -53,8 +55,9 @@ export default function AdminPanel({
         p.defense += voc.defPerLevel;
         p.magic += voc.magPerLevel;
       }
-      p.hp = p.maxHp;
-      p.mana = p.maxMana;
+      const derived = computeDerivedStats(p);
+      p.hp = derived.totalMaxHp;
+      p.mana = derived.totalMaxMana;
       p.stats.levelUps++;
     }
     setPlayer(p);
@@ -162,8 +165,9 @@ export default function AdminPanel({
 
   const healFull = () => {
     const p = { ...player };
-    p.hp = p.maxHp;
-    p.mana = p.maxMana;
+    const derived = computeDerivedStats(p);
+    p.hp = derived.totalMaxHp;
+    p.mana = derived.totalMaxMana;
     setPlayer(p);
     addMessage('Admin', 'Fully healed!', '#2ecc71', 'system');
   };
@@ -282,8 +286,7 @@ export default function AdminPanel({
               }} icon="🏆" label="All Achievements" />
               <AdminButton onClick={() => {
                 const p = { ...player };
-                p.blessings = 5;
-                p.aol = true;
+                grantAllBlessings(p);
                 setPlayer(p);
                 addMessage('Admin', 'All 5 Blessings + AOL activated!', '#f4e04d', 'system');
               }} icon="✨" label="All Blessings" />
@@ -394,9 +397,10 @@ export default function AdminPanel({
             <div className="grid grid-cols-1 gap-1">
               <AdminButton onClick={() => {
                 const data = {
-                  player: player,
+                  version: 1,
+                  exportedAt: Date.now(),
+                  player,
                   inventory: inventoryRef.current,
-                  accounts: JSON.parse(localStorage.getItem('tibia_accounts') || '[]'),
                 };
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
@@ -418,8 +422,12 @@ export default function AdminPanel({
                   reader.onload = (ev) => {
                     try {
                       const data = JSON.parse(ev.target?.result as string);
-                      if (data.player) setPlayer(data.player);
-                      if (data.inventory) { inventoryRef.current = data.inventory; setInventory(data.inventory); }
+                      if (!data || typeof data !== 'object' || !data.player || typeof data.player !== 'object') throw new Error('Invalid save');
+                      if (typeof data.player.name !== 'string' || data.player.name !== player.name) throw new Error('Save belongs to another character');
+                      if (!Array.isArray(data.inventory)) throw new Error('Invalid inventory');
+                      setPlayer({ ...player, ...data.player, name: player.name });
+                      inventoryRef.current = data.inventory;
+                      setInventory(data.inventory);
                       addMessage('Admin', 'Save imported', '#ff00ff', 'system');
                     } catch {
                       addMessage('Admin', 'Import failed', '#ff0000', 'system');
