@@ -15,6 +15,7 @@ import { contentDB } from './engine/ContentDB.mjs';
 import { VOCATIONS } from './engine/Vocations.mjs';
 import { WORLD } from './engine/World.mjs';
 import { questEngine } from './engine/QuestEngine.mjs';
+import { adventureEngine } from './engine/AdventureEngine.mjs';
 import { validateContentReferences, findBlockingContentReferences } from './engine/ContentIntegrity.mjs';
 import { accountStore, sessionManager } from './engine/AuthService.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
@@ -186,6 +187,7 @@ function buildAuthoritativeSave(p) {
     reputation: p.reputation || {},
     stats: p.stats || {},
     quests: questEngine.exportState(p.id),
+    adventure: adventureEngine.exportState(p),
     mapId: p.mapId,
     x: p.x,
     y: p.y,
@@ -209,6 +211,7 @@ function restorePlayer(p, saved, expectedVocation) {
   if (saved.professions && typeof saved.professions === 'object' && !Array.isArray(saved.professions)) p.professions = saved.professions;
   if (saved.reputation && typeof saved.reputation === 'object' && !Array.isArray(saved.reputation)) p.reputation = saved.reputation;
   if (saved.stats && typeof saved.stats === 'object' && !Array.isArray(saved.stats)) p.stats = { ...p.stats, ...saved.stats };
+  adventureEngine.restorePlayer(p, saved.adventure);
 
   const mapData = typeof saved.mapId === 'string' ? WORLD.getMap(saved.mapId) : null;
   if (mapData) {

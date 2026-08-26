@@ -40,7 +40,8 @@ export interface Intent {
   type: 'move' | 'attack' | 'cast' | 'use_item' | 'equip' | 'unequip' |
         'pickup' | 'drop' | 'talk_npc' | 'buy' | 'sell' | 'deposit' |
         'train' | 'rest' | 'mount' | 'travel' | 'socket_gem' | 'talent' |
-        'talent_reset' | 'quest_accept' | 'quest_complete';
+        'talent_reset' | 'quest_accept' | 'quest_complete' |
+        'adventure_start' | 'adventure_abandon' | 'adventure_claim';
   payload: any;
   timestamp: number;
 }

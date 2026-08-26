@@ -198,7 +198,7 @@ export interface UILayout {
 const UI_KEY = (playerName: string) => `moria_ui_layout_${playerName}`;
 
 export const DEFAULT_UI_PANEL_ORDER = [
-  'quests', 'char', 'talents', 'bestiary', 'dps', 'dungeon', 'pet', 'mystery',
+  'adventure', 'quests', 'char', 'talents', 'bestiary', 'dps', 'dungeon', 'pet', 'mystery',
   'depot', 'books', 'auction', 'coins', 'world', 'mail', 'inv',
 ] as const;
 

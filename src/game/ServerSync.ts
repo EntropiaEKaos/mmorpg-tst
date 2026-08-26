@@ -145,6 +145,21 @@ class ServerSyncManager {
     sendIntent({ type: 'talent_reset', payload: {} });
   }
 
+  sendAdventureStart(contractId: string) {
+    if (!this.isActive()) return;
+    sendIntent({ type: 'adventure_start', payload: { contractId } });
+  }
+
+  sendAdventureAbandon() {
+    if (!this.isActive()) return;
+    sendIntent({ type: 'adventure_abandon', payload: {} });
+  }
+
+  sendAdventureClaim() {
+    if (!this.isActive()) return;
+    sendIntent({ type: 'adventure_claim', payload: {} });
+  }
+
   updateSnapshot(snap: ServerSnapshot) {
     this.authed = true;
     setSnapshot(snap);
@@ -202,6 +217,18 @@ class ServerSyncManager {
           break;
         case 'quest_complete':
           if (event.text) addMessage('Quest', event.text, event.color || '#58d6a8', 'quest');
+          break;
+        case 'adventure_combo':
+          if (event.text) addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#ffb84d', true);
+          break;
+        case 'adventure_progress':
+          if (event.text) addMessage('Hunt', event.text, event.color || '#7dd3fc', 'battle');
+          break;
+        case 'adventure_ready':
+          if (event.text) addMessage('Hunt', event.text, event.color || '#ffd87b', 'system');
+          break;
+        case 'adventure_claimed':
+          if (event.text) addMessage('Hunt', event.text, event.color || '#ffd87b', 'loot');
           break;
         case 'death':
           if (event.text) addMessage('System', event.text, event.color || '#ff0000', 'system');
