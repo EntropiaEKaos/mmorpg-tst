@@ -28,7 +28,7 @@ jobs:
           grep -q "this.getSpellList(player.vocation)" server/engine/GameState.mjs
           grep -q "engine.syncContentSpells(contentDB.get('spells'))" server/server.js
           grep -q "mergeServerSpells" src/components/GameScreen.tsx
-          grep -q "\^\[1-8\]\$" src/components/GameScreen.tsx
+          grep -Fq '/^[1-8]$/' src/components/GameScreen.tsx
           grep -q "authoritative content spells override base slots and execute custom spells" server/test/hardening.test.mjs
           if grep -RE "require[[:space:]]*\([[:space:]]*['\"]" src --include='*.ts' --include='*.tsx'; then
             echo "Executable CommonJS require found in browser source"
