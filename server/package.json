@@ -1,7 +1,7 @@
 {
   "name": "moria-mmo-server",
-  "version": "3.1.0",
-  "description": "Production MMO server for Mor'ia - serves client + WebSocket real-time multiplayer",
+  "version": "3.2.0",
+  "description": "Production authoritative MMO server for Mor'ia with account sessions and character ownership",
   "main": "server.js",
   "type": "module",
   "scripts": {
