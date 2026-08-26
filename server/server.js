@@ -15,6 +15,7 @@ import { contentDB } from './engine/ContentDB.mjs';
 import { VOCATIONS } from './engine/Vocations.mjs';
 import { WORLD } from './engine/World.mjs';
 import { questEngine } from './engine/QuestEngine.mjs';
+import { validateContentReferences, findBlockingContentReferences } from './engine/ContentIntegrity.mjs';
 import { accountStore, sessionManager } from './engine/AuthService.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
 
@@ -484,8 +485,11 @@ function handleAdminAPI(req, res, route) {
       if (typeof data.id !== 'string' || !data.id.trim() || data.id.length > 100) return json(res, 400, { error: 'Valid id is required' });
 
       const existing = contentDB.get(type).find(i => i.id === data.id);
-      if (existing) contentDB.update(type, data.id, data);
-      else contentDB.add(type, data);
+      const candidate = existing ? { ...existing, ...data, id: data.id } : { ...data, id: data.id };
+      const referenceError = validateContentReferences(contentDB, type, candidate);
+      if (referenceError) return json(res, 409, { error: referenceError });
+      const changed = existing ? contentDB.update(type, data.id, data) : contentDB.add(type, data);
+      if (!changed) return json(res, 409, { error: 'Content write was rejected' });
       if (type === 'items') engine.syncContentItems(contentDB.get('items'));
       if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
       if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
@@ -499,7 +503,11 @@ function handleAdminAPI(req, res, route) {
     if (READ_ONLY_ADMIN_TYPES.has(type)) {
       return json(res, 409, { error: `${type} catalog is read-only until its authoritative runtime is connected` });
     }
-    contentDB.remove(type, id);
+    const blockers = findBlockingContentReferences(contentDB, type, id);
+    if (blockers.length > 0) {
+      return json(res, 409, { error: 'Content is still referenced and cannot be deleted', references: blockers });
+    }
+    if (!contentDB.remove(type, id)) return json(res, 404, { error: 'Content not found' });
     if (type === 'items') engine.syncContentItems(contentDB.get('items'));
     if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
     if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));

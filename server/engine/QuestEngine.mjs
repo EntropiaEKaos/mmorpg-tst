@@ -5,6 +5,7 @@
 // ===================================================================
 
 import { contentDB } from './ContentDB.mjs';
+import { objectiveKey } from './ContentIntegrity.mjs';
 
 class QuestEngine {
   constructor() {
@@ -42,16 +43,18 @@ class QuestEngine {
     return { success: true, quest };
   }
 
-  progressQuest(playerId, targetType, amount = 1) {
+  progressQuest(playerId, targetType, amount = 1, aliases = []) {
     const active = this.activeQuests.get(playerId) || [];
     const progressed = [];
+    const targetKeys = new Set([targetType, ...(Array.isArray(aliases) ? aliases : [])].map(objectiveKey).filter(Boolean));
     for (const q of active) {
       const quest = contentDB.get('quests').find(qd => qd.id === q.questId);
       if (!quest) continue;
-      if (quest.target === targetType) {
-        q.progress[targetType] = Math.max(0, (q.progress[targetType] || 0) + amount);
+      if (targetKeys.has(objectiveKey(quest.target))) {
+        const progressKey = quest.target;
+        q.progress[progressKey] = Math.max(0, (q.progress[progressKey] || 0) + amount);
         const needed = quest.count;
-        const current = q.progress[targetType];
+        const current = q.progress[progressKey];
         progressed.push({ questId: q.questId, name: quest.name, current, needed });
       }
     }
@@ -107,8 +110,12 @@ class QuestEngine {
     globalThis.__players = playerMap;
   }
 
-  onMonsterKill(playerId, monsterName) {
-    const progressed = this.progressQuest(playerId, monsterName);
+  onMonsterKill(playerId, monster) {
+    const monsterName = monster && typeof monster === 'object' ? monster.name : monster;
+    const aliases = monster && typeof monster === 'object'
+      ? [monster.contentSourceId, monster.templateId].filter(value => typeof value === 'string' && value)
+      : [];
+    const progressed = this.progressQuest(playerId, monsterName, 1, aliases);
     const completed = this.checkCompletion(playerId);
     return { progressed, completed };
   }

@@ -392,7 +392,7 @@ class GameEngine {
     player.xp += xpGain;
     this.emitEvent(player.mapId, { kind: 'xp', targetId: player.id, amount: xpGain, pos: { x: monster.x, y: monster.y }, color: '#f4e04d', text: `+${xpGain} XP` });
 
-    const questResult = questEngine.onMonsterKill(player.id, monster.name);
+    const questResult = questEngine.onMonsterKill(player.id, monster);
     for (const prog of questResult.progressed) {
       this.emitEvent(player.mapId, { kind: 'quest_progress', targetId: player.id, text: `${prog.name}: ${prog.current}/${prog.needed}`, color: '#9bd4ff', pos: { x: player.x, y: player.y } });
     }

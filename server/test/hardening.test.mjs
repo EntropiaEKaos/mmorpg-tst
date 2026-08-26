@@ -446,3 +446,38 @@ test('authoritative content spells override base slots and execute custom spells
     engine.syncContentSpells(originalCatalog);
   }
 });
+
+
+test('authoritative monster kills progress canonical quest targets', () => {
+  const quest = contentDB.get('quests').find(entry => entry.id === 'quest_rats');
+  const npc = contentDB.get('npcs').find(entry => entry.id === quest?.npcId);
+  assert.ok(quest);
+  assert.ok(npc);
+  const { id, player } = makePlayer();
+  const monsters = engine.monstersByMap.get('eldoria');
+  const rat = monsters.find(monster => monster.name === 'Rat' && !monster.dead);
+  assert.ok(rat);
+  const originalRat = { hp: rat.hp, dead: rat.dead, respawnAt: rat.respawnAt };
+  try {
+    player.mapId = npc.mapId;
+    player.x = Number(npc.posX);
+    player.y = Number(npc.posY);
+    assert.equal(engine.processIntent(id, { type: 'quest_accept', payload: { questId: quest.id } }), true);
+
+    player.x = Math.max(1, rat.x - 1);
+    player.y = rat.y;
+    player.attack = 9999;
+    player.lastAttack = 0;
+    rat.hp = 1;
+    assert.equal(engine.processIntent(id, { type: 'attack', payload: { monsterId: rat.id } }), true);
+    const state = questEngine.exportState(id);
+    const active = state.active.find(entry => entry.questId === quest.id);
+    assert.ok(active);
+    assert.equal(active.progress[quest.target], 1);
+  } finally {
+    rat.hp = originalRat.hp;
+    rat.dead = originalRat.dead;
+    rat.respawnAt = originalRat.respawnAt;
+    cleanup(id);
+  }
+});
