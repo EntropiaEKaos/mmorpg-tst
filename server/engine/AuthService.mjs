@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DEFAULT_DB_FILE = path.join(__dirname, '..', 'moria-accounts.json');
+const DEFAULT_DB_FILE = process.env.MORIA_ACCOUNT_DB || path.join(__dirname, '..', 'moria-accounts.json');
 
 const SCRYPT_KEYLEN = 64;
 const SCRYPT_OPTIONS = Object.freeze({ N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
