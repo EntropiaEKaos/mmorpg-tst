@@ -220,6 +220,33 @@ test('mounting is server-gated by progression', () => {
 });
 
 
+
+test('authoritative buff spells apply effects without damaging monsters', () => {
+  const { id, player } = makePlayer('knight');
+  const monsters = engine.monstersByMap.get(player.mapId);
+  const dummy = {
+    id: `buff_dummy_${Date.now()}_${Math.random()}`, name: 'Buff Dummy', emoji: '🎯',
+    x: player.x + 1, y: player.y, spawnX: player.x + 1, spawnY: player.y,
+    hp: 100, maxHp: 100, attack: 0, defense: 0, xp: 0, level: 1, type: 'normal',
+    dead: false, lastAttack: 0, lastMove: 0, speed: 9999, respawnAt: 0,
+  };
+  monsters.push(dummy);
+  try {
+    player.level = 20;
+    player.mana = 999;
+    const beforeHp = dummy.hp;
+    const beforeReduction = engine.computeDerivedStats(player).damageReduction;
+    assert.equal(engine.processIntent(id, { type: 'cast', payload: { spellIndex: 3 } }), true);
+    assert.equal(dummy.hp, beforeHp);
+    assert.ok(player.buffs.some(buff => buff.type === 'shield' && buff.expiresAt > Date.now()));
+    assert.ok(engine.computeDerivedStats(player).damageReduction > beforeReduction);
+  } finally {
+    const idx = monsters.indexOf(dummy);
+    if (idx >= 0) monsters.splice(idx, 1);
+    cleanup(id);
+  }
+});
+
 test('successful authoritative attacks persist the selected target', () => {
   const { id, player } = makePlayer();
   const monsters = engine.monstersByMap.get(player.mapId);

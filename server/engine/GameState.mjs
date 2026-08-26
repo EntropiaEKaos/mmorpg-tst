@@ -257,7 +257,11 @@ class GameEngine {
     if (Math.abs(dx) + Math.abs(dy) !== 1) return false;
 
     const now = Date.now();
-    if (now - player.lastMove < 100) return false;
+    const activeBuffs = this.getActiveBuffs(player, now);
+    const haste = activeBuffs.find(buff => buff.type === 'haste');
+    const hasteValue = haste ? boundedNumber(haste.value, 0, 50, 35) : 0;
+    const moveCooldown = Math.max(50, Math.floor(100 * (1 - hasteValue / 100)));
+    if (now - player.lastMove < moveCooldown) return false;
 
     const nx = player.x + dx, ny = player.y + dy;
     const map = WORLD.getMap(player.mapId);
@@ -281,7 +285,14 @@ class GameEngine {
     return true;
   }
 
-  // ===== DERIVED STATS (equipment + passive talents) =====
+  getActiveBuffs(player, now = Date.now()) {
+    const buffs = Array.isArray(player.buffs) ? player.buffs : [];
+    const active = buffs.filter(buff => buff && typeof buff === 'object' && Number(buff.expiresAt) > now);
+    if (active.length !== buffs.length) player.buffs = active;
+    return active;
+  }
+
+  // ===== DERIVED STATS (equipment + passive talents + active buffs) =====
   computeDerivedStats(player) {
     const stats = {
       totalAttack: player.attack || 0, totalDefense: player.defense || 0,
@@ -322,6 +333,12 @@ class GameEngine {
     if (player.vocation === 'rogue' || player.vocation === 'berserker') stats.critChance += 10;
     if (player.vocation === 'knight' || player.vocation === 'templar') stats.damageReduction += 5;
 
+    for (const buff of this.getActiveBuffs(player)) {
+      if (buff.type === 'shield') stats.damageReduction += boundedNumber(buff.value, 0, 80, 25);
+      else if (buff.type === 'frenzy') stats.totalAttack *= 1 + boundedNumber(buff.value, 0, 100, 25) / 100;
+      else if (buff.type === 'haste') stats.moveSpeed += boundedNumber(buff.value, 0, 100, 35);
+    }
+    stats.totalAttack = Math.max(0, Math.floor(stats.totalAttack));
     stats.critChance = Math.max(0, Math.min(100, stats.critChance));
     stats.damageReduction = Math.max(0, Math.min(80, stats.damageReduction));
     return stats;
@@ -410,7 +427,19 @@ class GameEngine {
     const derived = this.computeDerivedStats(player);
     this.emitEvent(player.mapId, { kind: 'spell', targetId: player.id, text: spell.name, color: spell.color, pos: { x: player.x, y: player.y } });
 
-    if (spell.type === 'heal' && spell.damage > 0) {
+    if (spell.type === 'buff') {
+      const validBuffs = new Set(['shield', 'haste', 'invisible', 'frenzy']);
+      const buffType = validBuffs.has(spell.buffType) ? spell.buffType : 'shield';
+      const defaults = { shield: 25, haste: 35, invisible: 1, frenzy: 25 };
+      const duration = Math.floor(boundedNumber(spell.buffDuration, 1000, 60000, 8000));
+      const value = boundedNumber(spell.buffValue, 0, 100, defaults[buffType]);
+      player.buffs = this.getActiveBuffs(player, now).filter(buff => buff.type !== buffType);
+      player.buffs.push({
+        id: `${buffType}_${now}`, type: buffType, name: spell.name, value,
+        startTime: now, expiresAt: now + duration,
+      });
+      this.emitEvent(player.mapId, { kind: 'buff', targetId: player.id, text: spell.name, color: spell.color, pos: { x: player.x, y: player.y } });
+    } else if (spell.type === 'heal' && spell.damage > 0) {
       const baseHeal = spell.damage + Math.floor(derived.totalMagic * 0.5);
       const healAmt = Math.floor(baseHeal * (1 + derived.healBonus / 100));
       const before = player.hp;
@@ -667,7 +696,11 @@ class GameEngine {
       if (players.length === 0) continue;
 
       let nearest = null, minDist = 8;
-      for (const p of players) { const d = Math.abs(p.x - m.x) + Math.abs(p.y - m.y); if (d < minDist) { minDist = d; nearest = p; } }
+      for (const p of players) {
+        if (this.getActiveBuffs(p, now).some(buff => buff.type === 'invisible')) continue;
+        const d = Math.abs(p.x - m.x) + Math.abs(p.y - m.y);
+        if (d < minDist) { minDist = d; nearest = p; }
+      }
 
       if (nearest && minDist <= 1 && now - m.lastAttack > 1200) {
         m.lastAttack = now;
