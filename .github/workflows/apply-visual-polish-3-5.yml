@@ -35,6 +35,7 @@ jobs:
           p.write_text(s)
           PY
           python3 tools/apply-visual-polish-3-5.py
+          python3 tools/apply-visual-polish-3-5-post.py
       - name: Reject executable CommonJS in browser source
         run: |
           if grep -RE "require[[:space:]]*\([[:space:]]*['\"]" src --include='*.ts' --include='*.tsx'; then
