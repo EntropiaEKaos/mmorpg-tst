@@ -1,3 +1,5 @@
+import { GEMS, computeSetBonusStats } from './itemSets';
+
 export type TileType =
   | 'grass'
   | 'water'
@@ -148,12 +150,10 @@ export function computeDerivedStats(player: Player): DerivedStats {
     damageReduction: 0,
   };
 
-  // Gems cache
+  // Gem lookup is a real ESM dependency; using require() in the browser silently
+  // disabled socket bonuses under Vite.
   const gemMap: Record<string, { stat: string; value: number }> = {};
-  try {
-    const gems = require('./itemSets').GEMS;
-    for (const g of gems) gemMap[g.id] = { stat: g.stat, value: g.value };
-  } catch {}
+  for (const gem of GEMS) gemMap[gem.id] = { stat: gem.stat, value: gem.value };
 
   for (const eq of Object.values(player.equipment)) {
     if (!eq) continue;
@@ -189,22 +189,20 @@ export function computeDerivedStats(player: Player): DerivedStats {
     }
   }
 
-  // Apply set bonuses
-  try {
-    const setBonus = require('./itemSets').computeSetBonusStats(player);
-    stats.critChance += setBonus.crit;
-    stats.lifesteal += setBonus.lifesteal;
-    stats.thorns += setBonus.thorns;
-    stats.moveSpeed += setBonus.speed;
-    stats.xpBonus += setBonus.xp;
-    stats.goldBonus += setBonus.gold;
-    stats.damageReduction += setBonus.reduction;
-    stats.totalMaxHp += setBonus.hp;
-    stats.totalMaxMana += setBonus.mana;
-    // damage and magic from sets apply as flat multipliers - convert to a usable form via helper
-    (stats as any)._setDamageBonus = setBonus.damage;
-    (stats as any)._setMagicBonus = setBonus.magic;
-  } catch {}
+  // Apply set bonuses. itemSets imports Player as a type-only dependency, so this
+  // static import does not create a runtime cycle.
+  const setBonus = computeSetBonusStats(player);
+  stats.critChance += setBonus.crit;
+  stats.lifesteal += setBonus.lifesteal;
+  stats.thorns += setBonus.thorns;
+  stats.moveSpeed += setBonus.speed;
+  stats.xpBonus += setBonus.xp;
+  stats.goldBonus += setBonus.gold;
+  stats.damageReduction += setBonus.reduction;
+  stats.totalMaxHp += setBonus.hp;
+  stats.totalMaxMana += setBonus.mana;
+  (stats as any)._setDamageBonus = setBonus.damage;
+  (stats as any)._setMagicBonus = setBonus.magic;
 
   // Vocation passives
   if (player.vocation === 'rogue' || player.vocation === 'berserker') stats.critChance += 10;

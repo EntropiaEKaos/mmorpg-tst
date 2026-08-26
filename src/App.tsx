@@ -4,11 +4,9 @@ import GameScreen from './components/GameScreen';
 import GlobalTooltipRenderer from './components/Tooltip';
 import type { Account } from './game/types';
 import { logoutSession, resumeSession } from './game/auth';
+import { dpsMeter } from './game/dpsMeter';
 
-try {
-  const { dpsMeter } = require('./game/dpsMeter');
-  dpsMeter.start();
-} catch { /* ignore */ }
+dpsMeter.start();
 
 export default function App() {
   const [account, setAccount] = useState<Account | null>(null);

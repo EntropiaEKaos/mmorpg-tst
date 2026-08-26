@@ -1,6 +1,7 @@
 import type { Player, Monster, Item } from '../game/types';
 import { EQUIPMENT_LOOT } from '../game/equipment';
 import { VOCATIONS } from '../game/classes';
+import { dpsMeter } from '../game/dpsMeter';
 
 interface Props {
   player: Player;
@@ -313,17 +314,14 @@ export default function AdminPanel({
             <SectionTitle>📊 DPS METER</SectionTitle>
             <div className="grid grid-cols-1 gap-1">
               <AdminButton onClick={() => {
-                const { dpsMeter } = require('../game/dpsMeter');
                 dpsMeter.start();
                 addMessage('Admin', 'DPS Meter started!', '#ff6060', 'system');
               }} icon="▶" label="Start DPS" />
               <AdminButton onClick={() => {
-                const { dpsMeter } = require('../game/dpsMeter');
                 dpsMeter.stop();
                 addMessage('Admin', 'DPS Meter stopped!', '#ff6060', 'system');
               }} icon="⏹" label="Stop DPS" />
               <AdminButton onClick={() => {
-                const { dpsMeter } = require('../game/dpsMeter');
                 dpsMeter.clear();
                 addMessage('Admin', 'DPS Meter cleared!', '#ff6060', 'system');
               }} icon="🔄" label="Clear DPS" />

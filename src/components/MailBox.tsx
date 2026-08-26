@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Player, Item } from '../game/types';
-import { getMail, markMailRead, claimMail, deleteMail, type MailItem } from '../game/content';
+import { getMail, markMailRead, claimMail, deleteMail, sendMail, type MailItem } from '../game/content';
 
 interface Props {
   player: Player;
@@ -8,9 +8,10 @@ interface Props {
   setInventory: (items: Item[]) => void;
   onClose: () => void;
   addMessage: (sender: string, text: string, color: string, channel: 'world' | 'system' | 'battle' | 'loot' | 'quest') => void;
+  onClaimGold: (amount: number) => void;
 }
 
-export default function MailBox({ player, inventory, setInventory, onClose, addMessage }: Props) {
+export default function MailBox({ player, inventory, setInventory, onClose, addMessage, onClaimGold }: Props) {
   const [mail, setMail] = useState<MailItem[]>(getMail(player.name));
   const [active, setActive] = useState<MailItem | null>(null);
   const [composing, setComposing] = useState(false);
@@ -21,8 +22,8 @@ export default function MailBox({ player, inventory, setInventory, onClose, addM
     const p = player;
     const claimed = claimMail(p.name, m.id);
     if (!claimed) return;
-    if (claimed.gold) {
-      // gold handled by parent via addMessage; we reflect via inventory isn't right. Use a callback.
+    if (claimed.gold && claimed.gold > 0) {
+      onClaimGold(claimed.gold);
       addMessage('Mail', `Claimed ${claimed.gold} gold from mail.`, '#f4e04d', 'loot');
     }
     if (claimed.attachedItem) {
@@ -40,12 +41,11 @@ export default function MailBox({ player, inventory, setInventory, onClose, addM
   const unreadCount = mail.filter((m) => !m.read).length;
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
+    <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
          style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
          onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="rounded-xl border-2 p-5 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-           style={{ background: 'linear-gradient(180deg, rgba(50,40,15,0.98) 0%, rgba(25,20,8,0.98) 100%)', borderColor: '#f4e04d', boxShadow: '0 0 40px rgba(244,224,77,0.3)' }}>
+           className="moria-panel w-full max-w-2xl max-h-[92vh] overflow-hidden rounded-3xl border border-amber-200/20 p-4 sm:p-6 flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
@@ -65,7 +65,7 @@ export default function MailBox({ player, inventory, setInventory, onClose, addM
               </button>
               <button onClick={refresh} className="px-3 py-1.5 rounded bg-black/40 text-amber-200 text-xs border border-amber-900/50">🔄 Refresh</button>
             </div>
-            <div className="overflow-y-auto flex-1 space-y-2">
+            <div className="moria-scrollbar overflow-y-auto flex-1 space-y-2 pr-1">
               {mail.length === 0 ? (
                 <div className="text-center text-amber-200/40 py-12">
                   <div className="text-5xl mb-3">📭</div>
@@ -138,7 +138,6 @@ function ComposeMail({ player, onClose, refresh }: { player: Player; onClose: ()
 
   const send = () => {
     if (!to.trim() || !subject.trim()) return;
-    const { sendMail } = require('../game/content');
     sendMail({ from: player.name, to: to.trim(), subject: subject.trim(), body: body.trim() });
     setSent(true);
     setTimeout(() => { onClose(); refresh(); }, 1200);

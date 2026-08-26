@@ -28,8 +28,9 @@ import DungeonPortal from './DungeonPortal';
 import PetShop from './PetShop';
 import { DUNGEON_WAVES, spawnDungeonWave, getDungeonReward, PETS, getActivePet, buyPet, type ActivePetState } from '../game/dungeons';
 import { randomGemDrop, GEMS } from '../game/itemSets';
+import { RECIPES, canCraft } from '../game/crafting';
 import { generateMap, MAPS, MAP_WIDTH, MAP_HEIGHT } from '../game/maps';
-import { createCorpse, rollLoot, CORPSE_LIFETIME, type GroundItem, type LootItem } from '../game/loot';
+import { createCorpse, createLootBag, rollLoot, CORPSE_LIFETIME, type GroundItem, type LootItem } from '../game/loot';
 import QuestCreator from './QuestCreator';
 import MysteryQuestBook from './MysteryQuestBook';
 import Depot from './Depot';
@@ -47,7 +48,7 @@ import { getWorldEvents, maybeSpawnSystemEvent, contributeToWorldEvent, generate
 import { net, broadcastPlayer, broadcastChat, type NetPlayer, type NetMessage } from '../game/network';
 import { serverSync } from '../game/ServerSync';
 import { loadLocal, saveLocal, applySave, persistSubSystems } from '../game/SaveManager';
-import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, type CustomNPC, type CustomMonster } from '../game/content';
+import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, getUILayout, saveUILayout, type CustomNPC, type CustomMonster } from '../game/content';
 import { getTownBuildings } from '../game/world';
 import { drawBuilding, type Building } from '../game/render';
 import Weather from './Weather';
@@ -115,6 +116,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [netStatus, setNetStatus] = useState('');
   const lastBroadcastRef = useRef(0);
   const lastHudTickRef = useRef(0);
+  const lastStaminaDrainRef = useRef(0);
   const [onlineCount, setOnlineCount] = useState(1);
   const [muted, setMuted] = useState(false);
   // Server-authoritative state refs (used when connected to authoritative server)
@@ -147,7 +149,6 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   // Pet state
   const petStateRef = useRef<ActivePetState | null>(null);
-  const [, setPetTick] = useState(0);
 
   // Auto-attack
   const autoAttackRef = useRef(true);
@@ -612,19 +613,20 @@ export default function GameScreen({ account, onLogout }: Props) {
       return;
     }
     const p = playerRef.current;
+    const potionDerived = computeDerivedStats(p);
     if (type === 'hp') {
-      if (p.hp >= p.maxHp) return;
-      p.hp = Math.min(p.maxHp, p.hp + 50);
+      if (p.hp >= potionDerived.totalMaxHp) return;
+      p.hp = Math.min(potionDerived.totalMaxHp, p.hp + 50);
       addFloatingText('+50 HP', p.pos, '#2ecc71');
       spawnParticles(p.pos, '#2ecc71', 8);
     } else if (type === 'mp') {
-      if (p.mana >= p.maxMana) return;
-      p.mana = Math.min(p.maxMana, p.mana + 50);
+      if (p.mana >= potionDerived.totalMaxMana) return;
+      p.mana = Math.min(potionDerived.totalMaxMana, p.mana + 50);
       addFloatingText('+50 MP', p.pos, '#3498db');
       spawnParticles(p.pos, '#3498db', 8);
     } else {
-      if (p.hp >= p.maxHp) return;
-      p.hp = Math.min(p.maxHp, p.hp + 200);
+      if (p.hp >= potionDerived.totalMaxHp) return;
+      p.hp = Math.min(potionDerived.totalMaxHp, p.hp + 200);
       addFloatingText('+200 HP', p.pos, '#2ecc71', true);
       spawnParticles(p.pos, '#2ecc71', 15);
     }
@@ -726,13 +728,13 @@ export default function GameScreen({ account, onLogout }: Props) {
         addMessage('System', '💀 Unholy Frenzy! +50% damage!', '#6a0a6a', 'battle');
       } else if (spell.id === 'blood_tap') {
         const heal = 80;
-        p.hp = Math.min(p.maxHp, p.hp + heal);
+        p.hp = Math.min(derivedForSpell.totalMaxHp, p.hp + heal);
         p.stats.healingDone += heal;
         addFloatingText(`+${heal} HP`, p.pos, '#c13030', true);
         spawnParticles(p.pos, '#c13030', 12);
       } else {
         const healAmt = Math.floor((spell.damage + Math.random() * 20) * magicBonus);
-        p.hp = Math.min(p.maxHp, p.hp + healAmt);
+        p.hp = Math.min(derivedForSpell.totalMaxHp, p.hp + healAmt);
         p.stats.healingDone += healAmt;
         addFloatingText(`+${healAmt}`, p.pos, '#2ecc71', true);
         spawnParticles(p.pos, '#2ecc71', 10);
@@ -837,12 +839,17 @@ export default function GameScreen({ account, onLogout }: Props) {
     for (const event of activeEvents) {
       if (event.monsterTemplate && event.monsterTemplate.name === m.name) {
         const result = contributeToWorldEvent(event.id, p.name, 1);
-        addMessage('World', `🌍 ${event.name}: ${event.progress.current}/${event.progress.required} (${result.contribution} contributed)`, '#ff6a00', 'world');
+        if (result.accepted > 0 && result.required > 0) {
+          const rewardGold = Math.floor(event.rewardGold * (result.accepted / result.required));
+          const rewardXp = Math.floor(event.rewardXp * (result.accepted / result.required));
+          p.gold += rewardGold;
+          p.xp += rewardXp;
+          p.stats.goldEarned += rewardGold;
+        }
+        addMessage('World', `🌍 ${event.name}: ${result.current}/${result.required} (${result.contribution} contributed)`, '#ff6a00', 'world');
         if (result.completed) {
-          p.gold += event.rewardGold;
-          p.xp += event.rewardXp;
-          addMessage('System', `🌍 WORLD EVENT COMPLETE: ${event.name}! +${event.rewardGold}g, +${event.rewardXp} XP`, '#ffd700', 'system');
-          addToast('loot', 'World Event Done!', `${event.name}: +${event.rewardGold}g +${event.rewardXp}XP`, event.icon, '#ff6a00');
+          addMessage('System', `🌍 WORLD EVENT COMPLETE: ${event.name}!`, '#ffd700', 'system');
+          addToast('loot', 'World Event Done!', event.name, event.icon, '#ff6a00');
           showRaidWarning('WORLD EVENT COMPLETE!', event.icon, '#ff6a00', 4000);
         }
       }
@@ -1367,7 +1374,6 @@ export default function GameScreen({ account, onLogout }: Props) {
     } else {
       bagItems.push({ id: `drop_${Date.now()}`, name: item.name, icon: item.icon, quantity: item.quantity, value: item.value });
     }
-    const { createLootBag } = require('../game/loot');
     groundItemsRef.current.push(createLootBag({ ...p.pos }, bagItems));
     // Remove from inventory
     inventoryRef.current = inventoryRef.current.filter((i) => i.id !== item.id);
@@ -1417,8 +1423,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const craftItem = (name: string, icon: string, value: number, description?: string) => {
     if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) { addMessage('System', 'Crafting is disabled online until it is server-authoritative.', '#ff9090', 'system'); return; }
-    const { RECIPES: recipes, canCraft } = require('../game/crafting');
-    const recipe = recipes.find((r: any) => r.result.name === name);
+    const recipe = RECIPES.find((r) => r.result.name === name);
     if (!recipe) return;
     if (!canCraft(recipe, inventoryRef.current, playerRef.current.level)) {
       addMessage('System', 'Not enough materials.', '#ff9090', 'system');
@@ -1662,8 +1667,10 @@ export default function GameScreen({ account, onLogout }: Props) {
       // Buff expiry
       p.buffs = p.buffs.filter((b) => now - b.startTime < b.duration);
 
-      // Stamina decreases over time (1 min per 30s real time)
-      if (now % 30000 < 20) {
+      // Stamina decreases once per 30s. Modulo-based checks could execute on
+      // multiple animation frames inside the same time window.
+      if (now - lastStaminaDrainRef.current >= 30000) {
+        lastStaminaDrainRef.current = now;
         const currentStamina = getStamina(p);
         if (currentStamina > 0) saveStamina(p, currentStamina - 1);
       }
@@ -1723,7 +1730,6 @@ export default function GameScreen({ account, onLogout }: Props) {
               }
             }
           }
-          setPetTick((t) => t + 1);
         }
       } else {
         petStateRef.current = null;
@@ -2387,14 +2393,14 @@ export default function GameScreen({ account, onLogout }: Props) {
           <TopButton icon="📖" label="Bestiary" hotkey="B" onClick={() => setShowBestiary((s) => !s)} />
           <TopButton icon="📊" label="DPS" hotkey="D" onClick={() => setShowDPS((s) => !s)} />
           <TopButton icon="🌀" label="Dungeon" hotkey="" onClick={() => setShowDungeon(true)} />
-          <TopButton icon="🐾" label="Pet" hotkey="" onClick={() => setShowPetShop(true)} />
+          <TopButton icon="🐾" label="Pet" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Companions are local-only until server support lands.', '#ff9090', 'system') : setShowPetShop(true)} />
           <TopButton icon="✦" label="Mystery" hotkey="" onClick={() => setShowMysteryBook(true)} />
-          <TopButton icon="🗄" label="Depot" hotkey="" onClick={() => setShowDepot(true)} />
+          <TopButton icon="🗄" label="Depot" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Depot is local-only until server support lands.', '#ff9090', 'system') : setShowDepot(true)} />
           <TopButton icon="📚" label="Books" hotkey="" onClick={() => setShowBooks(true)} />
-          <TopButton icon="🏛" label="AH" hotkey="" onClick={() => { setShowAuction(true); }} />
-          <TopButton icon="💎" label="Coins" hotkey="" onClick={() => { setShowCoinShop(true); }} />
-          <TopButton icon="🌍" label="World" hotkey="" onClick={() => setShowWorldEvents(true)} />
-          <TopButton icon="📮" label="Mail" hotkey="" onClick={() => setShowMail(true)} />
+          <TopButton icon="🏛" label="AH" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Auction House is local-only until server support lands.', '#ff9090', 'system') : setShowAuction(true)} />
+          <TopButton icon="💎" label="Coins" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Coin Shop is local-only until server support lands.', '#ff9090', 'system') : setShowCoinShop(true)} />
+          <TopButton icon="🌍" label="World" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Browser world events are disabled in authoritative mode.', '#ff9090', 'system') : setShowWorldEvents(true)} />
+          <TopButton icon="📮" label="Mail" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Mail is local-only until server support lands.', '#ff9090', 'system') : setShowMail(true)} />
           <TopButton icon="📦" label="Inv" hotkey="I" onClick={() => setShowInventory((s) => !s)} />
           <TopButton icon="⚙" label="UI" hotkey="" onClick={() => setShowUIEditor(true)} />
           <TopButton icon="🐎" label="Mount" hotkey="SPACE" onClick={toggleMount} />
@@ -2611,7 +2617,19 @@ export default function GameScreen({ account, onLogout }: Props) {
             </div>
           )}
           {showMail && (
-            <MailBox player={player} inventory={inventory} setInventory={setInventory} onClose={() => setShowMail(false)} addMessage={addMessage} />
+            <MailBox
+              player={player}
+              inventory={inventory}
+              setInventory={setInventory}
+              onClose={() => setShowMail(false)}
+              addMessage={addMessage}
+              onClaimGold={(amount) => {
+                const p = playerRef.current;
+                p.gold += Math.max(0, Math.floor(amount));
+                p.stats.goldEarned += Math.max(0, Math.floor(amount));
+                setPlayer({ ...p });
+              }}
+            />
           )}
           {showUIEditor && (
             <UILayoutEditor player={player} onClose={() => setShowUIEditor(false)} />
@@ -2622,13 +2640,15 @@ export default function GameScreen({ account, onLogout }: Props) {
           {showPetShop && (
             <PetShop player={player} onClose={() => setShowPetShop(false)} onBuyPet={(petId, price) => {
               const p = playerRef.current;
-              if (p.gold < price) { addMessage('System', 'Not enough gold.', '#ff9090', 'system'); return; }
-              p.gold -= price;
-              buyPet(p.name, petId);
               const pet = PETS.find((pd) => pd.id === petId);
-              addMessage('System', `🐾 Tamed ${pet?.icon} ${pet?.name}!`, pet?.color || '#ff9bcc', 'system');
-              addToast('info', 'New Companion!', `${pet?.name} joins you!`, pet?.icon || '🐾', pet?.color || '#ff9bcc');
+              if (!pet) { addMessage('System', 'Unknown companion.', '#ff9090', 'system'); return false; }
+              if (p.gold < price) { addMessage('System', 'Not enough gold.', '#ff9090', 'system'); return false; }
+              if (!buyPet(p.name, petId)) { addMessage('System', 'Companion already owned.', '#ff9090', 'system'); return false; }
+              p.gold -= price;
+              addMessage('System', `🐾 Tamed ${pet.icon} ${pet.name}!`, pet.color, 'system');
+              addToast('info', 'New Companion!', `${pet.name} joins you!`, pet.icon, pet.color);
               setPlayer({ ...p });
+              return true;
             }} />
           )}
 
@@ -2824,7 +2844,6 @@ export default function GameScreen({ account, onLogout }: Props) {
 
 // ============ UI LAYOUT EDITOR (editable backpacks/panels) ============
 function UILayoutEditor({ player, onClose }: { player: Player; onClose: () => void }) {
-  const { getUILayout, saveUILayout } = require('../game/content');
   const [layout, setLayout] = useState(getUILayout(player.name));
 
   const PANELS = [

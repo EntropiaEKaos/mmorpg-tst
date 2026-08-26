@@ -1,3 +1,5 @@
+import { sendSystemMail } from './content';
+
 // ============ PREMIUM CURRENCY (Coins) ============
 export function getCoins(playerName: string): number {
   try {
@@ -97,8 +99,7 @@ export function buyFromAuction(listingId: string, buyerName: string): { success:
   if (listing.sellerName === buyerName) return { success: false, reason: 'Cannot buy your own listing' };
   // Remove listing
   saveAuctionListings(listings.filter((l) => l.id !== listingId));
-  // Send gold to seller via mail
-  const { sendSystemMail } = require('./content');
+  // Send gold to seller via mail.
   sendSystemMail(listing.sellerName, 'Auction House',
     `Auction Sold: ${listing.itemName}`,
     `Your ${listing.itemName} sold on the Auction House for ${listing.buyoutPrice} gold!\n\nThe gold has been deposited to your account.`,
