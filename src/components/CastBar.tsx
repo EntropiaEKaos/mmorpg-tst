@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 interface CastInfo {
   name: string;
@@ -8,63 +8,66 @@ interface CastInfo {
   color: string;
 }
 
-export default function CastBar() {
+function CastBarInner() {
   const [cast, setCast] = useState<CastInfo | null>(null);
+  const [progress, setProgress] = useState(0);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Listen for cast events via custom event
-    const handler = (e: CustomEvent<CastInfo>) => {
-      setCast(e.detail);
+    const handler = (event: CustomEvent<CastInfo>) => {
+      const duration = Math.max(100, Number(event.detail.duration) || 100);
+      setCast({ ...event.detail, duration, startTime: Date.now() });
+      setProgress(0);
     };
     window.addEventListener('tibia-cast' as never, handler as never);
     return () => window.removeEventListener('tibia-cast' as never, handler as never);
   }, []);
 
+  useEffect(() => {
+    if (!cast) return;
+    const tick = () => {
+      const next = Math.max(0, Math.min(1, (Date.now() - cast.startTime) / cast.duration));
+      setProgress(next);
+      if (next >= 1) {
+        rafRef.current = null;
+        setCast(null);
+        return;
+      }
+      rafRef.current = window.requestAnimationFrame(tick);
+    };
+    rafRef.current = window.requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [cast]);
+
   if (!cast) return null;
 
-  const elapsed = Date.now() - cast.startTime;
-  const progress = Math.min(1, elapsed / cast.duration);
-
-  if (progress >= 1) {
-    setTimeout(() => setCast(null), 100);
-  }
+  const remainingMs = Math.max(0, cast.duration * (1 - progress));
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-80 z-15 pointer-events-none">
-      <div
-        className="rounded-lg border-2 p-2 backdrop-blur-md"
-        style={{
-          background: 'linear-gradient(180deg, rgba(40,20,40,0.95) 0%, rgba(20,10,20,0.98) 100%)',
-          borderColor: cast.color,
-          boxShadow: `0 0 20px ${cast.color}50`,
-        }}
-      >
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-xl" style={{ filter: `drop-shadow(0 0 4px ${cast.color})` }}>{cast.icon}</span>
-          <div className="flex-1">
-            <div className="text-sm font-bold text-amber-100">{cast.name}</div>
+    <div className="pointer-events-none absolute bottom-[90px] left-1/2 z-[25] w-80 max-w-[calc(100vw-32px)] -translate-x-1/2">
+      <div className="moria-panel overflow-hidden rounded-2xl border p-2.5" style={{ borderColor: `${cast.color}66`, boxShadow: `0 18px 46px rgba(0,0,0,.4), 0 0 24px ${cast.color}18` }}>
+        <div className="mb-2 flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.06] bg-black/25 text-xl" style={{ filter: `drop-shadow(0 0 7px ${cast.color}aa)` }}>{cast.icon}</span>
+          <div className="min-w-0 flex-1">
+            <div className="moria-eyebrow text-[8px]" style={{ color: cast.color }}>CASTING</div>
+            <div className="truncate text-xs font-black text-slate-100">{cast.name}</div>
           </div>
-          <span className="text-xs text-amber-200/70">{(elapsed / 1000).toFixed(1)}s</span>
+          <span className="font-mono text-[10px] text-slate-400">{(remainingMs / 1000).toFixed(1)}s</span>
         </div>
-        <div className="h-3 bg-black/60 rounded-full overflow-hidden border border-black/50">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{
-              width: `${progress * 100}%`,
-              background: `linear-gradient(90deg, ${cast.color} 0%, ${cast.color}cc 100%)`,
-              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.3), 0 0 8px ${cast.color}`,
-            }}
-          />
+        <div className="h-2 overflow-hidden rounded-full border border-white/[0.05] bg-black/60 p-[1px]">
+          <div className="h-full rounded-full" style={{ width: `${progress * 100}%`, background: `linear-gradient(90deg, ${cast.color}99, ${cast.color})`, boxShadow: `0 0 10px ${cast.color}88` }} />
         </div>
       </div>
     </div>
   );
 }
 
+const CastBar = memo(CastBarInner);
+export default CastBar;
+
 export function triggerCast(name: string, icon: string, duration: number, color: string) {
-  window.dispatchEvent(
-    new CustomEvent('tibia-cast', {
-      detail: { name, icon, duration, startTime: Date.now(), color },
-    })
-  );
+  window.dispatchEvent(new CustomEvent('tibia-cast', { detail: { name, icon, duration: Math.max(100, duration), startTime: Date.now(), color } }));
 }
