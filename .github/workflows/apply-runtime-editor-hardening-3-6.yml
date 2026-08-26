@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Prepare editor compatibility
+        run: python3 tools/prep-runtime-editor-hardening-3-6.py
       - name: Apply runtime editor hardening
         run: python3 tools/apply-runtime-editor-hardening-3-6.py
       - name: Validate browser/admin invariants
