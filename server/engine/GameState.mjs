@@ -6,8 +6,9 @@
 
 import { WORLD } from './World.mjs';
 import { VOCATIONS } from './Vocations.mjs';
-import { rollLoot, getStarterInventory } from './Items.mjs';
+import { rollLoot, getStarterInventory, buildEquipmentLootPool } from './Items.mjs';
 import { questEngine } from './QuestEngine.mjs';
+import { adventureEngine, createAdventureState } from './AdventureEngine.mjs';
 import { contentDB } from './ContentDB.mjs';
 
 
@@ -85,7 +86,8 @@ class GameEngine {
       buffs: [], skills: { sword: 10, magic: 10, shielding: 10 },
       lastAttack: 0, lastMove: 0, lastRegen: 0, cooldowns: {},
       mounted: false, professions: {}, reputation: { town: 0 }, talents: {},
-      stats: { monstersKilled: 0, damageDealt: 0, damageTaken: 0, healingDone: 0, goldEarned: 0, deaths: 0, levelUps: 0, spellsCast: 0 },
+      adventure: createAdventureState(),
+      stats: { monstersKilled: 0, damageDealt: 0, damageTaken: 0, healingDone: 0, goldEarned: 0, deaths: 0, levelUps: 0, spellsCast: 0, adventuresCompleted: 0 },
       ws, lastActivity: Date.now(),
     };
     this.players.set(id, player);
@@ -254,6 +256,9 @@ class GameEngine {
       case 'mount': return this.handleMount(player);
       case 'talent': return this.handleTalent(player, payload);
       case 'talent_reset': return this.handleTalentReset(player);
+      case 'adventure_start': return this.handleAdventureStart(player, payload);
+      case 'adventure_abandon': return this.handleAdventureAbandon(player);
+      case 'adventure_claim': return this.handleAdventureClaim(player);
       case 'quest_accept': return this.handleQuestAccept(player, payload);
       case 'quest_complete': return this.handleQuestComplete(player, payload);
       case 'travel': return this.handleTravel(player, payload);
@@ -388,7 +393,8 @@ class GameEngine {
     player.stats.monstersKilled++;
 
     const derived = this.computeDerivedStats(player);
-    const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100));
+    const adventureKill = adventureEngine.onMonsterKill(player, monster);
+    const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100) * adventureKill.xpMultiplier);
     player.xp += xpGain;
     this.emitEvent(player.mapId, { kind: 'xp', targetId: player.id, amount: xpGain, pos: { x: monster.x, y: monster.y }, color: '#f4e04d', text: `+${xpGain} XP` });
 
@@ -398,6 +404,17 @@ class GameEngine {
     }
     for (const comp of questResult.completed) {
       this.emitEvent(player.mapId, { kind: 'quest_complete', targetId: player.id, text: `✅ ${comp.quest.name} COMPLETE!`, color: '#2ecc71', pos: { x: player.x, y: player.y } });
+    }
+
+    if (adventureKill.comboCount > 1) {
+      this.emitEvent(player.mapId, { kind: 'adventure_combo', targetId: player.id, text: `${adventureKill.comboCount}x MOMENTUM · +${Math.round((adventureKill.comboMultiplier - 1) * 100)}% XP`, color: '#ffb84d', pos: { x: player.x, y: player.y } });
+    }
+    if (adventureKill.progress) {
+      const p = adventureKill.progress;
+      this.emitEvent(player.mapId, { kind: 'adventure_progress', targetId: player.id, text: `⚔ ${p.title}: ${p.current}/${p.needed}`, color: '#7dd3fc', pos: { x: player.x, y: player.y } });
+    }
+    if (adventureKill.becameReady) {
+      this.emitEvent(player.mapId, { kind: 'adventure_ready', targetId: player.id, text: '🏆 Hunt complete! Open Hunts (H) to claim your reward.', color: '#ffd87b', pos: { x: player.x, y: player.y } });
     }
 
     const loot = rollLoot(monster, derived.goldBonus, this.contentItems);
@@ -656,6 +673,77 @@ class GameEngine {
     return this.travelThroughPortal(player, portal);
   }
 
+  handleAdventureStart(player, payload) {
+    const result = adventureEngine.start(player, payload.contractId);
+    this.emitEvent(player.mapId, {
+      kind: 'system', targetId: player.id,
+      text: result.ok ? `⚔ Hunt started: ${result.contract.title}` : `❌ ${result.error}`,
+      color: result.ok ? '#7dd3fc' : '#ff6060', pos: { x: player.x, y: player.y },
+    });
+    return result.ok;
+  }
+
+  handleAdventureAbandon(player) {
+    const result = adventureEngine.abandon(player);
+    this.emitEvent(player.mapId, {
+      kind: 'system', targetId: player.id,
+      text: result.ok ? 'Hunt abandoned.' : `❌ ${result.error}`,
+      color: result.ok ? '#cbd5e1' : '#ff6060', pos: { x: player.x, y: player.y },
+    });
+    return result.ok;
+  }
+
+  handleAdventureClaim(player) {
+    const result = adventureEngine.claim(player);
+    if (!result.ok) {
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `❌ ${result.error}`, color: '#ff6060', pos: { x: player.x, y: player.y } });
+      return false;
+    }
+
+    player.gold += result.gold;
+    player.xp += result.xp;
+    player.stats.goldEarned += result.gold;
+    player.stats.adventuresCompleted = Math.max(0, Number(player.stats.adventuresCompleted) || 0) + 1;
+
+    let cacheItem = null;
+    if (result.cache) {
+      const pool = buildEquipmentLootPool(this.contentItems)
+        .filter(item => (Number(item.level) || 1) <= player.level + 3)
+        .sort((a, b) => Math.abs((Number(a.level) || 1) - player.level) - Math.abs((Number(b.level) || 1) - player.level))
+        .slice(0, 6);
+      if (pool.length > 0) {
+        const reward = pool[Math.floor(Math.random() * pool.length)];
+        cacheItem = reward.name;
+        player.inventory.push({
+          id: `hunt_cache_${Date.now()}_${Math.random()}`,
+          name: reward.name, icon: reward.icon, quantity: 1, value: reward.value || 0,
+          type: 'equipment', rarity: reward.rarity, description: reward.description,
+          equipment: { ...reward, sockets: 0, socketedGems: [] },
+        });
+      }
+    }
+
+    const voc = VOCATIONS[player.vocation];
+    while (voc && player.xp >= player.xpNext) {
+      player.xp -= player.xpNext;
+      player.level++;
+      player.xpNext = Math.floor(player.xpNext * 1.4);
+      player.maxHp += voc.hpPerLevel; player.hp = player.maxHp;
+      player.maxMana += voc.manaPerLevel; player.mana = player.maxMana;
+      player.attack += voc.atkPerLevel; player.defense += voc.defPerLevel; player.magic += voc.magPerLevel;
+      player.stats.levelUps++;
+      this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y } });
+    }
+
+    const cacheText = cacheItem ? ` · 🎁 Cache: ${cacheItem}` : result.cache ? ' · 🎁 Equipment cache earned' : '';
+    this.emitEvent(player.mapId, {
+      kind: 'adventure_claimed', targetId: player.id,
+      text: `🏆 ${result.contract.title}: +${result.gold}g +${result.xp} XP · Streak ${result.streak}${cacheText}`,
+      color: '#ffd87b', pos: { x: player.x, y: player.y },
+    });
+    return true;
+  }
+
   getQuestNpcRequirement(questId) {
     const quest = contentDB.get('quests').find(entry => entry?.id === questId);
     if (!quest || typeof quest.npcId !== 'string' || !quest.npcId.trim()) return null;
@@ -824,6 +912,7 @@ class GameEngine {
       damageReduction: derived.damageReduction,
       moveSpeed: derived.moveSpeed,
       quests: questEngine.serialize(playerId),
+      adventure: adventureEngine.serialize(player),
     };
 
     const nearbyPlayers = [];
@@ -842,7 +931,7 @@ class GameEngine {
     const allGround = this.groundItemsByMap.get(player.mapId) || [];
     const groundItems = allGround.filter(g => Math.abs(g.x - player.x) < 15 && Math.abs(g.y - player.y) < 15).map(g => ({ id: g.id, x: g.x, y: g.y, items: g.items }));
 
-    const privateKinds = new Set(['system', 'quest_progress', 'quest_complete', 'death', 'heal', 'xp', 'levelup']);
+    const privateKinds = new Set(['system', 'quest_progress', 'quest_complete', 'death', 'heal', 'xp', 'levelup', 'adventure_combo', 'adventure_progress', 'adventure_ready', 'adventure_claimed']);
     const events = (this.pendingEvents.get(player.mapId) || []).filter(event =>
       !privateKinds.has(event.kind) || event.targetId === playerId
     );

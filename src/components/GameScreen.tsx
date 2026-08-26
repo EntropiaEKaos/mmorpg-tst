@@ -59,6 +59,7 @@ import { showRaidWarning } from './RaidWarning';
 import TalentTree from './TalentTree';
 import Bestiary from './Bestiary';
 import DPSMeter from './DPSMeter';
+import AdventureBoard, { type AdventureSnapshot } from './AdventureBoard';
 import { dpsMeter } from '../game/dpsMeter';
 import { recordKill } from '../game/bestiary';
 import {
@@ -234,6 +235,9 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [showInventory, setShowInventory] = useState(false);
   const [showCharacter, setShowCharacter] = useState(false);
   const [showQuestLog, setShowQuestLog] = useState(false);
+  const [showAdventure, setShowAdventure] = useState(false);
+  const [adventureState, setAdventureState] = useState<AdventureSnapshot | null>(null);
+  const lastAdventureSignatureRef = useRef('');
   const serverQuestsRef = useRef<{ active: any[]; completed: string[] } | null>(null);
   const [serverQuestCatalog, setServerQuestCatalog] = useState<Quest[]>([]);
   const serverNpcCatalogRef = useRef<Array<{ mapId: string; npc: NPC }>>([]);
@@ -714,6 +718,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (e.key.toLowerCase() === 'i') setShowInventory((s) => !s);
       if (e.key.toLowerCase() === 'c') setShowCharacter((s) => !s);
       if (e.key.toLowerCase() === 'q') setShowQuestLog((s) => !s);
+      if (e.key.toLowerCase() === 'h') setShowAdventure((s) => !s);
       if (e.key.toLowerCase() === 't') setShowTalents((s) => !s);
       if (e.key.toLowerCase() === 'r') setAutoAttack((s) => { autoAttackRef.current = !s; return !s; });
       if (e.key.toLowerCase() === 'b') setShowBestiary((s) => !s);
@@ -1733,10 +1738,17 @@ export default function GameScreen({ account, onLogout }: Props) {
         const renderState = serverSync.getRenderState();
         if (renderState) {
           const sp = renderState.player || {};
-          const { x, y, inventory: serverInventory, quests: serverQuestState, skills: _serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
+          const { x, y, inventory: serverInventory, quests: serverQuestState, adventure: serverAdventure, skills: _serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
           Object.assign(p, compatibleServerPlayer);
           if (Number.isFinite(x) && Number.isFinite(y)) p.pos = { x, y };
           if (serverStats && typeof serverStats === 'object') p.stats = { ...p.stats, ...serverStats };
+          if (serverAdventure && typeof serverAdventure === 'object') {
+            const signature = JSON.stringify(serverAdventure);
+            if (signature !== lastAdventureSignatureRef.current) {
+              lastAdventureSignatureRef.current = signature;
+              setAdventureState(serverAdventure as AdventureSnapshot);
+            }
+          }
           if (serverQuestState && typeof serverQuestState === 'object') {
             p.quests = Array.isArray(serverQuestState.completed) ? serverQuestState.completed : p.quests;
             p.activeQuests = Array.isArray(serverQuestState.active) ? serverQuestState.active.map((q: any) => ({
@@ -2573,6 +2585,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const availableQuests = serverSync.isActive() ? authoritativeAvailableQuests : localAvailableQuests;
 
   const quickActions: Record<string, { icon: string; label: string; hotkey: string; onClick: () => void }> = {
+    adventure: { icon: '⚔', label: 'Hunts', hotkey: 'H', onClick: () => setShowAdventure((v) => !v) },
     quests: { icon: '📜', label: 'Quests', hotkey: 'Q', onClick: () => setShowQuestLog((v) => !v) },
     char: { icon: '👤', label: 'Char', hotkey: 'C', onClick: () => setShowCharacter((v) => !v) },
     talents: { icon: '🌟', label: 'Talents', hotkey: 'T', onClick: () => setShowTalents((v) => !v) },
@@ -2694,6 +2707,28 @@ export default function GameScreen({ account, onLogout }: Props) {
               </div>
             );
           })()}
+
+
+          {/* Active Hunt Tracker */}
+          {serverSync.isActive() && adventureState?.active && (
+            <div className="moria-panel absolute left-3 top-[132px] z-10 w-[245px] rounded-2xl border border-sky-300/25 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="moria-eyebrow text-[8px] text-sky-200/70">⚔ ACTIVE HUNT</div>
+                {adventureState.combo.count > 1 && <div className="text-[9px] font-black text-amber-300">⚡ {adventureState.combo.count}x · +{Math.round((adventureState.combo.multiplier - 1) * 100)}% XP</div>}
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="text-xl">{adventureState.active.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-black text-slate-100">{adventureState.active.title}</div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/50">
+                    <div className={`h-full ${adventureState.active.ready ? 'bg-amber-300' : 'bg-sky-400'}`} style={{ width: `${Math.min(100, (adventureState.active.progress / Math.max(1, adventureState.active.count)) * 100)}%` }} />
+                  </div>
+                  <div className="mt-1 flex justify-between text-[9px] text-slate-400"><span>{adventureState.active.targetLabel}</span><span>{adventureState.active.progress}/{adventureState.active.count}</span></div>
+                </div>
+              </div>
+              {adventureState.active.ready && <button onClick={() => setShowAdventure(true)} className="moria-button-primary mt-2 w-full rounded-lg py-1 text-[9px] font-black">🏆 REWARD READY</button>}
+            </div>
+          )}
 
           {/* Active Quest Tracker */}
           {player.activeQuests.length > 0 && (
@@ -2952,6 +2987,18 @@ export default function GameScreen({ account, onLogout }: Props) {
 
           {/* Chat - WoW style bottom-left */}
           <Chat messages={messages} onSendMessage={(text) => { addMessage(player.name, text, '#ffffff', 'world'); broadcastChat(player.name, text, '#ffffff', 'world'); }} />
+
+          {showAdventure && (
+            <AdventureBoard
+              state={adventureState}
+              connected={serverSync.isActive()}
+              onStart={(contractId) => serverSync.sendAdventureStart(contractId)}
+              onAbandon={() => serverSync.sendAdventureAbandon()}
+              onClaim={() => serverSync.sendAdventureClaim()}
+              onClose={() => setShowAdventure(false)}
+            />
+          )}
+
           {showQuestLog && (
             <QuestLog
               activeQuests={player.activeQuests}
@@ -3060,6 +3107,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 // ============ UI LAYOUT EDITOR (editable backpacks/panels) ============
 function UILayoutEditor({ player, layout, onLayoutChange, onClose }: { player: Player; layout: UILayout; onLayoutChange: (layout: UILayout) => void; onClose: () => void }) {
   const PANELS = [
+    { id: 'adventure', label: 'Hunt Board', icon: '⚔' },
     { id: 'quests', label: 'Quest Log', icon: '📜' },
     { id: 'char', label: 'Character', icon: '👤' },
     { id: 'talents', label: 'Talents', icon: '🌟' },
