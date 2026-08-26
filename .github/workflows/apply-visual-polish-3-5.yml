@@ -1,0 +1,53 @@
+name: Apply visual polish 3.5
+
+on:
+  push:
+    branches: [hardening-3.1]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening-3.1
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply visual and correctness transform
+        run: python3 tools/apply-visual-polish-3-5.py
+      - name: Reject CommonJS in browser source
+        run: |
+          if grep -R "require(" src --include='*.ts' --include='*.tsx'; then
+            echo "CommonJS require found in browser source"
+            exit 1
+          fi
+      - name: Validate all gates
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm install --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated polish
+        run: |
+          if git diff --quiet; then
+            echo "No source changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src
+          git commit -m "feat(ui): polish utility panels and fix local systems"
+          git fetch origin hardening-3.1
+          git rebase origin/hardening-3.1
+          git push origin HEAD:hardening-3.1
