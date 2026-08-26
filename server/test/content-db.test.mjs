@@ -55,3 +55,26 @@ test('ContentDB recovers from corrupt JSON and saves atomically', () => withTemp
   const persisted = normalizeContentData(JSON.parse(fs.readFileSync(file, 'utf-8')));
   assert.ok(persisted.items.length > 0);
 }));
+
+
+test('ContentDB enforces unique IDs for runtime additions', () => withTempDir(dir => {
+  const file = path.join(dir, 'content.json');
+  fs.writeFileSync(file, JSON.stringify({
+    version: 1, items: [], monsters: [], npcs: [], quests: [], spells: [], maps: [],
+    worldEvents: [], shops: [], lootTables: [],
+  }));
+  const db = new ContentDB(file);
+
+  const first = db.add('items', { id: 'unique_sword', name: 'First Sword' });
+  assert.ok(first);
+  assert.equal(db.add('items', { id: 'unique_sword', name: 'Duplicate Sword' }), null);
+  assert.equal(db.get('items').length, 1);
+  assert.equal(db.get('items')[0].name, 'First Sword');
+
+  const generatedA = db.add('items', { name: 'Generated A' });
+  const generatedB = db.add('items', { name: 'Generated B' });
+  assert.ok(generatedA?.id);
+  assert.ok(generatedB?.id);
+  assert.notEqual(generatedA.id, generatedB.id);
+  assert.equal(new Set(db.get('items').map(item => item.id)).size, db.get('items').length);
+}));

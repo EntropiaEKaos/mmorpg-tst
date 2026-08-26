@@ -215,7 +215,17 @@ export class ContentDB {
   add(type, item) {
     const key = canonicalContentType(type);
     if (!key || !item || typeof item !== 'object' || Array.isArray(item)) return null;
-    const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 100) : `${key}_${Date.now()}`;
+
+    const explicitId = typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 100) : '';
+    if (explicitId && this.data[key].some(record => record.id === explicitId)) return null;
+
+    let id = explicitId;
+    if (!id) {
+      do {
+        id = `${key}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      } while (this.data[key].some(record => record.id === id));
+    }
+
     const record = { ...item, id };
     this.data[key].push(record);
     this.save();
