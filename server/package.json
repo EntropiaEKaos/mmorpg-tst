@@ -8,7 +8,8 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check server.js && for f in engine/*.mjs; do node --check \"$f\"; done",
+    "check": "node --check server.js && for f in engine/*.mjs; do node --check \"$f\"; done && for f in tools/*.mjs; do node --check \"$f\"; done",
+    "migrate:legacy": "node tools/migrate-legacy-character.mjs",
     "build": "cd .. && npm install && npm run build",
     "build:start": "npm run build && npm start",
     "tunnel": "npx localtunnel --port 3000"
