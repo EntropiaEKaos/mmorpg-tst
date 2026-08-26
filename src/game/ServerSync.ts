@@ -9,7 +9,6 @@
 import { sendAuth, sendIntent, setSnapshot, getSnapshot, isAuthoritative, net, type ServerSnapshot } from './network';
 import { type PlayerSave } from './SaveManager';
 
-// Re-export net for convenience
 export { net };
 
 let pendingLoadResponse: ((save: PlayerSave | null) => void) | null = null;
@@ -26,20 +25,17 @@ class ServerSyncManager {
   private authed = false;
   private currentMapId = 'eldoria';
 
-  /** Authenticate with the server (call once after connecting) */
   authenticate(name: string, vocation: string) {
     if (this.authed) return;
     sendAuth(name, vocation);
     this.authed = true;
   }
 
-  /** Returns true if the client should act as a dumb terminal */
   isActive(): boolean {
     return isAuthoritative() && this.authed && getSnapshot() !== null;
   }
 
   // ===== SAVE SYNC =====
-  /** Upload full player save to server (talents, gems, inventory, etc.) */
   uploadSave(player: any, inventory: any[]) {
     if (!this.isActive()) return;
     const { buildSave } = require('./SaveManager');
@@ -48,7 +44,6 @@ class ServerSyncManager {
     net.send({ kind: 'save', payload: save });
   }
 
-  /** Request the full save from server (on first connect) */
   requestServerSave(): Promise<PlayerSave | null> {
     return new Promise((resolve) => {
       pendingLoadResponse = resolve;
@@ -57,12 +52,11 @@ class ServerSyncManager {
     });
   }
 
-  /** Called when server sends back the saved data */
   handleLoadResponse(save: PlayerSave | null) {
     if (pendingLoadResponse) { pendingLoadResponse(save); pendingLoadResponse = null; }
   }
 
-  // ===== INTENT SENDERS (replace direct state mutation) =====
+  // ===== INTENT SENDERS =====
   sendMove(dx: number, dy: number) {
     if (!this.isActive()) return;
     sendIntent({ type: 'move', payload: { dx, dy } });
@@ -103,9 +97,11 @@ class ServerSyncManager {
     sendIntent({ type: 'mount', payload: {} });
   }
 
-  sendTravel(targetMap: string, spawnX: number, spawnY: number) {
+  // Keep the old signature so existing callers do not break, but coordinates
+  // are deliberately not sent: destination coordinates are server-owned.
+  sendTravel(targetMap: string, _spawnX?: number, _spawnY?: number) {
     if (!this.isActive()) return;
-    sendIntent({ type: 'travel', payload: { targetMap, spawnX, spawnY } });
+    sendIntent({ type: 'travel', payload: { targetMap } });
   }
 
   sendQuestAccept(questId: string) {
@@ -123,14 +119,17 @@ class ServerSyncManager {
     sendIntent({ type: 'talent', payload: { talentId } });
   }
 
+  sendTalentReset() {
+    if (!this.isActive()) return;
+    sendIntent({ type: 'talent_reset', payload: {} });
+  }
+
   // ===== SNAPSHOT CONSUMER =====
-  /** Store the latest snapshot from the server */
   updateSnapshot(snap: ServerSnapshot) {
     setSnapshot(snap);
     this.currentMapId = snap.player.mapId;
   }
 
-  /** Get the current render state (server truth) */
   getRenderState(): RenderState | null {
     const snap = getSnapshot();
     if (!snap) return null;
@@ -143,7 +142,6 @@ class ServerSyncManager {
     };
   }
 
-  /** Process server events (damage numbers, loot, level up) into floating texts + chat */
   processEvents(addFloatingText: (text: string, pos: { x: number; y: number }, color: string, big?: boolean) => void,
                  addMessage: (sender: string, text: string, color: string, channel: any) => void): string[] {
     const state = this.getRenderState();
