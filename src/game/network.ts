@@ -97,7 +97,7 @@ class NetworkClient {
 
   connectOnline(explicitUrl?: string): Promise<boolean> {
     return new Promise(resolve => {
-      let url = explicitUrl || this.serverUrl || this.detectServerUrl() || '';
+      const url = explicitUrl || this.serverUrl || this.detectServerUrl() || '';
       if (!url) { resolve(false); return; }
       if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
         resolve(this.ws.readyState === WebSocket.OPEN);
@@ -118,11 +118,16 @@ class NetworkClient {
           finish(true);
         };
         socket.onmessage = ev => {
-          try { this.emit(JSON.parse(ev.data) as NetMessage); } catch {}
+          try {
+            const msg = JSON.parse(ev.data) as NetMessage;
+            if (msg.kind === 'auth_error') setSnapshot(null);
+            this.emit(msg);
+          } catch {}
         };
         socket.onerror = () => finish(false);
         socket.onclose = () => {
           if (this.ws === socket) this.ws = null;
+          setSnapshot(null);
           this.mode = this.channel ? 'local' : 'offline';
         };
         setTimeout(() => finish(false), 3000);
@@ -142,12 +147,7 @@ class NetworkClient {
 
   private sendAuthPayload() {
     if (!this.authPayload || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    const message = {
-      kind: 'auth',
-      from: this.clientId,
-      time: Date.now(),
-      payload: this.authPayload,
-    };
+    const message = { kind: 'auth', from: this.clientId, time: Date.now(), payload: this.authPayload };
     try { this.ws.send(JSON.stringify(message)); } catch {}
   }
 
@@ -170,9 +170,7 @@ class NetworkClient {
     if (this.reconnectTimer) return;
     this.reconnectTimer = setInterval(() => {
       if (this.manuallyDisconnected || !this.serverUrl) return;
-      if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
-        void this.connectOnline(this.serverUrl);
-      }
+      if (!this.ws || this.ws.readyState === WebSocket.CLOSED) void this.connectOnline(this.serverUrl);
     }, 5000);
   }
 
@@ -184,6 +182,7 @@ class NetworkClient {
     this.channel = null;
     this.ws = null;
     this.mode = 'offline';
+    setSnapshot(null);
     this.clearAuthPayload();
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     if (this.reconnectTimer) clearInterval(this.reconnectTimer);
@@ -192,7 +191,6 @@ class NetworkClient {
   }
 
   get id() { return this.clientId; }
-
   isConnected(): boolean { return this.ws?.readyState === WebSocket.OPEN; }
 
   detectServerUrl(): string | null {
