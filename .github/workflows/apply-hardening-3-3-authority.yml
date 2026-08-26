@@ -39,4 +39,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add server/server.js server/engine/GameState.mjs server/test/hardening.test.mjs src/game/ServerSync.ts src/components/GameScreen.tsx
           git commit -m "fix(authority): enforce portal travel and online state boundary"
+          git fetch origin hardening-3.1
+          git rebase origin/hardening-3.1
           git push origin HEAD:hardening-3.1
