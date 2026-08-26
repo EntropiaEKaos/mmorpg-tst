@@ -20,6 +20,7 @@ export interface RenderState {
 class ServerSyncManager {
   private authed = false;
   private currentMapId = 'eldoria';
+  private lastProcessedEvents: any[] | null = null;
 
   // GameScreen historically passed (characterName, vocation). During the auth
   // migration we resolve the actual credential from the session token store so
@@ -41,6 +42,7 @@ class ServerSyncManager {
 
   handleAuthError() {
     this.authed = false;
+    this.lastProcessedEvents = null;
     setSnapshot(null);
   }
 
@@ -50,8 +52,6 @@ class ServerSyncManager {
 
   uploadSave(_player: any, _inventory: any[]) {
     if (!this.isActive()) return;
-    // Payload is only a save request. The server ignores client state and persists
-    // its own authoritative player object.
     net.send({ kind: 'save', payload: {} });
   }
 
@@ -163,13 +163,22 @@ class ServerSyncManager {
     };
   }
 
-  processEvents(addFloatingText: (text: string, pos: { x: number; y: number }, color: string, big?: boolean) => void,
-                 addMessage: (sender: string, text: string, color: string, channel: any) => void): string[] {
+  processEvents(
+    addFloatingText: (text: string, pos: { x: number; y: number }, color: string, big?: boolean) => void,
+    addMessage: (sender: string, text: string, color: string, channel: any) => void,
+  ): string[] {
     const state = this.getRenderState();
     if (!state) return [];
+
+    // GameScreen can render faster than the server snapshot cadence. The event
+    // array belongs to a single immutable snapshot, so consume that array once.
+    if (state.events === this.lastProcessedEvents) return [];
+    this.lastProcessedEvents = state.events;
+
     const consumedIds: string[] = [];
-    for (const event of state.events) {
-      const id = `${event.kind}_${event.targetId}_${event.amount}_${Math.random()}`;
+    for (let index = 0; index < state.events.length; index++) {
+      const event = state.events[index];
+      const id = `${event.kind}_${event.targetId || ''}_${event.amount || ''}_${index}`;
       consumedIds.push(id);
       switch (event.kind) {
         case 'damage':
@@ -182,8 +191,17 @@ class ServerSyncManager {
         case 'levelup':
           if (event.text) addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#f4e04d', true);
           break;
+        case 'spell':
+          if (event.text) addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#b398ff', true);
+          break;
         case 'loot':
           if (event.text) addMessage('Loot', event.text, event.color || '#f4e04d', 'loot');
+          break;
+        case 'quest_progress':
+          if (event.text) addMessage('Quest', event.text, event.color || '#9bd4ff', 'quest');
+          break;
+        case 'quest_complete':
+          if (event.text) addMessage('Quest', event.text, event.color || '#58d6a8', 'quest');
           break;
         case 'death':
           if (event.text) addMessage('System', event.text, event.color || '#ff0000', 'system');
@@ -197,8 +215,10 @@ class ServerSyncManager {
   }
 
   getMapId(): string { return this.currentMapId; }
+
   reset() {
     this.authed = false;
+    this.lastProcessedEvents = null;
     setSnapshot(null);
     net.clearAuthPayload();
   }
