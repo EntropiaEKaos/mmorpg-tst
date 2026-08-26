@@ -31,6 +31,11 @@ function safePayload(payload) {
   return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
 }
 
+function boundedNumber(value, min, max, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+}
+
 class GameEngine {
   constructor() {
     this.players = new Map();
@@ -82,6 +87,81 @@ class GameEngine {
     const result = [];
     for (const p of this.players.values()) if (p.mapId === mapId) result.push(p);
     return result;
+  }
+
+  // Reconcile live monster overlays created in the server ContentDB.
+  // Baseline WORLD spawns are preserved; only monsters carrying contentSourceId
+  // are replaced when admin content changes. A mapId is intentionally required
+  // so catalog-only templates cannot accidentally flood Eldoria.
+  syncContentMonsters(monsterContent = []) {
+    const catalog = Array.isArray(monsterContent) ? monsterContent : [];
+    for (const mapId of WORLD.getMapIds()) {
+      const map = WORLD.getMap(mapId);
+      if (!map) continue;
+
+      const baseline = (this.monstersByMap.get(mapId) || []).filter(monster => !monster.contentSourceId);
+      const occupied = new Set(
+        baseline.filter(monster => !monster.dead).map(monster => `${monster.x},${monster.y}`)
+      );
+      const overlays = [];
+      const seenContentIds = new Set();
+
+      for (const template of catalog) {
+        if (!template || typeof template !== 'object' || template.mapId !== mapId) continue;
+        if (typeof template.id !== 'string' || !template.id.trim()) continue;
+        const sourceId = template.id.trim().slice(0, 100);
+        if (seenContentIds.has(sourceId)) continue;
+        seenContentIds.add(sourceId);
+
+        const count = Math.floor(boundedNumber(template.count, 1, 25, 1));
+        const explicitX = Number(template.posX);
+        const explicitY = Number(template.posY);
+        const hasExplicitSpawn = Number.isInteger(explicitX) && Number.isInteger(explicitY)
+          && explicitX >= 0 && explicitX < map.width && explicitY >= 0 && explicitY < map.height
+          && Boolean(map.tiles?.[explicitY]?.[explicitX]?.walkable);
+
+        for (let index = 0; index < count; index++) {
+          let pos = null;
+          if (index === 0 && hasExplicitSpawn && !occupied.has(`${explicitX},${explicitY}`)) {
+            pos = { x: explicitX, y: explicitY };
+          }
+          if (!pos) {
+            for (let attempt = 0; attempt < 300; attempt++) {
+              const candidate = WORLD.findWalkableSpawn(map);
+              if (!occupied.has(`${candidate.x},${candidate.y}`)) { pos = candidate; break; }
+            }
+          }
+          if (!pos) continue;
+          occupied.add(`${pos.x},${pos.y}`);
+
+          const hp = Math.floor(boundedNumber(template.hp, 1, 10_000_000, 20));
+          const rawType = typeof template.type === 'string' ? template.type.toLowerCase() : 'normal';
+          const type = ['normal', 'elite', 'boss'].includes(rawType) ? rawType : 'normal';
+          const rawColor = typeof template.color === 'string' ? template.color : '';
+          overlays.push({
+            id: `content_${mapId}_${sourceId}_${index}`,
+            contentSourceId: sourceId,
+            name: typeof template.name === 'string' && template.name.trim() ? template.name.trim().slice(0, 80) : sourceId,
+            emoji: typeof template.emoji === 'string' && template.emoji ? template.emoji.slice(0, 8) : '👹',
+            x: pos.x, y: pos.y, spawnX: pos.x, spawnY: pos.y,
+            hp, maxHp: hp,
+            attack: Math.floor(boundedNumber(template.attack, 0, 1_000_000, 4)),
+            defense: Math.floor(boundedNumber(template.defense, 0, 1_000_000, 1)),
+            xp: Math.floor(boundedNumber(template.xp, 0, 100_000_000, 10)),
+            level: Math.floor(boundedNumber(template.level, 1, 100_000, 1)),
+            color: /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : '#8b6f47',
+            size: boundedNumber(template.size, 0.4, 4, 1),
+            type,
+            dead: false, respawnAt: 0, lastMove: 0, lastAttack: 0,
+            speed: Math.floor(boundedNumber(template.speed, 200, 10_000, 1200)),
+            goldMin: Math.floor(boundedNumber(template.goldMin, 0, 100_000_000, 0)),
+            goldMax: Math.floor(boundedNumber(template.goldMax, 0, 100_000_000, 0)),
+          });
+        }
+      }
+
+      this.monstersByMap.set(mapId, [...baseline, ...overlays]);
+    }
   }
 
   // ===== INTENT PROCESSING =====

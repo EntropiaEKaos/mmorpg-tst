@@ -239,3 +239,49 @@ test('successful authoritative attacks persist the selected target', () => {
     cleanup(id);
   }
 });
+
+
+test('authoritative content monsters spawn, fight and reconcile cleanly', () => {
+  const mapId = 'eldoria';
+  const map = WORLD.getMap(mapId);
+  const originalCatalog = contentDB.get('monsters').map(monster => ({ ...monster }));
+  const baseline = (engine.monstersByMap.get(mapId) || []).filter(monster => !monster.contentSourceId);
+  let spawn = null;
+  for (let attempt = 0; attempt < 300 && !spawn; attempt++) {
+    const candidate = WORLD.findWalkableSpawn(map);
+    if (!baseline.some(monster => !monster.dead && monster.x === candidate.x && monster.y === candidate.y)) spawn = candidate;
+  }
+  assert.ok(spawn);
+
+  const sourceId = `admin_live_${Date.now()}_${Math.random()}`;
+  engine.syncContentMonsters([{
+    id: sourceId, name: 'Admin Live Beast', emoji: '🧪', mapId,
+    posX: spawn.x, posY: spawn.y, count: 1,
+    hp: 25, attack: 3, defense: 0, xp: 7, level: 2,
+    type: 'elite', color: '#abcdef', size: 1.1, speed: 900,
+  }]);
+
+  const live = (engine.monstersByMap.get(mapId) || []).find(monster => monster.contentSourceId === sourceId);
+  assert.ok(live);
+  assert.equal(live.name, 'Admin Live Beast');
+  assert.equal(live.x, spawn.x);
+  assert.equal(live.y, spawn.y);
+  assert.equal(live.type, 'elite');
+
+  const { id, player } = makePlayer();
+  try {
+    player.x = Math.max(1, live.x - 1);
+    player.y = live.y;
+    player.attack = 9999;
+    player.lastAttack = 0;
+    live.hp = 1;
+    assert.equal(engine.processIntent(id, { type: 'attack', payload: { monsterId: live.id } }), true);
+    assert.equal(live.dead, true);
+    assert.ok(live.respawnAt > Date.now());
+  } finally {
+    cleanup(id);
+    engine.syncContentMonsters(originalCatalog);
+  }
+
+  assert.equal((engine.monstersByMap.get(mapId) || []).some(monster => monster.contentSourceId === sourceId), false);
+});

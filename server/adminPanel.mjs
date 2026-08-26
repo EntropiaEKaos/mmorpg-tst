@@ -115,14 +115,16 @@ export function adminPanelHTML() {
     
     // Edit/Create form
     if (editing !== null) {
-      const item = editing === 'new' ? {} : items.find(i => i.id === editing) || {};
+      const item = editing === 'new'
+        ? (currentTab === 'monsters' ? { mapId: 'eldoria', count: 1, speed: 1200 } : {})
+        : items.find(i => i.id === editing) || {};
       html += '<h3>' + (editing === 'new' ? '➕ Create' : '✏ Edit') + '</h3>';
       html += '<div class="form-row">';
       for (const f of fields) {
         html += '<div><label>' + f + '</label>';
-        if (f === 'type' || f === 'rarity' || f === 'slot' || f === 'role' || f === 'biome' || f === 'vocation') {
+        if (f === 'type' || f === 'rarity' || f === 'slot' || f === 'role' || f === 'biome' || f === 'vocation' || f === 'mapId') {
           html += '<input value="' + (item[f]||'') + '" id="fld_' + f + '" list="' + f + '_list">';
-          html += '<datalist id="' + f + '_list">' + (f==='rarity'?'<option>common<option>uncommon<option>rare<option>epic<option>legendary':'') + (f==='slot'?'<option>weapon<option>armor<option>helmet<option>legs<option>boots<option>shield<option>ring<option>amulet':'') + '</datalist>';
+          html += '<datalist id="' + f + '_list">' + (f==='rarity'?'<option>common<option>uncommon<option>rare<option>epic<option>legendary':'') + (f==='slot'?'<option>weapon<option>armor<option>helmet<option>legs<option>boots<option>shield<option>ring<option>amulet':'') + (f==='mapId'?'<option>eldoria<option>frostpeak<option>shadowfen<option>emberhold<option>voidlands':'') + '</datalist>';
         } else if (f === 'description' || f === 'dialogue') {
           html += '<textarea id="fld_' + f + '" rows="2">' + (item[f]||'') + '</textarea>';
         } else {

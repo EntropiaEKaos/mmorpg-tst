@@ -31,6 +31,10 @@ const AUTH_RATE_LIMITS = new Map();
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
 
+// ContentDB is persistent; reconcile explicitly placed monster records into the
+// already-initialized authoritative world at server boot.
+engine.syncContentMonsters(contentDB.get('monsters'));
+
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
@@ -444,7 +448,7 @@ function handleAdminAPI(req, res, route) {
 
     const fieldsMap = {
       items: ['id','name','icon','slot','attack','defense','armor','hp','mana','magic','rarity','level','value','description'],
-      monsters: ['id','name','emoji','hp','attack','defense','xp','level','type','color','size','goldMin','goldMax'],
+      monsters: ['id','name','emoji','hp','attack','defense','xp','level','type','color','size','goldMin','goldMax','mapId','count','posX','posY','speed'],
       npcs: ['id','name','emoji','color','role','posX','posY','mapId','dialogue'],
       spells: ['id','name','icon','mana','cooldown','damage','range','color','type','vocation','levelRequired'],
       quests: ['id','name','npcId','description','target','count','rewardGold','rewardXp','levelRequired'],
@@ -470,6 +474,7 @@ function handleAdminAPI(req, res, route) {
       const existing = contentDB.get(type).find(i => i.id === data.id);
       if (existing) contentDB.update(type, data.id, data);
       else contentDB.add(type, data);
+      if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
       broadcastContentUpdate();
       return json(res, 200, { ok: true });
     });
@@ -478,6 +483,7 @@ function handleAdminAPI(req, res, route) {
   if (req.method === 'DELETE' && id) {
     if (!ALLOWED_ADMIN_TYPES.has(type)) return json(res, 404, { error: 'Unknown content type' });
     contentDB.remove(type, id);
+    if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
     broadcastContentUpdate();
     return json(res, 200, { ok: true });
   }
