@@ -13,6 +13,7 @@ import { engine } from './engine/GameState.mjs';
 import { playerDB } from './engine/PlayerDB.mjs';
 import { contentDB } from './engine/ContentDB.mjs';
 import { VOCATIONS } from './engine/Vocations.mjs';
+import { WORLD } from './engine/World.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -40,7 +41,7 @@ function parseCookies(req) {
   for (const part of String(req.headers.cookie || '').split(';')) {
     const idx = part.indexOf('=');
     if (idx <= 0) continue;
-    result[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+    try { result[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim()); } catch {}
   }
   return result;
 }
@@ -143,6 +144,10 @@ function buildAuthoritativeSave(p) {
 
 function restorePlayer(p, saved) {
   if (!saved || typeof saved !== 'object') return;
+
+  // A saved character owns its vocation. Re-authenticating with the same name
+  // cannot be used to swap class while keeping progression/equipment.
+  if (typeof saved.vocation === 'string' && VOCATIONS[saved.vocation]) p.vocation = saved.vocation;
   if (Number.isInteger(saved.level) && saved.level > 0) p.level = saved.level;
   if (Number.isFinite(saved.xp) && saved.xp >= 0) p.xp = saved.xp;
   if (Number.isFinite(saved.xpNext) && saved.xpNext > 0) p.xpNext = saved.xpNext;
@@ -156,31 +161,36 @@ function restorePlayer(p, saved) {
   if (saved.reputation && typeof saved.reputation === 'object' && !Array.isArray(saved.reputation)) p.reputation = saved.reputation;
   if (saved.stats && typeof saved.stats === 'object' && !Array.isArray(saved.stats)) p.stats = { ...p.stats, ...saved.stats };
 
-  const map = typeof saved.mapId === 'string' ? saved.mapId : null;
-  const mapData = map ? engine?.monstersByMap && map : null;
+  const mapData = typeof saved.mapId === 'string' ? WORLD.getMap(saved.mapId) : null;
   if (mapData) {
-    // Position is restored only when it looks sane. The engine will reject
-    // subsequent invalid moves, and unknown maps fall back to Eldoria.
     p.mapId = saved.mapId;
-    if (Number.isInteger(saved.x) && Number.isInteger(saved.y) && saved.x >= 1 && saved.x < 79 && saved.y >= 1 && saved.y < 79) {
+    const validPosition = Number.isInteger(saved.x) && Number.isInteger(saved.y)
+      && saved.x >= 0 && saved.x < mapData.width
+      && saved.y >= 0 && saved.y < mapData.height
+      && mapData.tiles?.[saved.y]?.[saved.x]?.walkable;
+    if (validPosition) {
       p.x = saved.x;
       p.y = saved.y;
+    } else {
+      p.x = 40;
+      p.y = 40;
     }
   }
 
   const voc = VOCATIONS[p.vocation] || VOCATIONS.knight;
-  p.maxHp = voc.baseHp + Math.max(0, p.level - 1) * voc.hpPerLevel;
-  p.maxMana = voc.baseMana + Math.max(0, p.level - 1) * voc.manaPerLevel;
-  p.attack = voc.baseAttack + Math.max(0, p.level - 1) * voc.atkPerLevel;
-  p.defense = voc.baseDefense + Math.max(0, p.level - 1) * voc.defPerLevel;
-  p.magic = voc.baseMagic + Math.max(0, p.level - 1) * voc.magPerLevel;
+  const levelsGained = Math.max(0, p.level - 1);
+  p.maxHp = voc.baseHp + levelsGained * voc.hpPerLevel;
+  p.maxMana = voc.baseMana + levelsGained * voc.manaPerLevel;
+  p.attack = voc.baseAttack + levelsGained * voc.atkPerLevel;
+  p.defense = voc.baseDefense + levelsGained * voc.defPerLevel;
+  p.magic = voc.baseMagic + levelsGained * voc.magPerLevel;
 
   const talents = p.talents || {};
-  p.maxHp += (Number(talents.vitality) || 0) * 10;
-  p.maxMana += (Number(talents.wisdom) || 0) * 8;
-  p.attack += (Number(talents.might) || 0) * 2;
+  p.maxHp += (Number(talents.vitality) || 0) * 10 + (Number(talents.transcendence) || 0) * 50;
+  p.maxMana += (Number(talents.wisdom) || 0) * 8 + (Number(talents.transcendence) || 0) * 30;
+  p.attack += (Number(talents.might) || 0) * 2 + (Number(talents.berserker) || 0) * 15;
   p.defense += (Number(talents.toughness) || 0) * 2;
-  p.magic += (Number(talents.arcane_mastery) || 0) * 3;
+  p.magic += (Number(talents.arcane_mastery) || 0) * 3 + (Number(talents.transcendence) || 0) * 8;
   p.hp = p.maxHp;
   p.mana = p.maxMana;
 }
@@ -197,12 +207,10 @@ const server = http.createServer((req, res) => {
   catch { return json(res, 400, { error: 'Invalid URL' }); }
   const pathname = requestUrl.pathname;
 
-  // ===== HEALTH CHECK =====
   if (pathname === '/health' || pathname === '/status') {
     return json(res, 200, { status: 'online', players: engine.getOnlineCount(), tick: engine.getTickCount(), content: { items: contentDB.get('items').length, monsters: contentDB.get('monsters').length } });
   }
 
-  // ===== ADMIN PANEL =====
   if (pathname === '/admin') {
     if (!ADMIN_TOKEN) return json(res, 503, { error: 'Admin disabled: configure ADMIN_TOKEN on the server' });
     const supplied = getAdminToken(req, requestUrl);
@@ -212,9 +220,10 @@ const server = http.createServer((req, res) => {
       return;
     }
     if (requestUrl.searchParams.has('token')) {
+      const secure = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https' ? '; Secure' : '';
       res.writeHead(302, {
         'Location': '/admin',
-        'Set-Cookie': `moria_admin=${encodeURIComponent(ADMIN_TOKEN)}; HttpOnly; SameSite=Strict; Path=/admin`,
+        'Set-Cookie': `moria_admin=${encodeURIComponent(ADMIN_TOKEN)}; HttpOnly; SameSite=Strict; Path=/admin${secure}`,
         'Cache-Control': 'no-store',
       });
       res.end();
@@ -225,15 +234,18 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ===== ADMIN API =====
   if (pathname.startsWith('/admin/api/')) {
     if (!isAdminAuthorized(req, requestUrl)) return json(res, 401, { error: 'Unauthorized' });
     handleAdminAPI(req, res, pathname.replace('/admin/api', ''));
     return;
   }
 
-  // ===== STATIC FILES (game client) =====
-  const relativePath = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+  let relativePath;
+  try {
+    relativePath = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+  } catch {
+    return json(res, 400, { error: 'Invalid path encoding' });
+  }
   const filePath = path.resolve(DIST_DIR, relativePath);
   if (filePath !== DIST_DIR && !filePath.startsWith(DIST_DIR + path.sep)) {
     res.writeHead(403);
