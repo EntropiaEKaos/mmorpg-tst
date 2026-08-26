@@ -386,7 +386,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         addMessage('System', '🟢 CONNECTED to Mor\'ia authoritative server! Anti-cheat active.', '#2ecc71', 'system');
         addToast('info', 'Online!', `Connected to ${net.isHosted() ? 'world server' : 'local server'}`, '🟢', '#2ecc71');
         // AUTHENTICATE — sends player identity to server for authoritative mode
-        serverSync.authenticate(account.characterName, account.vocation);
+        serverSync.authenticate(account.sessionToken || '', account.characterName);
       } else if (net.isHosted()) {
         setTimeout(() => net.connectOnline().then(ok2 => ok2 && setNetMode('online')), 3000);
       }
@@ -428,12 +428,14 @@ export default function GameScreen({ account, onLogout }: Props) {
         }
         // ===== AUTHORITATIVE MODE: server sends the truth =====
         case 'auth_ok': {
+          serverSync.handleAuthOk();
           addMessage('System', '🔒 Authenticated! Server-authoritative mode active.', '#2ecc71', 'system');
           // Request our full save from the server (talents, gems, blessings, etc.)
           serverSync.requestServerSave();
           break;
         }
         case 'auth_error': {
+          serverSync.handleAuthError();
           addMessage('System', `🔴 Auth failed: ${msg.payload?.text}`, '#ff6060', 'system');
           break;
         }
@@ -470,10 +472,12 @@ export default function GameScreen({ account, onLogout }: Props) {
         }
       }
     };
-    net.on(handler);
+    const unsubscribeNet = net.on(handler);
 
     // Cleanup on unmount
     return () => {
+      unsubscribeNet();
+      serverSync.reset();
       net.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

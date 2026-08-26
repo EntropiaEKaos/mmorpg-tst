@@ -137,7 +137,6 @@ export default function LoginScreen({ onLogin }: Props) {
     const demo = {
       accountId: 'offline-demo',
       username: 'offline-demo',
-      password: '',
       characterName: 'Hero',
       vocation: 'Knight',
       level: 1,

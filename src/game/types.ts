@@ -335,13 +335,15 @@ export interface ChatMessage {
 }
 
 export interface Account {
+  accountId?: string;
   username: string;
-  password: string;
   characterName: string;
   vocation: string;
   level: number;
   created: number;
-  savedPlayer?: string; // JSON serialized player state
+  sessionToken?: string;
+  offline?: boolean;
+  savedPlayer?: string; // legacy/offline JSON serialized player state
 }
 
 // Quest system
