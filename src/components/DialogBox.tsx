@@ -1,4 +1,4 @@
-import type { NPC, Player } from '../game/types';
+import type { NPC, Player, Quest } from '../game/types';
 import { QUESTS } from '../game/quests';
 
 interface Props {
@@ -6,16 +6,17 @@ interface Props {
   onAction: (action: string, questId?: string) => void;
   onClose: () => void;
   player: Player;
+  questCatalog?: Quest[];
 }
 
-export default function DialogBox({ npc, onAction, onClose, player }: Props) {
+export default function DialogBox({ npc, onAction, onClose, player, questCatalog = QUESTS }: Props) {
   const dialogue = npc.dialogues?.[0] || { text: '...', options: [{ text: 'Farewell.', action: 'bye' }] };
   const hasActiveQuest = player.activeQuests.some((q) => {
-    const quest = QUESTS.find((qq) => qq.id === q.questId);
+    const quest = questCatalog.find((qq) => qq.id === q.questId);
     return quest?.npcId === npc.id;
   });
   const hasCompletedQuest = player.activeQuests.find((q) => {
-    const quest = QUESTS.find((qq) => qq.id === q.questId);
+    const quest = questCatalog.find((qq) => qq.id === q.questId);
     return quest?.npcId === npc.id && q.objectives.every((o) => o.current >= o.count);
   });
 
@@ -39,7 +40,7 @@ export default function DialogBox({ npc, onAction, onClose, player }: Props) {
         </div>
 
         {hasCompletedQuest && (() => {
-          const quest = QUESTS.find((q) => q.id === hasCompletedQuest.questId);
+          const quest = questCatalog.find((q) => q.id === hasCompletedQuest.questId);
           return quest ? (
             <div className="moria-card relative mt-4 rounded-2xl border-amber-200/25 p-3">
               <div className="moria-eyebrow mb-1">Quest ready</div>
@@ -51,10 +52,10 @@ export default function DialogBox({ npc, onAction, onClose, player }: Props) {
 
         {hasActiveQuest && !hasCompletedQuest && (() => {
           const aq = player.activeQuests.find((q) => {
-            const quest = QUESTS.find((qq) => qq.id === q.questId);
+            const quest = questCatalog.find((qq) => qq.id === q.questId);
             return quest?.npcId === npc.id;
           });
-          const quest = aq ? QUESTS.find((q) => q.id === aq.questId) : null;
+          const quest = aq ? questCatalog.find((q) => q.id === aq.questId) : null;
           return quest ? (
             <div className="moria-card relative mt-4 rounded-2xl border-sky-300/20 p-3">
               <div className="moria-eyebrow mb-1 text-sky-300">Active quest · {quest.name}</div>

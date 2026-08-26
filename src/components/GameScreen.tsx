@@ -2893,6 +2893,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               onAction={(action: string, questId?: string) => handleNPCAction(action, activeDialog, questId)}
               onClose={() => setActiveDialog(null)}
               player={player}
+              questCatalog={questCatalog}
             />
           )}
           <Toaster toasts={toasts} onDismiss={(id: string) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
