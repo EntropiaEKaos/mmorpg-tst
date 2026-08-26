@@ -1,0 +1,62 @@
+name: Apply authoritative quest UI 3.6
+
+on:
+  push:
+    branches: [hardening-3.1]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening-3.1
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply authoritative quest UI
+        run: python3 tools/apply-authoritative-quest-ui-3-6.py
+      - name: Validate quest/runtime invariants
+        run: |
+          grep -q "questCatalog={questCatalog}" src/components/GameScreen.tsx
+          grep -q "activeQuests={player.activeQuests}" src/components/GameScreen.tsx
+          grep -q "serverQuestToClient" src/components/GameScreen.tsx
+          grep -q "questCatalog = QUESTS" src/components/QuestLog.tsx
+          if grep -q "serverQuestsRef.current.active : player.activeQuests" src/components/GameScreen.tsx; then
+            echo "Raw authoritative quest payload still reaches local QuestLog shape"
+            exit 1
+          fi
+          if grep -RE "require[[:space:]]*\([[:space:]]*['\"]" src --include='*.ts' --include='*.tsx'; then
+            echo "Executable CommonJS require found in browser source"
+            exit 1
+          fi
+      - name: Validate all gates
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm install --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated quest UI fixes
+        run: |
+          if git diff --quiet -- src; then
+            echo "No source changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src
+          git commit -m "fix(quests): normalize authoritative quest journal content"
+          git restore tools
+          git fetch origin hardening-3.1
+          git rebase origin/hardening-3.1
+          git push origin HEAD:hardening-3.1
