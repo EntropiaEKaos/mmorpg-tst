@@ -1164,7 +1164,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     // Lifesteal
     if (derived.lifesteal > 0 && !oneHitKillRef.current) {
       const heal = Math.max(1, Math.floor(dmg * (derived.lifesteal / 100)));
-      p.hp = Math.min(p.maxHp, p.hp + heal);
+      p.hp = Math.min(derived.totalMaxHp, p.hp + heal);
       addFloatingText(`+${heal}`, p.pos, '#ff5599');
       p.stats.healingDone += heal;
     }
@@ -2602,12 +2602,11 @@ export default function GameScreen({ account, onLogout }: Props) {
             <WorldEventCreator onClose={() => setShowWorldEventCreator(false)} />
           )}
           {showConnect && (
-            <div className="absolute inset-0 flex items-center justify-center p-4 z-50"
-                 style={{ background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)' }}
+            <div className="moria-overlay absolute inset-0 z-50 flex items-center justify-center p-3 sm:p-5"
                  onClick={() => setShowConnect(false)}>
               <div onClick={(e) => e.stopPropagation()}
-                   className="rounded-xl border-2 p-6 max-w-md w-full"
-                   style={{ background: 'linear-gradient(180deg, rgba(20,30,20,0.98) 0%, rgba(10,15,10,0.98) 100%)', borderColor: netMode === 'online' ? '#2ecc71' : '#9bd4ff', boxShadow: `0 0 50px ${netMode === 'online' ? 'rgba(46,204,113,0.4)' : 'rgba(155,212,255,0.3)'}` }}>
+                   className="moria-panel w-full max-w-md rounded-3xl border p-5 sm:p-6"
+                   style={{ borderColor: netMode === 'online' ? 'rgba(46,204,113,.35)' : 'rgba(125,211,252,.25)', boxShadow: `0 30px 90px rgba(0,0,0,.6), 0 0 45px ${netMode === 'online' ? 'rgba(46,204,113,.10)' : 'rgba(56,189,248,.08)'}` }}>
                 <div className="text-center mb-4">
                   <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
                       style={{ backgroundImage: `linear-gradient(180deg, ${netMode === 'online' ? '#2ecc71' : '#9bd4ff'} 0%, #4a90e2 100%)` }}>🔌 CONNECT TO SERVER</h2>
@@ -2622,9 +2621,9 @@ export default function GameScreen({ account, onLogout }: Props) {
                 <label className="text-xs text-blue-200/70 block mb-1">Server URL (ws:// or wss://):</label>
                 <input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doConnectServer()}
                        placeholder={net.detectServerUrl() || 'ws://localhost:3000/ws'}
-                       className="w-full px-3 py-2 rounded bg-black/60 border border-blue-700/50 text-blue-100 text-sm mb-2 focus:outline-none focus:border-blue-500" />
+                       className="moria-input mb-2 w-full rounded-xl px-3 py-2 text-sm text-sky-100" />
                 <button onClick={doConnectServer}
-                        className="w-full py-2.5 rounded bg-gradient-to-b from-blue-500 to-blue-700 text-white font-bold text-sm mb-2">
+                        className="moria-button-primary mb-2 w-full rounded-xl py-2.5 text-sm font-bold">
                   🔌 Connect
                 </button>
                 {netStatus && <div className="text-center text-xs text-blue-200/70 mb-2">{netStatus}</div>}
@@ -2632,7 +2631,7 @@ export default function GameScreen({ account, onLogout }: Props) {
                   <b>To run your own server:</b> Open the <code className="text-blue-300">server/</code> folder, run <code className="text-blue-300">npm install && npm start</code>.<br/>
                   For internet play, tunnel with <code className="text-blue-300">npm run tunnel</code> and paste the URL here.
                 </div>
-                <button onClick={() => setShowConnect(false)} className="w-full mt-2 py-1.5 rounded bg-black/40 text-blue-200/60 text-xs border border-blue-900/50">Close</button>
+                <button onClick={() => setShowConnect(false)} className="moria-button mt-2 w-full rounded-lg py-1.5 text-xs text-sky-200">Close</button>
               </div>
             </div>
           )}
@@ -2674,25 +2673,23 @@ export default function GameScreen({ account, onLogout }: Props) {
 
           {/* Dungeon indicator */}
           {inDungeon && (
-            <div className="absolute top-14 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full border-2 z-10 pointer-events-none animate-pulse"
-                 style={{ background: 'linear-gradient(180deg, rgba(80,20,80,0.9) 0%, rgba(30,5,30,0.95) 100%)', borderColor: '#c832ff', boxShadow: '0 0 20px rgba(200,50,255,0.6)' }}>
+            <div className="moria-panel pointer-events-none absolute left-1/2 top-14 z-10 -translate-x-1/2 animate-pulse rounded-full border border-violet-300/40 px-4 py-1.5"
+                 style={{ boxShadow: '0 0 28px rgba(168,85,247,.18)' }}>
               <span className="text-purple-200 font-bold text-sm tracking-wider">🌀 DUNGEON · WAVE {dungeonWave}/{dungeonTotalWavesRef.current}</span>
             </div>
           )}
 
           {/* Food Shop */}
           {showFoodShop && (
-            <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
-                 style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+            <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
                  onClick={() => setShowFoodShop(false)}>
               <div onClick={(e) => e.stopPropagation()}
-                   className="rounded-lg border-2 p-4 max-w-lg w-full"
-                   style={{ background: 'linear-gradient(180deg, rgba(60,40,20,0.98) 0%, rgba(30,20,10,0.98) 100%)', borderColor: '#ff9bcc' }}>
+                   className="moria-panel w-full max-w-lg rounded-3xl border border-pink-300/20 p-4 sm:p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-lg font-bold tracking-widest text-amber-100">🍽 FOOD & DRINKS</h2>
                   <button onClick={() => setShowFoodShop(false)} className="text-amber-200/60 hover:text-amber-100 text-xl">✕</button>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {FOOD_ITEMS.map((food) => {
                     const canBuy = player.level >= food.levelRequired && player.gold >= food.cost;
                     return (
