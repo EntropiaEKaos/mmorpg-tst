@@ -3,8 +3,8 @@ import LoginScreen from './components/LoginScreen';
 import GameScreen from './components/GameScreen';
 import GlobalTooltipRenderer from './components/Tooltip';
 import type { Account } from './game/types';
+import { logoutSession, resumeSession } from './game/auth';
 
-// Start DPS meter on game load
 try {
   const { dpsMeter } = require('./game/dpsMeter');
   dpsMeter.start();
@@ -15,29 +15,28 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Try auto-login
-    const current = localStorage.getItem('tibia_current');
-    if (current) {
-      const accounts: Account[] = JSON.parse(
-        localStorage.getItem('tibia_accounts') || '[]'
-      );
-      const acc = accounts.find((a) => a.username === current);
-      if (acc) {
-        setAccount(acc);
-      }
-    }
-    setLoading(false);
+    let cancelled = false;
+    // Legacy versions stored plaintext credentials in these keys. Never reuse them.
+    localStorage.removeItem('tibia_accounts');
+    localStorage.removeItem('tibia_current');
+
+    resumeSession()
+      .then(acc => { if (!cancelled && acc) setAccount(acc); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('tibia_current');
+    const token = (account as any)?.sessionToken as string | undefined;
+    void logoutSession(token);
     setAccount(null);
   };
 
   if (loading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-black text-amber-400">
-        <div className="text-xl tracking-widest animate-pulse" style={{ fontFamily: 'serif' }}>LOADING MOR'IA...</div>
+        <div className="text-xl tracking-widest animate-pulse" style={{ fontFamily: 'serif' }}>VALIDATING MOR'IA SESSION...</div>
       </div>
     );
   }
