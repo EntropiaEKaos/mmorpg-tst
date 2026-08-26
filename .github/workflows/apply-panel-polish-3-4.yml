@@ -1,0 +1,47 @@
+name: Apply panel polish 3.4
+
+on:
+  push:
+    branches: [hardening-3.1]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening-3.1
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply panel transform
+        run: python3 tools/apply-panel-polish-3-4.py
+      - name: Validate all gates
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm install --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated panel fixes
+        run: |
+          if git diff --quiet; then
+            echo "No source changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/Inventory.tsx src/components/CharacterPanel.tsx src/components/QuestLog.tsx src/components/TalentTree.tsx
+          git commit -m "feat(ui): polish responsive gameplay panels"
+          git fetch origin hardening-3.1
+          git rebase origin/hardening-3.1
+          git push origin HEAD:hardening-3.1
