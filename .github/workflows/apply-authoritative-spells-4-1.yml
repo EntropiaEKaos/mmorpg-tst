@@ -21,13 +21,16 @@ jobs:
         with:
           node-version: 22
       - name: Apply authoritative spell runtime
-        run: python3 tools/apply-authoritative-spells-4-1.py
+        run: |
+          python3 tools/apply-authoritative-spells-4-1.py
+          python3 tools/dedupe-authoritative-spells-4-1.py
       - name: Validate spell runtime invariants
         run: |
           grep -q "syncContentSpells(spellContent" server/engine/GameState.mjs
           grep -q "this.getSpellList(player.vocation)" server/engine/GameState.mjs
           grep -q "engine.syncContentSpells(contentDB.get('spells'))" server/server.js
           grep -q "mergeServerSpells" src/components/GameScreen.tsx
+          test "$(grep -c "const SERVER_SPELL_TYPES" src/components/GameScreen.tsx)" -eq 1
           grep -Fq '/^[1-8]$/' src/components/GameScreen.tsx
           grep -q "authoritative content spells override base slots and execute custom spells" server/test/hardening.test.mjs
           if grep -RE "require[[:space:]]*\([[:space:]]*['\"]" src --include='*.ts' --include='*.tsx'; then
