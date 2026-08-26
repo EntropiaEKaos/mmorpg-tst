@@ -8,6 +8,7 @@ import { WORLD } from './World.mjs';
 import { VOCATIONS } from './Vocations.mjs';
 import { rollLoot, getStarterInventory } from './Items.mjs';
 import { questEngine } from './QuestEngine.mjs';
+import { contentDB } from './ContentDB.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -655,8 +656,42 @@ class GameEngine {
     return this.travelThroughPortal(player, portal);
   }
 
+  getQuestNpcRequirement(questId) {
+    const quest = contentDB.get('quests').find(entry => entry?.id === questId);
+    if (!quest || typeof quest.npcId !== 'string' || !quest.npcId.trim()) return null;
+    const npc = contentDB.get('npcs').find(entry => entry?.id === quest.npcId);
+    if (!npc) return null;
+    const x = Number(npc.posX);
+    const y = Number(npc.posY);
+    const mapId = typeof npc.mapId === 'string' && WORLD.getMap(npc.mapId) ? npc.mapId : null;
+    if (!mapId || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { name: typeof npc.name === 'string' && npc.name.trim() ? npc.name.trim() : npc.id, mapId, x: Math.floor(x), y: Math.floor(y) };
+  }
+
+  isNearQuestNpc(player, questId) {
+    const npc = this.getQuestNpcRequirement(questId);
+    if (!npc) return { ok: true, npc: null };
+    const near = player.mapId === npc.mapId
+      && Math.abs(player.x - npc.x) <= 2
+      && Math.abs(player.y - npc.y) <= 2;
+    return { ok: near, npc };
+  }
+
+  emitQuestNpcRequirement(player, npc, verb) {
+    this.emitEvent(player.mapId, {
+      kind: 'system', targetId: player.id,
+      text: `❌ Move near ${npc.name} to ${verb} this quest.`,
+      color: '#ff6060', pos: { x: player.x, y: player.y },
+    });
+  }
+
   handleQuestAccept(player, payload) {
     if (typeof payload.questId !== 'string') return false;
+    const proximity = this.isNearQuestNpc(player, payload.questId);
+    if (!proximity.ok) {
+      this.emitQuestNpcRequirement(player, proximity.npc, 'accept');
+      return false;
+    }
     const result = questEngine.acceptQuest(player.id, payload.questId);
     if (result.success) {
       this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `📜 Quest accepted: ${result.quest.name}`, color: '#9bd4ff' });
@@ -668,6 +703,11 @@ class GameEngine {
 
   handleQuestComplete(player, payload) {
     if (typeof payload.questId !== 'string') return false;
+    const proximity = this.isNearQuestNpc(player, payload.questId);
+    if (!proximity.ok) {
+      this.emitQuestNpcRequirement(player, proximity.npc, 'complete');
+      return false;
+    }
     const result = questEngine.completeQuest(player.id, payload.questId);
     if (result.success) {
       player.gold += result.rewards.gold;

@@ -185,6 +185,48 @@ test('quest state round-trips through authoritative persistence shape', () => {
   } finally { cleanup(id); }
 });
 
+
+test('quest accept and completion require authoritative NPC proximity when linked', () => {
+  const quest = contentDB.get('quests').find(entry => {
+    const npc = contentDB.get('npcs').find(candidate => candidate.id === entry.npcId);
+    return npc && WORLD.getMap(npc.mapId) && Number.isFinite(Number(npc.posX)) && Number.isFinite(Number(npc.posY));
+  });
+  assert.ok(quest);
+  const npc = contentDB.get('npcs').find(entry => entry.id === quest.npcId);
+  assert.ok(npc);
+
+  const { id, player } = makePlayer();
+  try {
+    player.mapId = npc.mapId;
+    player.x = Math.max(0, Number(npc.posX) + 8);
+    player.y = Math.max(0, Number(npc.posY) + 8);
+    assert.equal(engine.processIntent(id, { type: 'quest_accept', payload: { questId: quest.id } }), false);
+    assert.equal(questEngine.exportState(id).active.length, 0);
+
+    player.x = Number(npc.posX);
+    player.y = Number(npc.posY);
+    assert.equal(engine.processIntent(id, { type: 'quest_accept', payload: { questId: quest.id } }), true);
+
+    questEngine.restorePlayer(id, {
+      active: [{ questId: quest.id, progress: { [quest.target]: quest.count }, startedAt: Date.now() }],
+      completed: [],
+    });
+    const goldBefore = player.gold;
+    player.x = Math.max(0, Number(npc.posX) + 8);
+    player.y = Math.max(0, Number(npc.posY) + 8);
+    assert.equal(engine.processIntent(id, { type: 'quest_complete', payload: { questId: quest.id } }), false);
+    assert.equal(player.gold, goldBefore);
+    assert.equal(questEngine.exportState(id).completed.includes(quest.id), false);
+
+    player.x = Number(npc.posX);
+    player.y = Number(npc.posY);
+    assert.equal(engine.processIntent(id, { type: 'quest_complete', payload: { questId: quest.id } }), true);
+    assert.equal(questEngine.exportState(id).completed.includes(quest.id), true);
+  } finally {
+    cleanup(id);
+  }
+});
+
 test('full potions are not consumed and quest XP can level the player', () => {
   const { id, player } = makePlayer();
   try {
@@ -201,6 +243,12 @@ test('full potions are not consumed and quest XP can level the player', () => {
       active: [{ questId: quest.id, progress: { [quest.target]: quest.count }, startedAt: Date.now() }],
       completed: [],
     });
+    const questNpc = contentDB.get('npcs').find(npc => npc.id === quest.npcId);
+    if (questNpc && WORLD.getMap(questNpc.mapId) && Number.isFinite(Number(questNpc.posX)) && Number.isFinite(Number(questNpc.posY))) {
+      player.mapId = questNpc.mapId;
+      player.x = Number(questNpc.posX);
+      player.y = Number(questNpc.posY);
+    }
     player.xp = Math.max(0, player.xpNext - Number(quest.rewardXp));
     assert.equal(engine.processIntent(id, { type: 'quest_complete', payload: { questId: quest.id } }), true);
     assert.ok(player.level >= 2);
