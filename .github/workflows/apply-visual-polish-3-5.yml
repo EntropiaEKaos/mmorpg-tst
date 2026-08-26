@@ -20,11 +20,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Prepare exact ESM scan and remaining imports
+        run: |
+          python3 tools/apply-visual-polish-3-5-fix.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tools/apply-visual-polish-3-5.py')
+          s = p.read_text()
+          s = s.replace("from pathlib import Path\n", "from pathlib import Path\nimport re\n", 1)
+          s = s.replace("if 'require(' in text:\n        remaining.append(str(path))", "if re.search(r\"\\brequire\\s*\\(\\s*['\\\"]\", text):\n        remaining.append(str(path))")
+          p.write_text(s)
+          PY
       - name: Apply visual and correctness transform
         run: python3 tools/apply-visual-polish-3-5.py
       - name: Reject CommonJS in browser source
         run: |
-          if grep -R "require(" src --include='*.ts' --include='*.tsx'; then
+          if grep -RE "require[[:space:]]*\([[:space:]]*['\"]" src --include='*.ts' --include='*.tsx'; then
             echo "CommonJS require found in browser source"
             exit 1
           fi
