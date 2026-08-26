@@ -114,6 +114,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [showConnect, setShowConnect] = useState(false);
   const [netStatus, setNetStatus] = useState('');
   const lastBroadcastRef = useRef(0);
+  const lastHudTickRef = useRef(0);
   const [onlineCount, setOnlineCount] = useState(1);
   const [muted, setMuted] = useState(false);
   // Server-authoritative state refs (used when connected to authoritative server)
@@ -1975,7 +1976,12 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
 
       render(now);
-      setHudTick((t) => (t + 1) % 100000);
+      // Keep the canvas at display refresh rate without forcing a full React
+      // reconciliation every frame. 10fps is ample for cooldown/HUD text.
+      if (now - lastHudTickRef.current >= 100) {
+        lastHudTickRef.current = now;
+        setHudTick((t) => (t + 1) % 100000);
+      }
       rafId = requestAnimationFrame(loop);
     };
     rafId = requestAnimationFrame(loop);
@@ -2455,8 +2461,10 @@ export default function GameScreen({ account, onLogout }: Props) {
 
           {/* Target Frame */}
           {player.targetId && (() => {
-            const t = monstersRef.current.find((m) => m.id === player.targetId);
-            if (!t || t.dead) return null;
+            const t = serverSync.isActive()
+              ? serverMonstersRef.current.find((m: any) => m.id === player.targetId && m.hp > 0)
+              : monstersRef.current.find((m) => m.id === player.targetId && !m.dead);
+            if (!t) return null;
             return (
               <div className="moria-panel absolute left-3 top-3 min-w-[230px] rounded-2xl border p-3" style={{ borderColor: t.type === 'boss' ? 'rgba(255,216,123,.62)' : t.type === 'elite' ? 'rgba(184,138,255,.56)' : 'rgba(255,100,116,.42)' }}>
                 <div className="moria-eyebrow mb-2" style={{ color: t.type === 'boss' ? '#ffd87b' : t.type === 'elite' ? '#b88aff' : '#ff818d' }}>{t.type === 'boss' ? 'BOSS TARGET' : t.type === 'elite' ? 'ELITE TARGET' : 'TARGET'}</div>
@@ -2468,7 +2476,7 @@ export default function GameScreen({ account, onLogout }: Props) {
                       <span className="text-amber-200/60 text-xs">Lv {t.level}</span>
                     </div>
                     <div className="h-2 bg-black/60 rounded overflow-hidden border border-red-900/50 mt-1">
-                      <div className="h-full bg-gradient-to-r from-red-600 to-red-400" style={{ width: `${(t.hp / t.maxHp) * 100}%` }} />
+                      <div className="h-full bg-gradient-to-r from-rose-700 to-rose-400" style={{ width: `${Math.max(0, Math.min(100, (t.hp / Math.max(1, t.maxHp)) * 100))}%` }} />
                     </div>
                     <div className="text-[10px] text-red-300 mt-0.5">{Math.max(0, t.hp)} / {t.maxHp}</div>
                   </div>

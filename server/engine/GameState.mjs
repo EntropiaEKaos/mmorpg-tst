@@ -198,6 +198,7 @@ class GameEngine {
 
     const dist = Math.abs(monster.x - player.x) + Math.abs(monster.y - player.y);
     if (dist > 2) return false;
+    player.targetId = monster.id;
     player.lastAttack = now;
 
     const derived = this.computeDerivedStats(player);

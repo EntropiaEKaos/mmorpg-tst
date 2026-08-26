@@ -217,3 +217,25 @@ test('mounting is server-gated by progression', () => {
     assert.equal(player.mounted, true);
   } finally { cleanup(id); }
 });
+
+
+test('successful authoritative attacks persist the selected target', () => {
+  const { id, player } = makePlayer();
+  const monsters = engine.monstersByMap.get(player.mapId);
+  const monster = {
+    id: `target_${Date.now()}_${Math.random()}`, name: 'Target Dummy', emoji: '🎯',
+    x: player.x + 1, y: player.y, spawnX: player.x + 1, spawnY: player.y,
+    hp: 9999, maxHp: 9999, attack: 0, defense: 0, xp: 0, level: 1, type: 'normal',
+    dead: false, lastAttack: 0, lastMove: 0, speed: 9999, respawnAt: 0,
+  };
+  monsters.push(monster);
+  try {
+    player.lastAttack = 0;
+    assert.equal(engine.processIntent(id, { type: 'attack', payload: { monsterId: monster.id } }), true);
+    assert.equal(player.targetId, monster.id);
+  } finally {
+    const idx = monsters.indexOf(monster);
+    if (idx >= 0) monsters.splice(idx, 1);
+    cleanup(id);
+  }
+});
