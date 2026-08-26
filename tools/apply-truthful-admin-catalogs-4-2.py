@@ -53,19 +53,20 @@ s = replace_once(s,
 'read-only admin styles')
 p.write_text(s)
 
-# UI regression coverage.
+# UI regression coverage. Use literal includes so HTML quoting cannot accidentally
+# create an invalid JavaScript regular expression in the generated test.
 p = Path('server/test/admin-panel.test.mjs')
 s = p.read_text()
-block = """
+block = r'''
 
 test('admin panel supports read-only catalogs without fake mutation controls', () => {
   const html = adminPanelHTML();
-  assert.match(html, /data\.readOnly === true/);
-  assert.match(html, /READ-ONLY CATALOG/);
-  assert.match(html, /if \(!readOnly\) html \+= '<button class=\\"btn btn-amber\\"/);
-  assert.match(html, /if \(readOnly\) html \+= '<td><span class=\\"readonly-label\\">Catalog only<\\\/span>/);
+  assert.equal(html.includes('data.readOnly === true'), true);
+  assert.equal(html.includes('READ-ONLY CATALOG'), true);
+  assert.equal(html.includes("if (!readOnly) html += '<button class=\"btn btn-amber\""), true);
+  assert.equal(html.includes("if (readOnly) html += '<td><span class=\"readonly-label\">Catalog only</span>"), true);
 });
-"""
+'''
 if "read-only catalogs without fake mutation controls" not in s:
     s += block
 p.write_text(s)
