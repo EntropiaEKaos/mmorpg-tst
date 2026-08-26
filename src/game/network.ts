@@ -34,22 +34,20 @@ export interface NetChat {
 
 export interface NetMessage {
   kind: 'player:join' | 'player:move' | 'player:leave' | 'chat' | 'world-event' | 'ping' | 'pong' | 'presence-request' | 'roster' | 'auth' | 'auth_ok' | 'auth_error' | 'snapshot' | 'intent' | 'system' | 'presence' | 'save' | 'load_request' | 'load_response' | 'content_sync';
-  from: string;       // sender client id
+  from: string;
   payload?: any;
   time: number;
 }
 
-// Authoritative intent — what the client asks the server to do
 export interface Intent {
   type: 'move' | 'attack' | 'cast' | 'use_item' | 'equip' | 'unequip' |
         'pickup' | 'drop' | 'talk_npc' | 'buy' | 'sell' | 'deposit' |
         'train' | 'rest' | 'mount' | 'travel' | 'socket_gem' | 'talent' |
-        'quest_accept' | 'quest_complete';
+        'talent_reset' | 'quest_accept' | 'quest_complete';
   payload: any;
   timestamp: number;
 }
 
-// Server snapshot — the absolute truth the client must render
 export interface ServerSnapshot {
   player: any;
   nearbyPlayers: any[];
@@ -82,14 +80,12 @@ class NetworkClient {
     }
   }
 
-  // --- Layer 1: BroadcastChannel (same-machine tabs) ---
   connectLocal(): boolean {
     try {
       if (typeof BroadcastChannel === 'undefined') return false;
       this.channel = new BroadcastChannel('moria_mmorpg');
       this.channel.onmessage = (ev) => this.emit(ev.data as NetMessage);
       this.mode = 'local';
-      // Announce presence
       this.send({ kind: 'presence-request', payload: { id: this.clientId }, time: Date.now() });
       return true;
     } catch {
@@ -97,15 +93,10 @@ class NetworkClient {
     }
   }
 
-  // --- Layer 2: WebSocket server (internet) ---
-  // Auto-detects the correct server URL based on how the client was loaded.
   connectOnline(explicitUrl?: string): Promise<boolean> {
     return new Promise((resolve) => {
       let url = explicitUrl || '';
-      // AUTO-DETECT: if no explicit URL, figure it out from window.location
-      if (!url) {
-        url = this.detectServerUrl() || '';
-      }
+      if (!url) url = this.detectServerUrl() || '';
       if (!url) { resolve(false); return; }
       try {
         this.ws = new WebSocket(url);
@@ -134,21 +125,18 @@ class NetworkClient {
       time: Date.now(),
       ...msg,
     } as NetMessage;
-    // Send on whatever layers are active
     try { this.channel?.postMessage(full); } catch {}
     try { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(full)); } catch {}
   }
 
-  /** Start a heartbeat to keep the connection alive and detect drops */
   startHeartbeat() {
     setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         try { this.ws.send(JSON.stringify({ kind: 'ping', from: this.clientId, time: Date.now() })); } catch {}
       }
-    }, 20000); // every 20s (server drops after 45s inactivity)
+    }, 20000);
   }
 
-  /** Auto-reconnect if connection drops */
   enableAutoReconnect() {
     setInterval(() => {
       if (this.mode === 'online' && (!this.ws || this.ws.readyState === WebSocket.CLOSED)) {
@@ -173,25 +161,16 @@ class NetworkClient {
 
   isConnected(): boolean { return this.ws !== null; }
 
-  /**
-   * AUTO-DETECT server URL — the magic that makes deployment seamless.
-   * - If deployed (e.g. Render): uses wss://same-host/ws
-   * - If Vite dev server (localhost:5173): tries ws://localhost:3000/ws
-   * - If served from MMO server directly (localhost:3000): uses ws://localhost:3000/ws
-   */
   detectServerUrl(): string | null {
     if (typeof window === 'undefined') return null;
     const { protocol, hostname, port } = window.location;
-    // Dev mode: Vite runs on 5173, server runs on 3000
     if (hostname === 'localhost' && (port === '5173' || port === '4173')) {
       return 'ws://localhost:3000/ws';
     }
-    // Production: same origin, convert protocol
     const wsProto = protocol === 'https:' ? 'wss:' : 'ws:';
     return `${wsProto}//${window.location.host}/ws`;
   }
 
-  /** Returns true if we're running in a deployed/hosted environment */
   isHosted(): boolean {
     if (typeof window === 'undefined') return false;
     return window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
@@ -200,29 +179,22 @@ class NetworkClient {
 
 export const net = new NetworkClient();
 
-// ===== AUTHORITATIVE MODE HELPERS =====
-
-// Send authentication to server
 export function sendAuth(name: string, vocation: string) {
   net.send({ kind: 'auth', payload: { name, vocation } });
 }
 
-// Send an intent to the server (client never modifies state directly in auth mode)
 export function sendIntent(intent: Omit<Intent, 'timestamp'>) {
   net.send({ kind: 'intent', payload: { ...intent, timestamp: Date.now() } });
 }
 
-// Get the latest server snapshot (null if not in authoritative mode)
 let latestSnapshot: ServerSnapshot | null = null;
 export function setSnapshot(s: ServerSnapshot | null) { latestSnapshot = s; }
 export function getSnapshot(): ServerSnapshot | null { return latestSnapshot; }
 
-// Check if we're connected to an authoritative server
 export function isAuthoritative(): boolean {
   return net.mode === 'online' && net.isConnected();
 }
 
-// Helper: announce this player's state to the network
 export function broadcastPlayer(player: NetPlayer) {
   net.send({ kind: 'player:move', payload: player });
 }
