@@ -452,7 +452,7 @@ function handleAdminAPI(req, res, route) {
       items: ['id','name','icon','slot','attack','defense','armor','hp','mana','magic','rarity','level','value','description'],
       monsters: ['id','name','emoji','hp','attack','defense','xp','level','type','color','size','goldMin','goldMax','mapId','count','posX','posY','speed'],
       npcs: ['id','name','emoji','color','role','posX','posY','mapId','dialogue'],
-      spells: ['id','name','icon','mana','cooldown','damage','range','color','type','vocation','levelRequired'],
+      spells: ['id','name','icon','mana','cooldown','damage','range','color','type','vocation','levelRequired','buffType','buffDuration','buffValue','scalingCoeff'],
       quests: ['id','name','npcId','description','target','count','rewardGold','rewardXp','levelRequired'],
       maps: ['id','name','biome','description','levelRequired'],
       events: ['id','name','icon','description','type','target','count','rewardGold','rewardXp','duration'],

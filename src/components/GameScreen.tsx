@@ -138,7 +138,8 @@ function serverNpcToClient(raw: any, quests: Quest[]): { mapId: string; npc: NPC
   };
 }
 
-const SERVER_SPELL_TYPES: Spell['type'][] = ['attack', 'heal', 'aoe'];
+const SERVER_SPELL_TYPES: Spell['type'][] = ['attack', 'heal', 'aoe', 'buff'];
+const SERVER_BUFF_TYPES: NonNullable<Spell['buffType']>[] = ['shield', 'haste', 'invisible', 'frenzy'];
 
 function spellContentSlug(value: unknown): string {
   return String(value || '').trim().toLowerCase()
@@ -188,6 +189,17 @@ function mergeServerSpells(vocationId: string, baseSpells: Spell[], content: unk
       levelRequired: Math.floor(finiteSpellNumber(record.levelRequired, 1, 100_000, previous?.levelRequired ?? 1)),
     };
     if (Number.isFinite(Number(record.scalingCoeff))) next.scalingCoeff = finiteSpellNumber(record.scalingCoeff, 0, 20, 1);
+    if (type === 'buff') {
+      const requestedBuffType = typeof record.buffType === 'string'
+        ? record.buffType.trim().toLowerCase() as NonNullable<Spell['buffType']>
+        : undefined;
+      next.buffType = requestedBuffType && SERVER_BUFF_TYPES.includes(requestedBuffType)
+        ? requestedBuffType
+        : (previous?.buffType && SERVER_BUFF_TYPES.includes(previous.buffType) ? previous.buffType : 'shield');
+      next.buffDuration = Math.floor(finiteSpellNumber(record.buffDuration, 1000, 60_000, previous?.buffDuration ?? 8000));
+      const defaultBuffValue = next.buffType === 'haste' ? 35 : next.buffType === 'invisible' ? 1 : 25;
+      next.buffValue = finiteSpellNumber(record.buffValue, 0, 100, previous?.buffValue ?? defaultBuffValue);
+    }
     if (matchIndex >= 0) merged[matchIndex] = next;
     else if (merged.length < 8) merged.push(next);
   }

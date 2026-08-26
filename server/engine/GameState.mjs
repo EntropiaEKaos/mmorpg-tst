@@ -36,7 +36,8 @@ function boundedNumber(value, min, max, fallback) {
   return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
 }
 
-const CONTENT_SPELL_TYPES = new Set(['attack', 'heal', 'aoe']);
+const CONTENT_SPELL_TYPES = new Set(['attack', 'heal', 'aoe', 'buff']);
+const CONTENT_BUFF_TYPES = new Set(['shield', 'haste', 'invisible', 'frenzy']);
 
 function spellSlug(value) {
   return String(value || '').trim().toLowerCase()
@@ -142,6 +143,14 @@ class GameEngine {
         levelRequired: Math.floor(boundedNumber(raw.levelRequired, 1, 100_000, previous?.levelRequired ?? 1)),
       };
       if (Number.isFinite(Number(raw.scalingCoeff))) next.scalingCoeff = boundedNumber(raw.scalingCoeff, 0, 20, 1);
+      if (type === 'buff') {
+        const requestedBuffType = typeof raw.buffType === 'string' ? raw.buffType.trim().toLowerCase() : '';
+        next.buffType = CONTENT_BUFF_TYPES.has(requestedBuffType)
+          ? requestedBuffType
+          : (CONTENT_BUFF_TYPES.has(previous?.buffType) ? previous.buffType : 'shield');
+        next.buffDuration = Math.floor(boundedNumber(raw.buffDuration, 1000, 60_000, previous?.buffDuration ?? 8000));
+        next.buffValue = boundedNumber(raw.buffValue, 0, 100, previous?.buffValue ?? ({ shield: 25, haste: 35, invisible: 1, frenzy: 25 }[next.buffType]));
+      }
 
       if (matchIndex >= 0) merged[matchIndex] = next;
       else if (merged.length < 8) merged.push(next);

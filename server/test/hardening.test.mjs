@@ -355,16 +355,22 @@ test('authoritative content spells override base slots and execute custom spells
     engine.syncContentSpells([
       { id: 'fireball', name: 'Inferno Admin', icon: '🔥', vocation: 'sorcerer', type: 'attack', mana: 33, cooldown: 777, damage: 444, range: 6, color: '#ff2200', levelRequired: 5 },
       { id: 'admin_heal', name: 'Admin Mend', icon: '💚', vocation: 'sorcerer', type: 'heal', mana: 7, cooldown: 500, damage: 40, range: 0, color: '#22ff88', levelRequired: 1 },
-      { id: 'bad_buff', name: 'Unsupported Buff', vocation: 'sorcerer', type: 'buff', mana: 0, cooldown: 500, damage: 0, range: 0 },
+      { id: 'admin_shield', name: 'Admin Aegis', icon: '🛡', vocation: 'sorcerer', type: 'buff', buffType: 'shield', buffDuration: 4000, buffValue: 33, mana: 9, cooldown: 500, damage: 0, range: 0, color: '#66ccff', levelRequired: 1 },
+      { id: 'bad_summon', name: 'Unsupported Summon', vocation: 'sorcerer', type: 'summon', mana: 0, cooldown: 500, damage: 0, range: 0 },
     ]);
 
     const spells = engine.getSpellList('sorcerer');
     assert.equal(spells[1].name, 'Inferno Admin');
     assert.equal(spells[1].damage, 444);
     assert.equal(spells.filter(spell => spell.contentSpellId === 'fireball').length, 1);
-    assert.equal(spells.some(spell => spell.name === 'Unsupported Buff'), false);
+    assert.equal(spells.some(spell => spell.name === 'Unsupported Summon'), false);
     const customIndex = spells.findIndex(spell => spell.contentSpellId === 'admin_heal');
+    const buffIndex = spells.findIndex(spell => spell.contentSpellId === 'admin_shield');
     assert.ok(customIndex >= 4);
+    assert.ok(buffIndex > customIndex);
+    assert.equal(spells[buffIndex].buffType, 'shield');
+    assert.equal(spells[buffIndex].buffDuration, 4000);
+    assert.equal(spells[buffIndex].buffValue, 33);
 
     const { id, player } = makePlayer('sorcerer');
     try {
@@ -378,6 +384,13 @@ test('authoritative content spells override base slots and execute custom spells
       assert.ok(player.hp > 100);
       assert.equal(player.mana, manaBefore - 7);
       assert.equal(player.stats.spellsCast, 1);
+      const reductionBeforeBuff = engine.computeDerivedStats(player).damageReduction;
+      const manaBeforeBuff = player.mana;
+      assert.equal(engine.processIntent(id, { type: 'cast', payload: { spellIndex: buffIndex } }), true);
+      assert.equal(player.mana, manaBeforeBuff - 9);
+      assert.ok(player.buffs.some(buff => buff.type === 'shield' && buff.value === 33 && buff.expiresAt > Date.now()));
+      assert.ok(engine.computeDerivedStats(player).damageReduction >= reductionBeforeBuff + 33);
+      assert.equal(player.stats.spellsCast, 2);
     } finally {
       cleanup(id);
     }
