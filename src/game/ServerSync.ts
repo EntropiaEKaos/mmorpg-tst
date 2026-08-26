@@ -1,9 +1,5 @@
 // ===================================================================
 //  SERVER SYNC MANAGER — turns the client into a "dumb terminal"
-//  When connected to an authoritative server, the client:
-//    1. Sends INTENTS (inputs) instead of modifying state
-//    2. Renders SNAPSHOTS (server truth) instead of simulating
-//  This is what makes it anti-cheat: client never owns state.
 // ===================================================================
 
 import { sendAuth, sendIntent, setSnapshot, getSnapshot, isAuthoritative, net, type ServerSnapshot } from './network';
@@ -25,38 +21,51 @@ class ServerSyncManager {
   private authed = false;
   private currentMapId = 'eldoria';
 
-  authenticate(name: string, vocation: string) {
-    if (this.authed) return;
-    sendAuth(name, vocation);
+  authenticate(sessionToken: string, characterName: string) {
+    if (!sessionToken || !characterName) return;
+    sendAuth(sessionToken, characterName);
+  }
+
+  handleAuthOk() {
     this.authed = true;
+  }
+
+  handleAuthError() {
+    this.authed = false;
+    setSnapshot(null);
   }
 
   isActive(): boolean {
     return isAuthoritative() && this.authed && getSnapshot() !== null;
   }
 
-  // ===== SAVE SYNC =====
   uploadSave(player: any, inventory: any[]) {
     if (!this.isActive()) return;
-    const { buildSave } = require('./SaveManager');
-    const save = buildSave(player);
-    save.inventory = inventory;
-    net.send({ kind: 'save', payload: save });
+    // Payload is only a save request. The server ignores client state and persists
+    // its own authoritative player object.
+    net.send({ kind: 'save', payload: {} });
   }
 
   requestServerSave(): Promise<PlayerSave | null> {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       pendingLoadResponse = resolve;
       net.send({ kind: 'load_request', payload: {} });
-      setTimeout(() => { if (pendingLoadResponse) { pendingLoadResponse(null); pendingLoadResponse = null; } }, 3000);
+      setTimeout(() => {
+        if (pendingLoadResponse) {
+          pendingLoadResponse(null);
+          pendingLoadResponse = null;
+        }
+      }, 3000);
     });
   }
 
   handleLoadResponse(save: PlayerSave | null) {
-    if (pendingLoadResponse) { pendingLoadResponse(save); pendingLoadResponse = null; }
+    if (pendingLoadResponse) {
+      pendingLoadResponse(save);
+      pendingLoadResponse = null;
+    }
   }
 
-  // ===== INTENT SENDERS =====
   sendMove(dx: number, dy: number) {
     if (!this.isActive()) return;
     sendIntent({ type: 'move', payload: { dx, dy } });
@@ -97,8 +106,6 @@ class ServerSyncManager {
     sendIntent({ type: 'mount', payload: {} });
   }
 
-  // Keep the old signature so existing callers do not break, but coordinates
-  // are deliberately not sent: destination coordinates are server-owned.
   sendTravel(targetMap: string, _spawnX?: number, _spawnY?: number) {
     if (!this.isActive()) return;
     sendIntent({ type: 'travel', payload: { targetMap } });
@@ -124,7 +131,6 @@ class ServerSyncManager {
     sendIntent({ type: 'talent_reset', payload: {} });
   }
 
-  // ===== SNAPSHOT CONSUMER =====
   updateSnapshot(snap: ServerSnapshot) {
     setSnapshot(snap);
     this.currentMapId = snap.player.mapId;
@@ -152,16 +158,12 @@ class ServerSyncManager {
       consumedIds.push(id);
       switch (event.kind) {
         case 'damage':
-          if (event.targetId && event.amount) {
-            addFloatingText(`-${event.amount}`, event.pos || { x: 0, y: 0 }, event.color || '#ff6060', event.amount > 50);
-          }
+          if (event.targetId && event.amount) addFloatingText(`-${event.amount}`, event.pos || { x: 0, y: 0 }, event.color || '#ff6060', event.amount > 50);
           break;
         case 'heal':
           if (event.amount) addFloatingText(`+${event.amount}`, event.pos || { x: 0, y: 0 }, event.color || '#2ecc71');
           break;
         case 'xp':
-          if (event.text) addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#f4e04d', true);
-          break;
         case 'levelup':
           if (event.text) addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#f4e04d', true);
           break;
@@ -180,7 +182,11 @@ class ServerSyncManager {
   }
 
   getMapId(): string { return this.currentMapId; }
-  reset() { this.authed = false; setSnapshot(null); }
+  reset() {
+    this.authed = false;
+    setSnapshot(null);
+    net.clearAuthPayload();
+  }
 }
 
 export const serverSync = new ServerSyncManager();
