@@ -23,13 +23,24 @@ class PlayerDB {
   }
 
   save() {
-    try { fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2)); }
-    catch (e) { console.warn('⚠ Player DB save failed:', e.message); }
+    try {
+      const tmp = `${DB_FILE}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2), { mode: 0o600 });
+      fs.renameSync(tmp, DB_FILE);
+    } catch (e) { console.warn('⚠ Player DB save failed:', e.message); }
   }
 
   get(name) { return this.data[name] || null; }
   exists(name) { return name in this.data; }
-  
+
+  findNameCaseInsensitive(name) {
+    if (typeof name !== 'string') return null;
+    const key = name.trim().toLocaleLowerCase('en-US');
+    return Object.keys(this.data).find(existing => existing.toLocaleLowerCase('en-US') === key) || null;
+  }
+
+  existsCaseInsensitive(name) { return Boolean(this.findNameCaseInsensitive(name)); }
+
   // Stores the FULL unified save object (talents, gems, blessings, etc.)
   set(name, saveData) {
     if (!this.data[name]) this.data[name] = {};
