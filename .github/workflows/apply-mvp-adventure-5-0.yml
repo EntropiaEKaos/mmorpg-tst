@@ -22,12 +22,15 @@ jobs:
           node-version: 22
       - name: Apply MVP Adventure 5.0
         run: python3 tools/apply-mvp-adventure-5-0.py
+      - name: Patch adventure intent types
+        run: python3 tools/fix-mvp-adventure-network-5-0.py
       - name: Validate adventure invariants
         run: |
           grep -q "class AdventureEngine" server/engine/AdventureEngine.mjs
           grep -q "adventure_start" server/engine/GameState.mjs
           grep -q "adventure: adventureEngine.exportState" server/server.js
           grep -q "sendAdventureStart" src/game/ServerSync.ts
+          grep -q "adventure_start' | 'adventure_abandon' | 'adventure_claim" src/game/network.ts
           grep -q "HUNT BOARD" src/components/AdventureBoard.tsx
           grep -q "adventureState?.active" src/components/GameScreen.tsx
           grep -q "every third claim awards equipment cache" server/test/adventure.test.mjs
