@@ -51,12 +51,13 @@ function selectedAccount(server: ServerAccount, token: string, character?: Serve
   return {
     accountId: server.id,
     username: server.username,
+    password: '', // legacy type field only; credentials are never stored client-side
     characterName: chosen.name,
     vocation: chosen.vocation,
     level: 1,
     created: chosen.createdAt || server.createdAt,
     sessionToken: token,
-  };
+  } as Account;
 }
 
 export function getStoredSessionToken(): string | null {
