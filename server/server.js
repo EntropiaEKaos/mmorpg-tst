@@ -14,6 +14,7 @@ import { playerDB } from './engine/PlayerDB.mjs';
 import { contentDB } from './engine/ContentDB.mjs';
 import { VOCATIONS } from './engine/Vocations.mjs';
 import { WORLD } from './engine/World.mjs';
+import { questEngine } from './engine/QuestEngine.mjs';
 import { accountStore, sessionManager } from './engine/AuthService.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
 
@@ -28,6 +29,7 @@ const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'que
 const ACTIVE_NAMES = new Map();
 const AUTH_RATE_LIMITS = new Map();
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -130,8 +132,11 @@ function readJsonBody(req, res, callback) {
 }
 
 function getRequestIp(req) {
-  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return forwarded || req.socket?.remoteAddress || 'unknown';
+  if (TRUST_PROXY) {
+    const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (forwarded) return forwarded;
+  }
+  return req.socket?.remoteAddress || 'unknown';
 }
 
 function consumeAuthRateLimit(req, res, bucket, limit, windowMs) {
@@ -172,6 +177,7 @@ function buildAuthoritativeSave(p) {
     professions: p.professions || {},
     reputation: p.reputation || {},
     stats: p.stats || {},
+    quests: questEngine.exportState(p.id),
     mapId: p.mapId,
     x: p.x,
     y: p.y,
@@ -207,8 +213,9 @@ function restorePlayer(p, saved, expectedVocation) {
       p.x = saved.x;
       p.y = saved.y;
     } else {
-      p.x = 40;
-      p.y = 40;
+      const safeSpawn = WORLD.findWalkableSpawn(mapData, mapData.spawnPoint);
+      p.x = safeSpawn.x;
+      p.y = safeSpawn.y;
     }
   }
 
@@ -533,7 +540,9 @@ wss.on('connection', ws => {
 
       const player = engine.playerConnect(clientId, name, vocation, ws);
       const saveKey = playerDB.findNameCaseInsensitive(name);
-      restorePlayer(player, saveKey ? playerDB.get(saveKey) : null, vocation);
+      const savedPlayer = saveKey ? playerDB.get(saveKey) : null;
+      restorePlayer(player, savedPlayer, vocation);
+      questEngine.restorePlayer(clientId, savedPlayer?.quests);
       authenticatedPlayer = name;
       authenticatedKey = nameKey;
       authenticatedAccountId = session.accountId;

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { engine } from '../engine/GameState.mjs';
 import { VOCATIONS } from '../engine/Vocations.mjs';
 import { WORLD } from '../engine/World.mjs';
+import { questEngine } from '../engine/QuestEngine.mjs';
+import { contentDB } from '../engine/ContentDB.mjs';
 
 let seq = 0;
 function makePlayer(vocation = 'knight') {
@@ -122,7 +124,7 @@ test('authoritative talent reset charges gold and rebuilds base stats', () => {
 test('map events remain available to every snapshot until explicitly consumed', () => {
   const a = makePlayer(); const b = makePlayer();
   try {
-    engine.emitEvent('eldoria', { kind: 'system', targetId: 'shared', text: 'shared-event' });
+    engine.emitEvent('eldoria', { kind: 'damage', targetId: 'monster_shared', text: 'shared-event' });
     assert.equal(engine.getSnapshot(a.id).events.some(e => e.text === 'shared-event'), true);
     assert.equal(engine.getSnapshot(b.id).events.some(e => e.text === 'shared-event'), true);
     engine.consumeEvents('eldoria');
@@ -151,5 +153,67 @@ test('authoritative drop and unequip preserve item ownership', () => {
     assert.equal(engine.processIntent(id, { type: 'drop', payload: { itemId: returned.id } }), true);
     assert.equal(player.inventory.some(i => i.id === returned.id), false);
     assert.ok((engine.groundItemsByMap.get(player.mapId) || []).find(g => g.items.some(i => i.name === returned.name)));
+  } finally { cleanup(id); }
+});
+
+
+test('private player events are filtered from other players', () => {
+  const a = makePlayer(); const b = makePlayer();
+  try {
+    engine.emitEvent('eldoria', { kind: 'system', targetId: a.id, text: 'private-a' });
+    engine.emitEvent('eldoria', { kind: 'damage', targetId: 'monster_public', text: 'public-hit' });
+    assert.equal(engine.getSnapshot(a.id).events.some(e => e.text === 'private-a'), true);
+    assert.equal(engine.getSnapshot(b.id).events.some(e => e.text === 'private-a'), false);
+    assert.equal(engine.getSnapshot(b.id).events.some(e => e.text === 'public-hit'), true);
+  } finally { engine.consumeEvents('eldoria'); cleanup(a.id); cleanup(b.id); }
+});
+
+test('quest state round-trips through authoritative persistence shape', () => {
+  const { id } = makePlayer();
+  try {
+    const quest = contentDB.get('quests')[0];
+    assert.ok(quest);
+    questEngine.restorePlayer(id, {
+      active: [{ questId: quest.id, progress: { [quest.target]: 1 }, startedAt: 12345 }],
+      completed: [],
+    });
+    const state = questEngine.exportState(id);
+    assert.equal(state.active.length, 1);
+    assert.equal(state.active[0].questId, quest.id);
+    assert.equal(state.active[0].progress[quest.target], Math.min(1, quest.count));
+  } finally { cleanup(id); }
+});
+
+test('full potions are not consumed and quest XP can level the player', () => {
+  const { id, player } = makePlayer();
+  try {
+    const potion = player.inventory.find(i => i.type === 'potion' && i.name.includes('Health'));
+    assert.ok(potion);
+    const before = potion.quantity;
+    player.hp = player.maxHp;
+    assert.equal(engine.processIntent(id, { type: 'use_item', payload: { itemId: potion.id } }), false);
+    assert.equal(potion.quantity, before);
+
+    const quest = contentDB.get('quests').find(q => Number(q.rewardXp) > 0);
+    assert.ok(quest);
+    questEngine.restorePlayer(id, {
+      active: [{ questId: quest.id, progress: { [quest.target]: quest.count }, startedAt: Date.now() }],
+      completed: [],
+    });
+    player.xp = Math.max(0, player.xpNext - Number(quest.rewardXp));
+    assert.equal(engine.processIntent(id, { type: 'quest_complete', payload: { questId: quest.id } }), true);
+    assert.ok(player.level >= 2);
+  } finally { cleanup(id); }
+});
+
+test('mounting is server-gated by progression', () => {
+  const { id, player } = makePlayer();
+  try {
+    player.level = 4;
+    assert.equal(engine.processIntent(id, { type: 'mount', payload: {} }), false);
+    assert.equal(player.mounted, false);
+    player.level = 5;
+    assert.equal(engine.processIntent(id, { type: 'mount', payload: {} }), true);
+    assert.equal(player.mounted, true);
   } finally { cleanup(id); }
 });

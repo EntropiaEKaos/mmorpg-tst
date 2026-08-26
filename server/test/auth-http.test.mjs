@@ -50,10 +50,10 @@ function startServer(t) {
   return { port, ready };
 }
 
-async function post(port, pathname, payload) {
+async function post(port, pathname, payload, extraHeaders = {}) {
   const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
     body: JSON.stringify(payload),
   });
   let body = null;
@@ -79,4 +79,8 @@ test('login endpoint throttles brute-force attempts', async t => {
   const throttled = await post(port, '/api/auth/login', { username, password: 'wrong-password-final' });
   assert.equal(throttled.status, 429);
   assert.ok(Number(throttled.retryAfter) >= 1);
+
+  // Direct deployments must not trust a client-spoofed forwarding header.
+  const spoofed = await post(port, '/api/auth/login', { username, password: 'wrong-password-spoof' }, { 'X-Forwarded-For': '203.0.113.99' });
+  assert.equal(spoofed.status, 429);
 });

@@ -79,6 +79,7 @@ const VIEW_H = 13;
 
 export default function GameScreen({ account, onLogout }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const onlineAccount = Boolean(account.sessionToken && !account.offline);
 
   // Panels state
   const [showInventory, setShowInventory] = useState(false);
@@ -380,18 +381,23 @@ export default function GameScreen({ account, onLogout }: Props) {
       setNetMode('local');
       addMessage('System', '🟡 Local multiplayer active — other browser tabs can join your world!', '#9bd4ff', 'system');
     }
-    // AUTO-CONNECT to server (works in dev AND production deployments)
-    net.connectOnline().then((ok) => {
-      if (ok) {
-        setNetMode('online');
-        addMessage('System', '🟢 CONNECTED to Mor\'ia authoritative server! Anti-cheat active.', '#2ecc71', 'system');
-        addToast('info', 'Online!', `Connected to ${net.isHosted() ? 'world server' : 'local server'}`, '🟢', '#2ecc71');
-        // AUTHENTICATE — sends player identity to server for authoritative mode
-        serverSync.authenticate(account.sessionToken || '', account.characterName);
-      } else if (net.isHosted()) {
-        setTimeout(() => net.connectOnline().then(ok2 => ok2 && setNetMode('online')), 3000);
-      }
-    });
+    // Only authenticated online accounts connect to the authoritative world.
+    // Quick Play remains local and never opens an unauthenticated server session.
+    if (onlineAccount && account.sessionToken) {
+      // Store auth payload before connecting so reconnect/retry authenticates on open.
+      serverSync.authenticate(account.sessionToken, account.characterName);
+      net.connectOnline().then((ok) => {
+        if (ok) {
+          setNetMode('online');
+          addMessage('System', '🟢 CONNECTED to Mor\'ia authoritative server! Anti-cheat active.', '#2ecc71', 'system');
+          addToast('info', 'Online!', `Connected to ${net.isHosted() ? 'world server' : 'local server'}`, '🟢', '#2ecc71');
+        } else if (net.isHosted()) {
+          setTimeout(() => net.connectOnline().then(ok2 => {
+            if (ok2) setNetMode('online');
+          }), 3000);
+        }
+      });
+    }
 
     // Handle incoming network messages
     const handler = (msg: NetMessage) => {
@@ -485,6 +491,10 @@ export default function GameScreen({ account, onLogout }: Props) {
   }, []);
 
   const doConnectServer = async () => {
+    if (!onlineAccount || !account.sessionToken) {
+      setNetStatus('🔒 Sign in to an online account first.');
+      return;
+    }
     setNetStatus('Connecting...');
     let url = serverUrl.trim();
     if (!url) return;
@@ -549,6 +559,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   }, []);
 
   const toggleMount = () => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) { serverSync.sendMount(); return; }
     const p = playerRef.current;
     const ownedMounts = MOUNTS.filter((m) => m.levelRequired <= p.level);
@@ -583,6 +594,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const usePotion = (type: 'hp' | 'mp' | 'hpg') => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) {
       const desired = type === 'mp' ? 'Mana Potion' : type === 'hpg' ? 'Greater Health Potion' : 'Health Potion';
       const serverItems = serverSync.getRenderState()?.player?.inventory;
@@ -622,6 +634,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const castSpell = (idx: number) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     // AUTHORITATIVE MODE: send cast intent to server
     if (serverSync.isActive()) {
       serverSync.sendCast(idx);
@@ -959,6 +972,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const travelToMap = (targetMapId: string, spawn: { x: number; y: number }) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) { serverSync.sendTravel(targetMapId); return; }
     const p = playerRef.current;
     const mapData = MAPS[targetMapId];
@@ -986,6 +1000,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const pickupGroundItem = (ground: GroundItem) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) { serverSync.sendPickup(ground.id); return; }
     const p = playerRef.current;
     let pickedUp: string[] = [];
@@ -1028,6 +1043,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const handleMysteryComplete = (gold: number, xp: number, itemName?: string, itemIcon?: string) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) {
       addMessage('System', 'Mystery rewards are disabled in authoritative online mode until server support is available.', '#ff9090', 'system');
       return;
@@ -1051,6 +1067,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const enterDungeon = (totalWaves: number) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) {
       addMessage('System', 'Dungeons are disabled in authoritative online mode until server support is available.', '#ff9090', 'system');
       setShowDungeon(false);
@@ -1077,6 +1094,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const attackTarget = (m: Monster) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     // AUTHORITATIVE MODE: send attack intent to server
     if (serverSync.isActive()) {
       serverSync.sendAttack(m.id);
@@ -1170,6 +1188,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const handleCanvasClick = () => {
+    if (onlineAccount && !serverSync.isActive()) return;
     const tile = mouseTileRef.current;
     if (!tile) return;
     const p = playerRef.current;
@@ -1207,6 +1226,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const handleNPCAction = (action: string, npc: NPC, questId?: string) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) {
       if (action === 'quest' && questId) serverSync.sendQuestAccept(questId);
       else if (action !== 'bye') addMessage('System', `${action} is not available in authoritative online mode yet.`, '#ff9090', 'system');
@@ -1296,6 +1316,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const buyItem = (shopItem: { name: string; icon: string; type: Item['type']; price: number; description?: string; equipment?: Equipment }) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) { addMessage('System', 'Server-authoritative shops are not enabled yet.', '#ff9090', 'system'); return; }
     const p = playerRef.current;
     const discount = getShopDiscountFromRep(p);
@@ -1330,6 +1351,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   // Drop item on the ground (Tibia-style)
   const dropItemOnGround = (item: Item) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) { serverSync.sendDrop(item.id); return; }
     const p = playerRef.current;
     // Create a loot bag / ground item at player's position
@@ -1356,6 +1378,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [pvpEnabled, setPvpEnabled] = useState(isPvpEnabled(player.name));
 
   const socketGem = (itemId: string, gemId: string) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) { addMessage('System', 'Gem socketing is disabled online until it is server-authoritative.', '#ff9090', 'system'); return; }
     const inv = inventoryRef.current;
     const item = inv.find((i) => i.id === itemId);
@@ -1391,6 +1414,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const craftItem = (name: string, icon: string, value: number, description?: string) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) { addMessage('System', 'Crafting is disabled online until it is server-authoritative.', '#ff9090', 'system'); return; }
     const { RECIPES: recipes, canCraft } = require('../game/crafting');
     const recipe = recipes.find((r: any) => r.result.name === name);
@@ -1436,6 +1460,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const equipItem = (item: Item) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (!item.equipment) return;
     if (serverSync.isActive()) { serverSync.sendEquip(item.id); return; }
     const p = playerRef.current;
@@ -1467,6 +1492,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const unequipItem = (slot: keyof Player['equipment']) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) { serverSync.sendUnequip(String(slot)); return; }
     const p = playerRef.current;
     const eq = p.equipment[slot];
@@ -1545,7 +1571,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           serverGroundRef.current = renderState.groundItems;
           serverSync.processEvents(addFloatingText, addMessage);
         }
-      } else {
+      } else if (!onlineAccount) {
       // LOCAL MODE (single-player or BroadcastChannel): original simulation
       const moveSpeed = Math.max(80, p.speed * 0.7);
       if (now - lastMoveRef.current > moveSpeed) {
@@ -1610,7 +1636,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
       } // end else (local mode)
 
-      if (!serverSync.isActive()) {
+      if (!onlineAccount) {
       // Auto-loot adjacent corpses (within 1 tile) for fluidity
       const adjacentCorpse = groundItemsRef.current.find((g) => {
         const d = Math.hypot(g.pos.x - p.pos.x, g.pos.y - p.pos.y);

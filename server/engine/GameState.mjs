@@ -76,7 +76,7 @@ class GameEngine {
     return player;
   }
 
-  playerDisconnect(id) { this.players.delete(id); }
+  playerDisconnect(id) { questEngine.clearPlayer(id); this.players.delete(id); }
   getPlayer(id) { return this.players.get(id); }
   getPlayersOnMap(mapId) {
     const result = [];
@@ -298,13 +298,17 @@ class GameEngine {
   handleUseItem(player, payload) {
     if (typeof payload.itemId !== 'string') return false;
     const item = player.inventory.find(i => i.id === payload.itemId);
-    if (!item || item.type !== 'potion') return false;
+    if (!item || item.type !== 'potion' || !Number.isFinite(item.quantity) || item.quantity <= 0) return false;
 
     const derived = this.computeDerivedStats(player);
     if (item.name.includes('Health')) {
-      player.hp = Math.min(derived.totalMaxHp, player.hp + 50);
-      this.emitEvent(player.mapId, { kind: 'heal', targetId: player.id, amount: 50, pos: { x: player.x, y: player.y }, color: '#2ecc71' });
+      if (player.hp >= derived.totalMaxHp) return false;
+      const before = player.hp;
+      const amount = item.name.includes('Greater') ? 200 : 50;
+      player.hp = Math.min(derived.totalMaxHp, player.hp + amount);
+      this.emitEvent(player.mapId, { kind: 'heal', targetId: player.id, amount: player.hp - before, pos: { x: player.x, y: player.y }, color: '#2ecc71' });
     } else if (item.name.includes('Mana')) {
+      if (player.mana >= derived.totalMaxMana) return false;
       player.mana = Math.min(derived.totalMaxMana, player.mana + 50);
     } else return false;
 
@@ -387,7 +391,11 @@ class GameEngine {
     return true;
   }
 
-  handleMount(player) { player.mounted = !player.mounted; return true; }
+  handleMount(player) {
+    if (!player.mounted && player.level < 5) return false;
+    player.mounted = !player.mounted;
+    return true;
+  }
 
   handleTalent(player, payload) {
     const talentId = payload.talentId;
@@ -487,6 +495,21 @@ class GameEngine {
       player.xp += result.rewards.xp;
       player.stats.goldEarned += result.rewards.gold;
       if (result.rewards.item) player.inventory.push({ id: `quest_${Date.now()}`, ...result.rewards.item, type: 'misc', quantity: 1 });
+      const voc = VOCATIONS[player.vocation];
+      while (voc && player.xp >= player.xpNext) {
+        player.xp -= player.xpNext;
+        player.level++;
+        player.xpNext = Math.floor(player.xpNext * 1.4);
+        player.maxHp += voc.hpPerLevel;
+        player.maxMana += voc.manaPerLevel;
+        player.attack += voc.atkPerLevel;
+        player.defense += voc.defPerLevel;
+        player.magic += voc.magPerLevel;
+        player.hp = player.maxHp;
+        player.mana = player.maxMana;
+        player.stats.levelUps++;
+        this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y } });
+      }
       this.emitEvent(player.mapId, { kind: 'quest_complete', targetId: player.id, text: `✅ ${result.quest.name}: +${result.rewards.gold}g, +${result.rewards.xp}XP`, color: '#2ecc71' });
     } else {
       this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `❌ ${result.reason}`, color: '#ff6060' });
@@ -517,16 +540,21 @@ class GameEngine {
           nearest.x = 40; nearest.y = 40; nearest.mapId = 'eldoria';
           nearest.xp = Math.max(0, nearest.xp - Math.floor(nearest.xpNext * 0.1));
           nearest.stats.deaths++;
-          this.emitEvent(mapId, { kind: 'death', targetId: nearest.id, text: 'You died!', color: '#ff0000', pos: { x: 40, y: 40 } });
+          this.emitEvent(nearest.mapId, { kind: 'death', targetId: nearest.id, text: 'You died!', color: '#ff0000', pos: { x: nearest.x, y: nearest.y } });
         }
       } else if (nearest && minDist > 1 && minDist < 8 && now - m.lastMove > m.speed) {
         m.lastMove = now;
         const dx = Math.sign(nearest.x - m.x), dy = Math.sign(nearest.y - m.y);
         const map = WORLD.getMap(mapId);
+        const canOccupy = (x, y) => Boolean(
+          map?.tiles?.[y]?.[x]?.walkable &&
+          !players.some(p => p.x === x && p.y === y) &&
+          !monsters.some(other => other.id !== m.id && !other.dead && other.x === x && other.y === y)
+        );
         if (Math.abs(nearest.x - m.x) > Math.abs(nearest.y - m.y)) {
-          if (map?.tiles[m.y]?.[m.x + dx]?.walkable) m.x += dx;
+          if (canOccupy(m.x + dx, m.y)) m.x += dx;
         } else {
-          if (map?.tiles[m.y + dy]?.[m.x]?.walkable) m.y += dy;
+          if (canOccupy(m.x, m.y + dy)) m.y += dy;
         }
       }
     }
@@ -591,7 +619,11 @@ class GameEngine {
     const allGround = this.groundItemsByMap.get(player.mapId) || [];
     const groundItems = allGround.filter(g => Math.abs(g.x - player.x) < 15 && Math.abs(g.y - player.y) < 15).map(g => ({ id: g.id, x: g.x, y: g.y, items: g.items }));
 
-    return { player: playerData, nearbyPlayers, monsters, groundItems, events: this.pendingEvents.get(player.mapId) || [] };
+    const privateKinds = new Set(['system', 'quest_progress', 'quest_complete', 'death', 'heal', 'xp', 'levelup']);
+    const events = (this.pendingEvents.get(player.mapId) || []).filter(event =>
+      !privateKinds.has(event.kind) || event.targetId === playerId
+    );
+    return { player: playerData, nearbyPlayers, monsters, groundItems, events };
   }
 
   consumeEvents(mapId) { this.pendingEvents.set(mapId, []); }
