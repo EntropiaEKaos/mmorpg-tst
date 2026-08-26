@@ -20,3 +20,12 @@ test('admin tab navigation passes the clicked element explicitly', () => {
   assert.match(html, /function showTab\(tab, button\)/);
   assert.match(html, /button instanceof HTMLElement/);
 });
+
+
+test('admin panel supports read-only catalogs without fake mutation controls', () => {
+  const html = adminPanelHTML();
+  assert.equal(html.includes('data.readOnly === true'), true);
+  assert.equal(html.includes('READ-ONLY CATALOG'), true);
+  assert.equal(html.includes("if (!readOnly) html += '<button class=\"btn btn-amber\""), true);
+  assert.equal(html.includes("if (readOnly) html += '<td><span class=\"readonly-label\">Catalog only</span>"), true);
+});

@@ -26,6 +26,7 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const MAX_HTTP_BODY = 256 * 1024;
 const MAX_WS_PAYLOAD = 64 * 1024;
 const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
+const READ_ONLY_ADMIN_TYPES = new Set(['maps', 'events']);
 const ACTIVE_NAMES = new Map();
 const AUTH_RATE_LIMITS = new Map();
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
@@ -457,10 +458,19 @@ function handleAdminAPI(req, res, route) {
       maps: ['id','name','biome','description','levelRequired'],
       events: ['id','name','icon','description','type','target','count','rewardGold','rewardXp','duration'],
     };
-    return json(res, 200, { items: contentDB.get(type), fields: fieldsMap[type] || [] });
+    const readOnly = READ_ONLY_ADMIN_TYPES.has(type);
+    const runtimeNote = type === 'maps'
+      ? 'Reference catalog only: authoritative terrain, portals and map lifecycle are still defined by World.mjs.'
+      : type === 'events'
+        ? 'Reference catalog only: online world-event runtime is not connected to ContentDB yet.'
+        : '';
+    return json(res, 200, { items: contentDB.get(type), fields: fieldsMap[type] || [], readOnly, runtimeNote });
   }
 
   if (req.method === 'POST') {
+    if (READ_ONLY_ADMIN_TYPES.has(type)) {
+      return json(res, 409, { error: `${type} catalog is read-only until its authoritative runtime is connected` });
+    }
     return readJsonBody(req, res, data => {
       if (type === 'broadcast') {
         const text = typeof data.text === 'string' ? data.text.trim().slice(0, 500) : '';
@@ -486,6 +496,9 @@ function handleAdminAPI(req, res, route) {
 
   if (req.method === 'DELETE' && id) {
     if (!ALLOWED_ADMIN_TYPES.has(type)) return json(res, 404, { error: 'Unknown content type' });
+    if (READ_ONLY_ADMIN_TYPES.has(type)) {
+      return json(res, 409, { error: `${type} catalog is read-only until its authoritative runtime is connected` });
+    }
     contentDB.remove(type, id);
     if (type === 'items') engine.syncContentItems(contentDB.get('items'));
     if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));

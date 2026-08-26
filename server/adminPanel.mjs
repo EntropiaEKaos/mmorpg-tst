@@ -40,6 +40,8 @@ export function adminPanelHTML() {
   .stat { background:#1a0f05; border:1px solid #3a2a1a; border-radius:8px; padding:1rem; text-align:center; }
   .stat .num { font-size:2rem; font-weight:bold; color:#2ecc71; }
   .stat .lbl { font-size:.8rem; color:#f4e04d80; }
+  .catalog-note { margin:0 0 1rem; padding:.8rem 1rem; border:1px solid #e6a81755; border-radius:6px; background:#e6a81712; color:#f7dda0; font-size:.8rem; line-height:1.45; }
+  .readonly-label { color:#f4e04d80; font-size:.75rem; font-weight:700; letter-spacing:.06em; }
 </style>
 </head>
 <body>
@@ -141,12 +143,17 @@ export function adminPanelHTML() {
 
     const items = Array.isArray(data.items) ? data.items : [];
     const fields = Array.isArray(data.fields) ? data.fields : [];
+    const readOnly = data.readOnly === true;
     renderedItems = items;
+    if (readOnly) editing = null;
     
     let html = '<div class="card"><h2>' + currentTab.toUpperCase() + ' (' + items.length + ')</h2>';
+    if (readOnly) {
+      html += '<div class="catalog-note"><strong>READ-ONLY CATALOG</strong><br>' + escapeHtml(data.runtimeNote || 'This catalog is not connected to the authoritative runtime yet.') + '</div>';
+    }
     
     // Edit/Create form
-    if (editing !== null) {
+    if (!readOnly && editing !== null) {
       const item = editing === 'new'
         ? (currentTab === 'monsters'
           ? { mapId: 'eldoria', count: 1, speed: 1200 }
@@ -175,7 +182,7 @@ export function adminPanelHTML() {
     }
 
     // Items list
-    html += '<button class="btn btn-amber" onclick="editing=\\'new\\';render()">➕ New ' + currentTab.replace(/s$/,'') + '</button>';
+    if (!readOnly) html += '<button class="btn btn-amber" onclick="editing=\\'new\\';render()">➕ New ' + currentTab.replace(/s$/,'') + '</button>';
     html += '<table><thead><tr>';
     for (const f of fields.slice(0, 6)) html += '<th>' + escapeHtml(f) + '</th>';
     html += '<th>Actions</th></tr></thead><tbody>';
@@ -185,8 +192,11 @@ export function adminPanelHTML() {
       for (const f of fields.slice(0, 6)) {
         html += '<td>' + escapeHtml(displayValue(item?.[f])) + '</td>';
       }
-      html += '<td><button class="btn btn-blue" onclick="editRow(' + index + ')">Edit</button> ';
-      html += '<button class="btn btn-red" onclick="deleteRow(' + index + ')">🗑</button></td></tr>';
+      if (readOnly) html += '<td><span class="readonly-label">Catalog only</span></td></tr>';
+      else {
+        html += '<td><button class="btn btn-blue" onclick="editRow(' + index + ')">Edit</button> ';
+        html += '<button class="btn btn-red" onclick="deleteRow(' + index + ')">🗑</button></td></tr>';
+      }
     }
     html += '</tbody></table></div>';
     el.innerHTML = html;
