@@ -276,11 +276,15 @@ export default function GameScreen({ account, onLogout }: Props) {
   const spellsRef = useRef(spells);
   spellsRef.current = spells;
 
-  const [inventory, setInventory] = useState<Item[]>([
-    { id: 'hp1', name: 'Health Potion', icon: '🧪', type: 'potion', quantity: 10, value: 50, description: 'Restores 50 HP' },
-    { id: 'mp1', name: 'Mana Potion', icon: '🧴', type: 'potion', quantity: 5, value: 50, description: 'Restores 50 Mana' },
-    { id: 'hpg', name: 'Greater Health Potion', icon: '🍷', type: 'potion', quantity: 2, value: 150, description: 'Restores 200 HP' },
-  ]);
+  const [inventory, setInventory] = useState<Item[]>(() => {
+    const loadedSave = loadLocal(account.characterName);
+    if (loadedSave && Array.isArray(loadedSave.inventory)) return loadedSave.inventory;
+    return [
+      { id: 'hp1', name: 'Health Potion', icon: '🧪', type: 'potion', quantity: 10, value: 50, description: 'Restores 50 HP' },
+      { id: 'mp1', name: 'Mana Potion', icon: '🧴', type: 'potion', quantity: 5, value: 50, description: 'Restores 50 Mana' },
+      { id: 'hpg', name: 'Greater Health Potion', icon: '🍷', type: 'potion', quantity: 2, value: 150, description: 'Restores 200 HP' },
+    ];
+  });
   const inventoryRef = useRef(inventory);
   inventoryRef.current = inventory;
   const lastServerInventorySignatureRef = useRef('');
@@ -353,52 +357,36 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (serverSync.isActive()) {
         serverSync.uploadSave(playerRef.current, inventoryRef.current);
       }
-      // Also update account list for login screen (level display)
-      const accounts: Account[] = JSON.parse(localStorage.getItem('tibia_accounts') || '[]');
-      const idx = accounts.findIndex((a) => a.username === account.username);
-      if (idx >= 0) {
-        accounts[idx] = { ...accounts[idx], savedPlayer: JSON.stringify(playerRef.current), level: playerRef.current.level };
-        localStorage.setItem('tibia_accounts', JSON.stringify(accounts));
-      }
     }, 5000);
     // Save on unmount too (critical for tab close)
     const onUnload = () => saveLocal(playerRef.current, inventoryRef.current);
     window.addEventListener('beforeunload', onUnload);
-    return () => { clearInterval(interval); window.removeEventListener('beforeunload', onUnload); };
-  }, [account.username]);
+    return () => {
+      saveLocal(playerRef.current, inventoryRef.current);
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, []);
 
-  // Spawn custom monsters on mount + check mail welcome + seed AH + welcome coins
+  // Seed local-only starter content exactly once per character.
   useEffect(() => {
-    seedAuctionHouse(); // populate AH with NPC listings on first load
-    // Welcome coins for new players
-    if (getCoins(account.characterName) === 0) {
-      addCoins(account.characterName, 200);
+    seedAuctionHouse();
+
+    const welcomeCoinsKey = `moria_welcome_coins_${account.characterName}`;
+    if (localStorage.getItem(welcomeCoinsKey) !== '1') {
+      if (getCoins(account.characterName) === 0) addCoins(account.characterName, 200);
+      localStorage.setItem(welcomeCoinsKey, '1');
     }
-    const customs = getCustomMonsters();
-    if (customs.length > 0) {
-      const spawned: Monster[] = customs.map((cm) => ({
-        id: `customm_${cm.id}`,
-        name: cm.name,
-        pos: { x: cm.posX, y: cm.posY },
-        hp: cm.hp, maxHp: cm.hp,
-        attack: cm.attack, defense: cm.defense,
-        speed: cm.speed, xp: cm.xp,
-        color: cm.color, emoji: cm.emoji, size: cm.size,
-        level: cm.level, type: cm.type,
-        lastMove: 0, lastAttack: 0,
-        respawnPos: { x: cm.posX, y: cm.posY },
-        dead: false, respawnAt: 0,
-        loot: [{ name: 'Gold', icon: '🪙', chance: 0.8, value: cm.level * 10 }],
-      }));
-      monstersRef.current = [...monstersRef.current, ...spawned];
-    }
-    // Welcome mail for new players
-    const mail = getMail(account.characterName);
-    if (mail.length === 0) {
-      sendSystemMail(account.characterName, 'Postmaster Edwin',
-        'Welcome to Mor\'ia!',
-        `Dear ${account.characterName},\n\nWelcome to the realm of Mor'ia! May your adventures be legendary.\n\nTo help you get started, here is some gold. Visit me at the post office (near the bank) anytime.\n\nSafe travels,\nPostmaster Edwin`,
-        100);
+
+    const welcomeMailKey = `moria_welcome_mail_${account.characterName}`;
+    if (localStorage.getItem(welcomeMailKey) !== '1') {
+      if (getMail(account.characterName).length === 0) {
+        sendSystemMail(account.characterName, 'Postmaster Edwin',
+          'Welcome to Mor\'ia!',
+          `Dear ${account.characterName},\n\nWelcome to the realm of Mor'ia! May your adventures be legendary.\n\nTo help you get started, here is some gold. Visit me at the post office (near the bank) anytime.\n\nSafe travels,\nPostmaster Edwin`,
+          100);
+      }
+      localStorage.setItem(welcomeMailKey, '1');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

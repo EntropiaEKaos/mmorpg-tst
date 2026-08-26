@@ -119,37 +119,8 @@ export function loadLocal(name: string): PlayerSave | null {
     const raw = localStorage.getItem(SAVE_KEY(name));
     if (raw) {
       const save = JSON.parse(raw) as PlayerSave;
+      if (!save || typeof save !== 'object' || save.name !== name || !Array.isArray(save.inventory)) return null;
       return migrate(save, name);
-    }
-    // MIGRATION: old fragmented save detected — try to rebuild from playerFactory save
-    const oldPlayerRaw = localStorage.getItem('tibia_accounts');
-    if (oldPlayerRaw) {
-      const accounts = JSON.parse(oldPlayerRaw);
-      const acc = accounts.find((a: any) => a.characterName === name || a.username === name);
-      if (acc?.savedPlayer) {
-        // We have an old save — convert to unified and save
-        const oldPlayer = JSON.parse(acc.savedPlayer);
-        const migrated: PlayerSave = {
-          version: CURRENT_VERSION, name,
-          vocation: oldPlayer.vocation || 'knight',
-          level: oldPlayer.level || 1, xp: oldPlayer.xp || 0,
-          gold: oldPlayer.gold || 100, bankGold: oldPlayer.bankGold || 0,
-          hp: oldPlayer.hp || 150, maxHp: oldPlayer.maxHp || 150,
-          mana: oldPlayer.mana || 50, maxMana: oldPlayer.maxMana || 50,
-          attack: oldPlayer.attack || 20, defense: oldPlayer.defense || 5, magic: oldPlayer.magic || 10,
-          skills: oldPlayer.skills || {}, talents: {},
-          blessings: [], achievements: oldPlayer.achievements || [],
-          professions: { miner: { level: 1, progress: 0 }, herbalist: { level: 1, progress: 0 }, fisher: { level: 1, progress: 0 } },
-          reputation: { town: 0 }, stamina: 42 * 60, bestiary: {}, mysteryProgress: {},
-          inventory: [], equipment: oldPlayer.equipment || {}, depot: [],
-          coins: 0, pets: [], activePet: null, mounts: [],
-          skull: { type: 'none', aggressionPoints: 0, lastDecay: Date.now() },
-          pvpEnabled: false, dailyReward: { lastClaim: 0, streak: 0 },
-          stats: oldPlayer.stats || {}, lastSaved: Date.now(),
-        };
-        localStorage.setItem(SAVE_KEY(name), JSON.stringify(migrated));
-        return migrated;
-      }
     }
     return null;
   } catch {
@@ -185,13 +156,14 @@ export function persistSubSystems(save: PlayerSave): void {
     localStorage.setItem(`tibia_blessings_${save.name}`, JSON.stringify(save.blessings || []));
     localStorage.setItem(`tibia_professions_${save.name}`, JSON.stringify(save.professions || {}));
     localStorage.setItem(`tibia_reputation_${save.name}`, JSON.stringify(save.reputation || {}));
-    localStorage.setItem(`tibia_stamina_${save.name}`, JSON.stringify({ value: save.stamina || (42 * 60), lastUpdate: Date.now() }));
+    localStorage.setItem(`tibia_stamina_${save.name}`, JSON.stringify({ value: save.stamina ?? (42 * 60), lastUpdate: Date.now() }));
     localStorage.setItem(`tibia_bestiary_${save.name}`, JSON.stringify(save.bestiary || {}));
     localStorage.setItem(`tibia_mystery_progress_${save.name}`, JSON.stringify(save.mysteryProgress || {}));
     localStorage.setItem(`tibia_depot_${save.name}`, JSON.stringify(save.depot || []));
     localStorage.setItem(`moria_coins_${save.name}`, JSON.stringify(save.coins || 0));
     localStorage.setItem(`tibia_pets_${save.name}`, JSON.stringify(save.pets || []));
     if (save.activePet) localStorage.setItem(`tibia_activepet_${save.name}`, save.activePet);
+    else localStorage.removeItem(`tibia_activepet_${save.name}`);
     localStorage.setItem(`moria_skull_${save.name}`, JSON.stringify(save.skull || { type: 'none', aggressionPoints: 0, lastDecay: Date.now() }));
     localStorage.setItem(`moria_pvp_enabled_${save.name}`, save.pvpEnabled ? '1' : '0');
     localStorage.setItem(`tibia_daily_${save.name}`, JSON.stringify(save.dailyReward || { lastClaim: 0, streak: 0 }));
