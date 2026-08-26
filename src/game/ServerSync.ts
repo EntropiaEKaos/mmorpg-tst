@@ -21,7 +21,16 @@ class ServerSyncManager {
   private authed = false;
   private currentMapId = 'eldoria';
 
-  authenticate(sessionToken: string, characterName: string) {
+  // GameScreen historically passed (characterName, vocation). During the auth
+  // migration we resolve the actual credential from the session token store so
+  // no password/account secret is pushed through gameplay props.
+  authenticate(characterOrToken: string, characterOrVocation: string) {
+    let sessionToken = characterOrToken;
+    let characterName = characterOrVocation;
+    if (characterOrToken.length < 32) {
+      sessionToken = localStorage.getItem('moria_session_token') || '';
+      characterName = characterOrToken;
+    }
     if (!sessionToken || !characterName) return;
     sendAuth(sessionToken, characterName);
   }
@@ -39,7 +48,7 @@ class ServerSyncManager {
     return isAuthoritative() && this.authed && getSnapshot() !== null;
   }
 
-  uploadSave(player: any, inventory: any[]) {
+  uploadSave(_player: any, _inventory: any[]) {
     if (!this.isActive()) return;
     // Payload is only a save request. The server ignores client state and persists
     // its own authoritative player object.
@@ -132,6 +141,7 @@ class ServerSyncManager {
   }
 
   updateSnapshot(snap: ServerSnapshot) {
+    this.authed = true;
     setSnapshot(snap);
     this.currentMapId = snap.player.mapId;
   }
