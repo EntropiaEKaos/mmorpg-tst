@@ -1,0 +1,66 @@
+name: Apply save integrity 3.6
+
+on:
+  push:
+    branches: [hardening-3.1]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hardening-3.1
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply save integrity transform
+        run: python3 tools/apply-save-integrity-3-6.py
+      - name: Validate save invariants
+        run: |
+          if grep -q "tibia_accounts" src/components/GameScreen.tsx src/game/SaveManager.ts; then
+            echo "Legacy account storage leaked back into runtime save path"
+            exit 1
+          fi
+          grep -q "loadedSave.inventory" src/components/GameScreen.tsx
+          grep -q "moria_welcome_coins_" src/components/GameScreen.tsx
+          grep -q "moria_welcome_mail_" src/components/GameScreen.tsx
+          if grep -q "customm_" src/components/GameScreen.tsx; then
+            echo "Obsolete duplicate custom monster spawn path still present"
+            exit 1
+          fi
+          grep -q "removeItem.*tibia_activepet_" src/game/SaveManager.ts
+          if grep -RE "require[[:space:]]*\([[:space:]]*['\"]" src --include='*.ts' --include='*.tsx'; then
+            echo "Executable CommonJS require found in browser source"
+            exit 1
+          fi
+      - name: Validate all gates
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm install --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated save fixes
+        run: |
+          if git diff --quiet -- src; then
+            echo "No source changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src
+          git commit -m "fix(save): restore inventory and close repeat starter grants"
+          git restore tools
+          git fetch origin hardening-3.1
+          git rebase origin/hardening-3.1
+          git push origin HEAD:hardening-3.1
