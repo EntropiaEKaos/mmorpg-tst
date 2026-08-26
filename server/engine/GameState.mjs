@@ -17,6 +17,23 @@ const TRAVEL_SPAWNS = Object.freeze({
   voidlands: { x: 40, y: 40 },
 });
 
+const TALENT_RULES = Object.freeze({
+  vitality: { maxRank: 5, hp: 10 },
+  wisdom: { maxRank: 5, mana: 8 },
+  might: { maxRank: 5, attack: 2 },
+  toughness: { maxRank: 5, defense: 2 },
+  precision: { maxRank: 5, requires: 'might', critChance: 1 },
+  arcane_mastery: { maxRank: 5, requires: 'wisdom', magic: 3 },
+  resilience: { maxRank: 3, requires: 'toughness', damageReduction: 2 },
+  bounty: { maxRank: 3, requires: 'vitality', goldBonus: 5 },
+  savant: { maxRank: 3, requires: 'bounty', xpBonus: 10 },
+  lethal: { maxRank: 2, requires: 'precision', critChance: 3 },
+  archmage: { maxRank: 2, requires: 'arcane_mastery', healBonus: 20 },
+  fortitude: { maxRank: 2, requires: 'resilience', damageReduction: 5 },
+  berserker: { maxRank: 1, requires: 'lethal', attack: 15, critChance: 5 },
+  transcendence: { maxRank: 1, requires: 'archmage', hp: 50, mana: 30, magic: 8 },
+});
+
 function safePayload(payload) {
   return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
 }
@@ -39,7 +56,6 @@ class GameEngine {
       this.groundItemsByMap.set(mapId, []);
       this.pendingEvents.set(mapId, []);
     }
-    // Register player map with quest engine
     questEngine.registerPlayers(this.players);
     console.log(`🌍 World Init: ${WORLD.getMapIds().length} maps`);
   }
@@ -59,7 +75,7 @@ class GameEngine {
       equipment: {},
       buffs: [], skills: { sword: 10, magic: 10, shielding: 10 },
       lastAttack: 0, lastMove: 0, lastRegen: 0, cooldowns: {},
-      mounted: false, professions: {}, reputation: { town: 0 },
+      mounted: false, professions: {}, reputation: { town: 0 }, talents: {},
       stats: { monstersKilled: 0, damageDealt: 0, damageTaken: 0, healingDone: 0, goldEarned: 0, deaths: 0, levelUps: 0, spellsCast: 0 },
       ws, lastActivity: Date.now(),
     };
@@ -92,6 +108,7 @@ class GameEngine {
       case 'pickup': return this.handlePickup(player, payload);
       case 'mount': return this.handleMount(player);
       case 'talent': return this.handleTalent(player, payload);
+      case 'talent_reset': return this.handleTalentReset(player);
       case 'quest_accept': return this.handleQuestAccept(player, payload);
       case 'quest_complete': return this.handleQuestComplete(player, payload);
       case 'travel': return this.handleTravel(player, payload);
@@ -101,14 +118,11 @@ class GameEngine {
 
   handleMove(player, payload) {
     const { dx, dy } = payload;
-
-    // Grid movement is one orthogonal tile per accepted intent. Reject NaN,
-    // fractional values, diagonals and client-side teleport attempts.
     if (!Number.isInteger(dx) || !Number.isInteger(dy)) return false;
     if (Math.abs(dx) + Math.abs(dy) !== 1) return false;
 
     const now = Date.now();
-    if (now - player.lastMove < 100) return false; // anti-speed-hack
+    if (now - player.lastMove < 100) return false;
 
     const nx = player.x + dx, ny = player.y + dy;
     const map = WORLD.getMap(player.mapId);
@@ -125,20 +139,19 @@ class GameEngine {
     else if (dx > 0) player.direction = 'right';
     else if (dy < 0) player.direction = 'up';
     else if (dy > 0) player.direction = 'down';
-
     return true;
   }
 
-  // ===== DERIVED STATS (equipment + talents) =====
+  // ===== DERIVED STATS (equipment + passive talents) =====
   computeDerivedStats(player) {
     const stats = {
       totalAttack: player.attack || 0, totalDefense: player.defense || 0,
       totalMagic: player.magic || 0, totalMaxHp: player.maxHp || 100, totalMaxMana: player.maxMana || 50,
-      critChance: 15, lifesteal: 0, thorns: 0, moveSpeed: 0, xpBonus: 0, goldBonus: 0, damageReduction: 0,
+      critChance: 15, lifesteal: 0, thorns: 0, moveSpeed: 0,
+      xpBonus: 0, goldBonus: 0, healBonus: 0, damageReduction: 0,
     };
 
-    // Equipment is applied only here. Mutating the base stats during equip and
-    // then adding gear here caused attack/defense to be counted twice.
+    // Equipment is counted exactly once here.
     for (const eq of Object.values(player.equipment || {})) {
       if (!eq) continue;
       stats.totalAttack += Number(eq.attack) || 0;
@@ -154,14 +167,19 @@ class GameEngine {
       stats.damageReduction += Number(eq.damageReduction) || 0;
     }
 
-    // might/toughness/vitality/wisdom/arcane_mastery are already applied to
-    // the authoritative base attributes when purchased. Only passive values
-    // that are not stored in the base attributes are derived here.
-    const talents = player.talents || {};
-    if (talents.precision) stats.critChance += talents.precision;
-    if (talents.resilience) stats.damageReduction += talents.resilience * 2;
+    // Attribute-changing talents are applied to base stats at purchase time;
+    // percentage/passive talents are derived here.
+    for (const [talentId, rawRank] of Object.entries(player.talents || {})) {
+      const rule = TALENT_RULES[talentId];
+      if (!rule) continue;
+      const rank = Math.max(0, Math.min(rule.maxRank, Number(rawRank) || 0));
+      stats.critChance += (rule.critChance || 0) * rank;
+      stats.damageReduction += (rule.damageReduction || 0) * rank;
+      stats.goldBonus += (rule.goldBonus || 0) * rank;
+      stats.xpBonus += (rule.xpBonus || 0) * rank;
+      stats.healBonus += (rule.healBonus || 0) * rank;
+    }
 
-    // Vocation passives
     if (player.vocation === 'rogue' || player.vocation === 'berserker') stats.critChance += 10;
     if (player.vocation === 'knight' || player.vocation === 'templar') stats.damageReduction += 5;
 
@@ -181,22 +199,18 @@ class GameEngine {
 
     const dist = Math.abs(monster.x - player.x) + Math.abs(monster.y - player.y);
     if (dist > 2) return false;
-
     player.lastAttack = now;
 
-    // SERVER CALCULATES DAMAGE using DERIVED STATS (equipment + talents)
     const derived = this.computeDerivedStats(player);
     const baseAttack = derived.totalAttack + Math.floor(Math.random() * 8);
     const crit = Math.random() < (derived.critChance / 100);
     let dmg = Math.max(1, baseAttack - monster.defense);
     if (crit) dmg = Math.floor(dmg * 2);
-    // Berserker passive
     if (player.vocation === 'berserker' && player.hp < derived.totalMaxHp * 0.3) dmg = Math.floor(dmg * 1.5);
 
     monster.hp -= dmg;
     player.stats.damageDealt += dmg;
     this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: dmg, pos: { x: monster.x, y: monster.y }, color: crit ? '#ff4444' : '#ffdddd' });
-
     if (monster.hp <= 0) this.killMonster(player, monster);
     return true;
   }
@@ -207,13 +221,10 @@ class GameEngine {
     player.stats.monstersKilled++;
 
     const derived = this.computeDerivedStats(player);
-    // Apply XP bonuses (talents + gear + stamina)
-    const xpMult = 1 + (derived.xpBonus / 100);
-    const xpGain = Math.floor(monster.xp * xpMult);
+    const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100));
     player.xp += xpGain;
     this.emitEvent(player.mapId, { kind: 'xp', targetId: player.id, amount: xpGain, pos: { x: monster.x, y: monster.y }, color: '#f4e04d', text: `+${xpGain} XP` });
 
-    // ===== QUEST PROGRESSION =====
     const questResult = questEngine.onMonsterKill(player.id, monster.name);
     for (const prog of questResult.progressed) {
       this.emitEvent(player.mapId, { kind: 'quest_progress', targetId: player.id, text: `${prog.name}: ${prog.current}/${prog.needed}`, color: '#9bd4ff', pos: { x: player.x, y: player.y } });
@@ -229,7 +240,6 @@ class GameEngine {
       this.groundItemsByMap.set(player.mapId, groundItems);
     }
 
-    // SERVER LEVEL UP
     const voc = VOCATIONS[player.vocation];
     while (player.xp >= player.xpNext && voc) {
       player.xp -= player.xpNext;
@@ -249,8 +259,6 @@ class GameEngine {
     if (!voc || !Number.isInteger(payload.spellIndex)) return false;
     const spell = voc.spells[payload.spellIndex];
     if (!spell) return false;
-
-    // SERVER VALIDATES: mana, cooldown, level
     if (player.level < (spell.levelRequired || 1)) return false;
     if (now - (player.cooldowns[spell.name] || 0) < spell.cooldown) return false;
     if (player.mana < spell.mana) return false;
@@ -263,9 +271,11 @@ class GameEngine {
     this.emitEvent(player.mapId, { kind: 'spell', targetId: player.id, text: spell.name, color: spell.color, pos: { x: player.x, y: player.y } });
 
     if (spell.type === 'heal' && spell.damage > 0) {
-      const healAmt = spell.damage + Math.floor(derived.totalMagic * 0.5);
+      const baseHeal = spell.damage + Math.floor(derived.totalMagic * 0.5);
+      const healAmt = Math.floor(baseHeal * (1 + derived.healBonus / 100));
+      const before = player.hp;
       player.hp = Math.min(derived.totalMaxHp, player.hp + healAmt);
-      player.stats.healingDone += healAmt;
+      player.stats.healingDone += Math.max(0, player.hp - before);
       this.emitEvent(player.mapId, { kind: 'heal', targetId: player.id, amount: healAmt, pos: { x: player.x, y: player.y }, color: '#2ecc71' });
     } else {
       const monsters = this.monstersByMap.get(player.mapId) || [];
@@ -279,7 +289,7 @@ class GameEngine {
           player.stats.damageDealt += dmg;
           this.emitEvent(player.mapId, { kind: 'damage', targetId: m.id, amount: dmg, pos: { x: m.x, y: m.y }, color: spell.color });
           if (m.hp <= 0) this.killMonster(player, m);
-          if (spell.type === 'attack') break; // single target
+          if (spell.type === 'attack') break;
         }
       }
     }
@@ -312,14 +322,9 @@ class GameEngine {
 
     const slot = item.equipment.slot;
     if (typeof slot !== 'string' || !slot) return false;
-
     const current = player.equipment[slot];
-    if (current) {
-      player.inventory.push({ id: `eq_${Date.now()}`, ...current, type: 'equipment', quantity: 1 });
-    }
+    if (current) player.inventory.push({ id: `eq_${Date.now()}`, ...current, type: 'equipment', quantity: 1 });
 
-    // Do not mutate player.attack/defense here. Equipment is included exactly
-    // once by computeDerivedStats().
     player.equipment[slot] = item.equipment;
     player.inventory = player.inventory.filter(i => i.id !== payload.itemId);
     return true;
@@ -342,23 +347,45 @@ class GameEngine {
   handleMount(player) { player.mounted = !player.mounted; return true; }
 
   handleTalent(player, payload) {
-    const { talentId } = payload;
-    if (typeof talentId !== 'string' || talentId.length > 64) return false;
-    if (!player.talents) player.talents = {};
-    const current = player.talents[talentId] || 0;
-    const maxRank = talentId === 'berserker' || talentId === 'transcendence' ? 1 : 5;
-    if (current >= maxRank) return false;
-    // Check available points (1 per level, minus spent)
-    const spent = Object.values(player.talents).reduce((s, v) => s + v, 0);
+    const talentId = payload.talentId;
+    const rule = typeof talentId === 'string' ? TALENT_RULES[talentId] : null;
+    if (!rule) return false;
+
+    if (!player.talents || typeof player.talents !== 'object') player.talents = {};
+    const current = Number(player.talents[talentId]) || 0;
+    if (current >= rule.maxRank) return false;
+    if (rule.requires && (Number(player.talents[rule.requires]) || 0) < 1) return false;
+
+    const spent = Object.entries(player.talents).reduce((sum, [id, rank]) => {
+      const known = TALENT_RULES[id];
+      return known ? sum + Math.max(0, Math.min(known.maxRank, Number(rank) || 0)) : sum;
+    }, 0);
     if (spent >= player.level) return false;
+
     player.talents[talentId] = current + 1;
-    // Apply immediate effects to base stats. computeDerivedStats deliberately
-    // does not add these a second time.
-    if (talentId === 'vitality') { player.maxHp += 10; player.hp += 10; }
-    if (talentId === 'wisdom') { player.maxMana += 8; player.mana += 8; }
-    if (talentId === 'might') player.attack += 2;
-    if (talentId === 'toughness') player.defense += 2;
-    if (talentId === 'arcane_mastery') player.magic += 3;
+    if (rule.hp) { player.maxHp += rule.hp; player.hp += rule.hp; }
+    if (rule.mana) { player.maxMana += rule.mana; player.mana += rule.mana; }
+    if (rule.attack) player.attack += rule.attack;
+    if (rule.defense) player.defense += rule.defense;
+    if (rule.magic) player.magic += rule.magic;
+    return true;
+  }
+
+  handleTalentReset(player) {
+    if (player.gold < 500) return false;
+    const voc = VOCATIONS[player.vocation];
+    if (!voc) return false;
+
+    player.gold -= 500;
+    player.talents = {};
+    const levelsGained = Math.max(0, player.level - 1);
+    player.maxHp = voc.baseHp + levelsGained * voc.hpPerLevel;
+    player.maxMana = voc.baseMana + levelsGained * voc.manaPerLevel;
+    player.attack = voc.baseAttack + levelsGained * voc.atkPerLevel;
+    player.defense = voc.baseDefense + levelsGained * voc.defPerLevel;
+    player.magic = voc.baseMagic + levelsGained * voc.magPerLevel;
+    player.hp = Math.min(player.hp, player.maxHp);
+    player.mana = Math.min(player.mana, player.maxMana);
     return true;
   }
 
@@ -368,7 +395,6 @@ class GameEngine {
     const spawn = TRAVEL_SPAWNS[targetMap];
     if (!map || !spawn || !map.tiles?.[spawn.y]?.[spawn.x]?.walkable) return false;
 
-    // Coordinates are server-owned. Client-supplied spawnX/spawnY are ignored.
     player.mapId = targetMap;
     player.x = spawn.x;
     player.y = spawn.y;
@@ -463,7 +489,6 @@ class GameEngine {
     const player = this.players.get(playerId);
     if (!player) return null;
 
-    // Inject derived stats so client renders bars correctly
     const derived = this.computeDerivedStats(player);
     const playerData = {
       ...player,
@@ -478,6 +503,7 @@ class GameEngine {
       thorns: derived.thorns,
       xpBonus: derived.xpBonus,
       goldBonus: derived.goldBonus,
+      healBonus: derived.healBonus,
       damageReduction: derived.damageReduction,
       moveSpeed: derived.moveSpeed,
       quests: questEngine.serialize(playerId),
