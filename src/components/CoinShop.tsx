@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import type { Player } from '../game/types';
-import { COIN_SHOP_ITEMS, getCoins, spendCoins, addCoins, type CoinShopItem } from '../game/economy';
+import { COIN_SHOP_ITEMS, getCoins, spendCoins, addCoins, claimDemoCoinGrant, type CoinShopItem } from '../game/economy';
 
 interface Props {
   player: Player;
   onClose: () => void;
   addMessage: (sender: string, text: string, color: string, channel: 'world' | 'system' | 'battle' | 'loot' | 'quest') => void;
+  onPurchase: (item: CoinShopItem) => boolean;
 }
 
-export default function CoinShop({ player, onClose, addMessage }: Props) {
+export default function CoinShop({ player, onClose, addMessage, onPurchase }: Props) {
   const [coins, setCoins] = useState(getCoins(player.name));
   const [category, setCategory] = useState<'all' | 'mount' | 'boost' | 'pet' | 'blessing' | 'cosmetic'>('all');
 
@@ -16,30 +17,43 @@ export default function CoinShop({ player, onClose, addMessage }: Props) {
 
   const filtered = category === 'all' ? COIN_SHOP_ITEMS : COIN_SHOP_ITEMS.filter((i) => i.category === category);
 
+  const isSupported = (item: CoinShopItem) => item.effect === 'allblessings';
+
   const handleBuy = (item: CoinShopItem) => {
+    if (!isSupported(item)) {
+      addMessage('System', `${item.name} is a roadmap preview and is not for sale yet.`, '#9bd4ff', 'system');
+      return;
+    }
     if (coins < item.cost) {
       addMessage('System', 'Not enough coins.', '#ff9090', 'system');
       return;
     }
-    spendCoins(player.name, item.cost);
-    // Apply effect
+    if (!spendCoins(player.name, item.cost)) {
+      addMessage('System', 'Purchase could not be completed.', '#ff9090', 'system');
+      return;
+    }
+    if (!onPurchase(item)) {
+      addCoins(player.name, item.cost);
+      addMessage('System', 'Effect unavailable. Your coins were refunded.', '#ff9090', 'system');
+      refresh();
+      return;
+    }
     addMessage('System', `💎 Purchased ${item.icon} ${item.name}! (${item.cost} coins)`, '#c8a0ff', 'system');
-    addMessage('System', `Effect: ${item.effect || 'cosmetic'} - (configure in game)`, '#9bd4ff', 'system');
     refresh();
   };
 
   const claimFree = () => {
-    addCoins(player.name, 500);
+    const claimed = claimDemoCoinGrant(player.name, 500);
     refresh();
-    addMessage('System', '🎁 Claimed 500 coins (demo bonus)!', '#c8a0ff', 'system');
+    addMessage('System', claimed ? '🎁 Claimed your one-time 500 coin demo grant!' : 'Demo coin grant already claimed.', claimed ? '#c8a0ff' : '#9bd4ff', 'system');
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
+    <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
          style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="rounded-xl border-2 p-5 max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-           style={{ background: 'linear-gradient(180deg, rgba(35,25,50,0.98) 0%, rgba(18,12,28,0.98) 100%)', borderColor: '#c8a0ff', boxShadow: '0 0 50px rgba(200,160,255,0.4)' }}>
+           className="moria-panel w-full max-w-3xl max-h-[92vh] overflow-hidden rounded-3xl border border-violet-300/20 p-4 sm:p-6 flex flex-col"
+           style={{ boxShadow: '0 30px 90px rgba(0,0,0,.58), 0 0 55px rgba(139,92,246,.10)' }}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
@@ -61,9 +75,10 @@ export default function CoinShop({ player, onClose, addMessage }: Props) {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2.5">
+        <div className="moria-scrollbar flex-1 overflow-y-auto grid grid-cols-1 gap-2.5 pr-1 sm:grid-cols-2">
           {filtered.map((item) => {
-            const canBuy = coins >= item.cost;
+            const supported = isSupported(item);
+            const canBuy = supported && coins >= item.cost;
             const catColors: Record<string, string> = { mount: '#ff8c00', boost: '#2ecc71', pet: '#ff9bcc', blessing: '#f4e04d', cosmetic: '#9b59ff' };
             return (
               <div key={item.id} className="p-3 rounded-lg border-2 bg-black/40" style={{ borderColor: (catColors[item.category] || '#c8a0ff') + '50' }}>
@@ -77,9 +92,10 @@ export default function CoinShop({ player, onClose, addMessage }: Props) {
                     <div className="text-[10px] text-purple-200/60 italic">{item.description}</div>
                   </div>
                 </div>
+                {!supported && <div className="mt-2 text-[9px] uppercase tracking-widest text-sky-300/70">Roadmap preview · no charge</div>}
                 <button onClick={() => handleBuy(item)} disabled={!canBuy}
-                        className={`w-full mt-2 py-1.5 rounded text-xs font-bold ${canBuy ? 'bg-gradient-to-b from-purple-500 to-purple-700 text-white' : 'bg-black/40 text-gray-500 cursor-not-allowed'}`}>
-                  💎 {item.cost} {canBuy ? '' : '(insufficient)'}
+                        className={`w-full mt-2 py-1.5 rounded text-xs font-bold ${canBuy ? 'moria-button-primary' : 'bg-black/40 text-gray-500 cursor-not-allowed'}`}>
+                  {supported ? `💎 ${item.cost}${coins < item.cost ? ' (insufficient)' : ''}` : 'Coming soon'}
                 </button>
               </div>
             );
@@ -90,15 +106,11 @@ export default function CoinShop({ player, onClose, addMessage }: Props) {
         <div className="mt-3 p-3 rounded-lg border border-purple-500/30 bg-purple-900/10">
           <div className="text-xs text-purple-200/70 mb-2">💎 GET MORE COINS</div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={claimFree} className="px-4 py-2 rounded bg-gradient-to-b from-green-500 to-green-700 text-white text-xs font-bold">
-              🎁 Claim 500 Coins (Free Demo)
-            </button>
-            <button onClick={() => { addCoins(player.name, 2000); refresh(); addMessage('System', '💎 +2000 coins!', '#c8a0ff', 'system'); }}
-                    className="px-4 py-2 rounded bg-gradient-to-b from-purple-500 to-purple-700 text-white text-xs font-bold">
-              💎 +2000 Coins (Free)
+            <button onClick={claimFree} className="moria-button rounded-lg px-4 py-2 text-xs font-bold text-emerald-200">
+              🎁 Claim one-time 500 Coin Demo Grant
             </button>
           </div>
-          <div className="text-[10px] text-purple-200/40 mt-2">Note: In a full release, coins are earned through gameplay or purchases. Here they are free for testing.</div>
+          <div className="text-[10px] text-purple-200/40 mt-2">Only fully implemented effects can spend coins. Roadmap items are visible for design review but cannot be purchased.</div>
         </div>
       </div>
     </div>

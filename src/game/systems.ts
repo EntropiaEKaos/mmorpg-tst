@@ -43,6 +43,13 @@ export function buyBlessing(player: Player, blessingId: string): boolean {
   return true;
 }
 
+export function grantAllBlessings(player: Player): void {
+  const ids = BLESSINGS.map((blessing) => blessing.id);
+  localStorage.setItem(`tibia_blessings_${player.name}`, JSON.stringify(ids));
+  player.blessings = ids.length;
+  player.aol = true;
+}
+
 export function getXPMultiplierFromBlessings(player: Player): number {
   const owned = getBlessings(player);
   let mult = 1;

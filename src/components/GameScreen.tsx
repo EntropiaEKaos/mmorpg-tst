@@ -67,7 +67,7 @@ import {
   gatherFromTile, addReputation, getShopDiscountFromRep,
   getStamina, saveStamina, getStaminaMultiplier,
   canClaimDaily, claimDaily,
-  FOOD_ITEMS, applyFoodBuff, getActiveFoodBonus,
+  FOOD_ITEMS, applyFoodBuff, getActiveFoodBonus, grantAllBlessings,
 } from '../game/systems';
 
 interface Props {
@@ -2393,14 +2393,14 @@ export default function GameScreen({ account, onLogout }: Props) {
           <TopButton icon="📖" label="Bestiary" hotkey="B" onClick={() => setShowBestiary((s) => !s)} />
           <TopButton icon="📊" label="DPS" hotkey="D" onClick={() => setShowDPS((s) => !s)} />
           <TopButton icon="🌀" label="Dungeon" hotkey="" onClick={() => setShowDungeon(true)} />
-          <TopButton icon="🐾" label="Pet" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Companions are local-only until server support lands.', '#ff9090', 'system') : setShowPetShop(true)} />
+          <TopButton icon="🐾" label="Pet" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Companions are local-only until server support lands.', '#ff9090', 'system') : setShowPetShop(true)} />
           <TopButton icon="✦" label="Mystery" hotkey="" onClick={() => setShowMysteryBook(true)} />
-          <TopButton icon="🗄" label="Depot" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Depot is local-only until server support lands.', '#ff9090', 'system') : setShowDepot(true)} />
+          <TopButton icon="🗄" label="Depot" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Depot is local-only until server support lands.', '#ff9090', 'system') : setShowDepot(true)} />
           <TopButton icon="📚" label="Books" hotkey="" onClick={() => setShowBooks(true)} />
-          <TopButton icon="🏛" label="AH" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Auction House is local-only until server support lands.', '#ff9090', 'system') : setShowAuction(true)} />
-          <TopButton icon="💎" label="Coins" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Coin Shop is local-only until server support lands.', '#ff9090', 'system') : setShowCoinShop(true)} />
-          <TopButton icon="🌍" label="World" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Browser world events are disabled in authoritative mode.', '#ff9090', 'system') : setShowWorldEvents(true)} />
-          <TopButton icon="📮" label="Mail" hotkey="" onClick={() => serverSync.isActive() ? addMessage('System', 'Mail is local-only until server support lands.', '#ff9090', 'system') : setShowMail(true)} />
+          <TopButton icon="🏛" label="AH" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Auction House is local-only until server support lands.', '#ff9090', 'system') : setShowAuction(true)} />
+          <TopButton icon="💎" label="Coins" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Coin Shop is local-only until server support lands.', '#ff9090', 'system') : setShowCoinShop(true)} />
+          <TopButton icon="🌍" label="World" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Browser world events are disabled in authoritative mode.', '#ff9090', 'system') : setShowWorldEvents(true)} />
+          <TopButton icon="📮" label="Mail" hotkey="" onClick={() => onlineAccount ? addMessage('System', 'Mail is local-only until server support lands.', '#ff9090', 'system') : setShowMail(true)} />
           <TopButton icon="📦" label="Inv" hotkey="I" onClick={() => setShowInventory((s) => !s)} />
           <TopButton icon="⚙" label="UI" hotkey="" onClick={() => setShowUIEditor(true)} />
           <TopButton icon="🐎" label="Mount" hotkey="SPACE" onClick={toggleMount} />
@@ -2567,10 +2567,22 @@ export default function GameScreen({ account, onLogout }: Props) {
             <BookLibrary player={player} onClose={() => setShowBooks(false)} />
           )}
           {showAuction && (
-            <AuctionHouse player={player} inventory={inventory} setInventory={setInventory} onClose={() => setShowAuction(false)} addMessage={addMessage} />
+            <AuctionHouse player={player} inventory={inventory} setInventory={setInventory} setPlayer={setPlayer} onClose={() => setShowAuction(false)} addMessage={addMessage} />
           )}
           {showCoinShop && (
-            <CoinShop player={player} onClose={() => setShowCoinShop(false)} addMessage={addMessage} />
+            <CoinShop
+              player={player}
+              onClose={() => setShowCoinShop(false)}
+              addMessage={addMessage}
+              onPurchase={(item) => {
+                if (item.effect !== 'allblessings') return false;
+                const p = playerRef.current;
+                grantAllBlessings(p);
+                setPlayer({ ...p });
+                addToast('loot', 'Blessings Granted', 'All five blessings and AOL are active.', item.icon, '#f4e04d');
+                return true;
+              }}
+            />
           )}
           {showWorldEvents && (
             <WorldEvents player={player} onClose={() => setShowWorldEvents(false)} onContribute={(gold: number, xp: number) => {
