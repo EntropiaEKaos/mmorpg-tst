@@ -4,7 +4,7 @@ p = Path('src/components/GameScreen.tsx')
 s = p.read_text()
 
 
-def replace_once(old: str, new: str, marker: str):
+def required(old: str, new: str, marker: str):
     global s
     if new in s:
         return
@@ -12,12 +12,20 @@ def replace_once(old: str, new: str, marker: str):
         raise SystemExit(f'pattern not found: {marker}')
     s = s.replace(old, new, 1)
 
-replace_once(
+
+def optional(old: str, new: str):
+    global s
+    if new in s:
+        return
+    if old in s:
+        s = s.replace(old, new, 1)
+
+required(
 '''    <div className="w-screen h-screen flex flex-col bg-black text-amber-100 overflow-hidden select-none">''',
 '''    <div className="w-screen h-screen flex flex-col bg-[#05070c] text-slate-100 overflow-hidden select-none">''',
 'root shell')
 
-replace_once(
+required(
 '''      <div
         className="flex items-center justify-between px-3 py-1 border-b-2 text-xs"
         style={{
@@ -40,27 +48,27 @@ replace_once(
         <div className="moria-scrollbar flex min-w-0 flex-1 items-center justify-end gap-1 overflow-x-auto pb-0.5">''',
 'top bar')
 
-replace_once(
+required(
 '''            className="px-2 py-0.5 text-xs rounded bg-purple-900/50 hover:bg-purple-800/60 text-purple-100 border border-purple-700/50 flex items-center gap-1"''',
 '''            className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-violet-200"''',
 'admin button')
 
-replace_once(
+required(
 '''            className={`px-2 py-0.5 text-xs rounded border ${muted ? 'bg-gray-800/50 text-gray-500 border-gray-600' : 'bg-blue-900/50 text-blue-200 border-blue-600'}`}''',
 '''            className={`moria-button shrink-0 rounded-lg px-2 py-1 text-[10px] ${muted ? 'text-slate-600' : 'text-sky-200'}`}''',
 'audio button')
 
-replace_once(
+required(
 '''            className={`px-2 py-0.5 text-xs rounded border flex items-center gap-1 ${netMode === 'online' ? 'bg-green-900/50 text-green-200 border-green-600' : netMode === 'local' ? 'bg-yellow-900/50 text-yellow-200 border-yellow-600' : 'bg-gray-800/50 text-gray-400 border-gray-600'}`}''',
 '''            className={`moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] ${netMode === 'online' ? 'text-emerald-200' : netMode === 'local' ? 'text-amber-200' : 'text-slate-500'}`}''',
 'network button')
 
-replace_once(
+required(
 '''            className="px-2 py-0.5 text-xs rounded bg-red-900/50 hover:bg-red-800/60 text-red-100 border border-red-700/50"''',
 '''            className="moria-button shrink-0 rounded-lg px-2 py-1 text-[10px] text-rose-200"''',
 'logout button')
 
-replace_once(
+required(
 '''        <div className="flex-1 flex items-center justify-center bg-black relative">
           <canvas''',
 '''        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#03060a]">
@@ -69,7 +77,7 @@ replace_once(
           <canvas''',
 'canvas shell')
 
-replace_once(
+required(
 '''              transition: 'transform 0.2s ease-out',
             }}''',
 '''              transition: 'transform 0.2s ease-out',
@@ -79,7 +87,7 @@ replace_once(
             }}''',
 'canvas style')
 
-replace_once(
+required(
 '''          <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-10">
             <button onClick={() => { const nz = Math.min(2.5, zoomRef.current + 0.25); zoomRef.current = nz; setZoom(nz); }}
                     className="w-9 h-9 rounded-lg border border-amber-700/50 bg-black/70 text-amber-200 text-lg font-bold hover:bg-amber-900/50">+</button>
@@ -97,7 +105,7 @@ replace_once(
           </div>''',
 'zoom controls')
 
-replace_once(
+required(
 '''              <div
                 className="absolute top-2 left-2 rounded border-2 p-2 backdrop-blur-sm min-w-[220px]"
                 style={{
@@ -109,48 +117,32 @@ replace_once(
                 <div className="moria-eyebrow mb-2" style={{ color: t.type === 'boss' ? '#ffd87b' : t.type === 'elite' ? '#b88aff' : '#ff818d' }}>{t.type === 'boss' ? 'BOSS TARGET' : t.type === 'elite' ? 'ELITE TARGET' : 'TARGET'}</div>''',
 'target frame')
 
-replace_once(
-'''              <div
+optional(
+'''            <div
               className="absolute top-2 right-2 rounded border-2 p-2 backdrop-blur-sm max-w-[260px]"
               style={{
                 background: 'linear-gradient(180deg, rgba(40,30,10,0.9) 0%, rgba(20,15,5,0.95) 100%)',
                 borderColor: '#8b6914',
               }}
             >''',
-'''            <div className="moria-panel absolute right-3 top-3 max-w-[270px] rounded-2xl border border-amber-200/20 p-3">''',
-'quest tracker')
+'''            <div className="moria-panel absolute right-3 top-3 max-w-[270px] rounded-2xl border border-amber-200/20 p-3">''')
 
-# The source indentation around the quest tracker may differ; fall back to a literal compact replacement.
-if "background: 'linear-gradient(180deg, rgba(40,30,10,0.9) 0%, rgba(20,15,5,0.95) 100%)'" in s:
-    s = s.replace('''            <div
-              className="absolute top-2 right-2 rounded border-2 p-2 backdrop-blur-sm max-w-[260px]"
-              style={{
-                background: 'linear-gradient(180deg, rgba(40,30,10,0.9) 0%, rgba(20,15,5,0.95) 100%)',
-                borderColor: '#8b6914',
-              }}
-            >''', '''            <div className="moria-panel absolute right-3 top-3 max-w-[270px] rounded-2xl border border-amber-200/20 p-3">''', 1)
-
-replace_once(
+optional(
 '''              <div className="text-[10px] text-amber-200/60 tracking-widest mb-1">📜 ACTIVE QUESTS</div>''',
-'''              <div className="moria-eyebrow mb-2 text-[9px] text-amber-200/80">📜 ACTIVE QUESTS</div>''',
-'quest tracker heading')
-
-replace_once(
+'''              <div className="moria-eyebrow mb-2 text-[9px] text-amber-200/80">📜 ACTIVE QUESTS</div>''')
+optional(
 '''                    <div className="text-xs text-amber-200 font-semibold">{quest.name}</div>''',
-'''                    <div className="text-xs font-bold text-slate-100">{quest.name}</div>''',
-'quest name')
-
-replace_once(
+'''                    <div className="text-xs font-bold text-slate-100">{quest.name}</div>''')
+optional(
 '''                      <div key={i} className="text-[10px] text-amber-200/70">''',
-'''                      <div key={i} className="text-[10px] text-slate-400">''',
-'quest objective')
+'''                      <div key={i} className="text-[10px] text-slate-400">''')
 
-replace_once(
+required(
 '''      className="px-2 py-0.5 text-xs rounded bg-amber-900/50 hover:bg-amber-800/60 text-amber-100 border border-amber-700/50 flex items-center gap-1"''',
 '''      className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-slate-300"''',
 'top button helper')
 
-replace_once(
+required(
 '''      <span className="text-[9px] text-amber-400/70">({hotkey})</span>''',
 '''      {hotkey && <span className="text-[8px] text-amber-200/45">{hotkey}</span>}''',
 'top button hotkey')
