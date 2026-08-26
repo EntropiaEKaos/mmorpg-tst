@@ -1,8 +1,5 @@
 // ===================================================================
 //  REAL-TIME NETWORKING for Mor'ia
-//  Layer 1: BroadcastChannel  -> works RIGHT NOW across browser tabs/windows on same machine
-//  Layer 2: WebSocket server  -> works over the INTERNET (see /server folder)
-//  Both layers feed into the same event handler, so the game logic is identical.
 // ===================================================================
 
 export interface NetPlayer {
@@ -63,6 +60,10 @@ class NetworkClient {
   private channel: BroadcastChannel | null = null;
   private ws: WebSocket | null = null;
   private handlers: Handler[] = [];
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer: ReturnType<typeof setInterval> | null = null;
+  private authPayload: { sessionToken: string; characterName: string } | null = null;
+  private manuallyDisconnected = false;
   public mode: 'offline' | 'local' | 'online' = 'offline';
   public serverUrl: string | null = null;
 
@@ -72,6 +73,7 @@ class NetworkClient {
 
   on(handler: Handler) {
     this.handlers.push(handler);
+    return () => { this.handlers = this.handlers.filter(h => h !== handler); };
   }
 
   private emit(msg: NetMessage) {
@@ -84,7 +86,7 @@ class NetworkClient {
     try {
       if (typeof BroadcastChannel === 'undefined') return false;
       this.channel = new BroadcastChannel('moria_mmorpg');
-      this.channel.onmessage = (ev) => this.emit(ev.data as NetMessage);
+      this.channel.onmessage = ev => this.emit(ev.data as NetMessage);
       this.mode = 'local';
       this.send({ kind: 'presence-request', payload: { id: this.clientId }, time: Date.now() });
       return true;
@@ -94,43 +96,70 @@ class NetworkClient {
   }
 
   connectOnline(explicitUrl?: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      let url = explicitUrl || '';
-      if (!url) url = this.detectServerUrl() || '';
+    return new Promise(resolve => {
+      let url = explicitUrl || this.serverUrl || this.detectServerUrl() || '';
       if (!url) { resolve(false); return; }
+      if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+        resolve(this.ws.readyState === WebSocket.OPEN);
+        return;
+      }
+      this.manuallyDisconnected = false;
       try {
-        this.ws = new WebSocket(url);
-        this.ws.onopen = () => {
+        const socket = new WebSocket(url);
+        this.ws = socket;
+        let resolved = false;
+        const finish = (value: boolean) => { if (!resolved) { resolved = true; resolve(value); } };
+        socket.onopen = () => {
           this.mode = 'online';
           this.serverUrl = url;
           this.startHeartbeat();
           this.enableAutoReconnect();
-          resolve(true);
+          if (this.authPayload) this.sendAuthPayload();
+          finish(true);
         };
-        this.ws.onmessage = (ev) => {
+        socket.onmessage = ev => {
           try { this.emit(JSON.parse(ev.data) as NetMessage); } catch {}
         };
-        this.ws.onerror = () => resolve(false);
-        this.ws.onclose = () => { this.mode = this.channel ? 'local' : 'offline'; };
-        setTimeout(() => resolve(false), 3000);
+        socket.onerror = () => finish(false);
+        socket.onclose = () => {
+          if (this.ws === socket) this.ws = null;
+          this.mode = this.channel ? 'local' : 'offline';
+        };
+        setTimeout(() => finish(false), 3000);
       } catch {
         resolve(false);
       }
     });
   }
 
-  send(msg: Omit<NetMessage, 'from' | 'time'> & { from?: string; time?: number }) {
-    const full: NetMessage = {
+  setAuthPayload(sessionToken: string, characterName: string) {
+    this.authPayload = { sessionToken, characterName };
+  }
+
+  clearAuthPayload() {
+    this.authPayload = null;
+  }
+
+  private sendAuthPayload() {
+    if (!this.authPayload || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const message = {
+      kind: 'auth',
       from: this.clientId,
       time: Date.now(),
-      ...msg,
-    } as NetMessage;
+      payload: this.authPayload,
+    };
+    try { this.ws.send(JSON.stringify(message)); } catch {}
+  }
+
+  send(msg: Omit<NetMessage, 'from' | 'time'> & { from?: string; time?: number }) {
+    const full: NetMessage = { from: this.clientId, time: Date.now(), ...msg } as NetMessage;
     try { this.channel?.postMessage(full); } catch {}
     try { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(full)); } catch {}
   }
 
   startHeartbeat() {
-    setInterval(() => {
+    if (this.heartbeatTimer) return;
+    this.heartbeatTimer = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         try { this.ws.send(JSON.stringify({ kind: 'ping', from: this.clientId, time: Date.now() })); } catch {}
       }
@@ -138,34 +167,39 @@ class NetworkClient {
   }
 
   enableAutoReconnect() {
-    setInterval(() => {
-      if (this.mode === 'online' && (!this.ws || this.ws.readyState === WebSocket.CLOSED)) {
-        console.log('🔄 Connection lost, reconnecting...');
-        this.connectOnline(this.serverUrl || undefined).then(ok => {
-          if (ok) console.log('🟢 Reconnected!');
-        });
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setInterval(() => {
+      if (this.manuallyDisconnected || !this.serverUrl) return;
+      if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+        void this.connectOnline(this.serverUrl);
       }
     }, 5000);
   }
 
   disconnect() {
+    this.manuallyDisconnected = true;
     this.send({ kind: 'player:leave', payload: { id: this.clientId } });
     try { this.channel?.close(); } catch {}
     try { this.ws?.close(); } catch {}
     this.channel = null;
     this.ws = null;
     this.mode = 'offline';
+    this.clearAuthPayload();
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.reconnectTimer) clearInterval(this.reconnectTimer);
+    this.heartbeatTimer = null;
+    this.reconnectTimer = null;
   }
 
   get id() { return this.clientId; }
 
-  isConnected(): boolean { return this.ws !== null; }
+  isConnected(): boolean { return this.ws?.readyState === WebSocket.OPEN; }
 
   detectServerUrl(): string | null {
     if (typeof window === 'undefined') return null;
     const { protocol, hostname, port } = window.location;
-    if (hostname === 'localhost' && (port === '5173' || port === '4173')) {
-      return 'ws://localhost:3000/ws';
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && (port === '5173' || port === '4173')) {
+      return `ws://${hostname}:3000/ws`;
     }
     const wsProto = protocol === 'https:' ? 'wss:' : 'ws:';
     return `${wsProto}//${window.location.host}/ws`;
@@ -179,8 +213,9 @@ class NetworkClient {
 
 export const net = new NetworkClient();
 
-export function sendAuth(name: string, vocation: string) {
-  net.send({ kind: 'auth', payload: { name, vocation } });
+export function sendAuth(sessionToken: string, characterName: string) {
+  net.setAuthPayload(sessionToken, characterName);
+  net.send({ kind: 'auth', payload: { sessionToken, characterName } });
 }
 
 export function sendIntent(intent: Omit<Intent, 'timestamp'>) {
