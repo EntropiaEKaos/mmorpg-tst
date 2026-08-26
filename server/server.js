@@ -31,8 +31,9 @@ const AUTH_RATE_LIMITS = new Map();
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
 
-// ContentDB is persistent; reconcile explicitly placed monster records into the
-// already-initialized authoritative world at server boot.
+// ContentDB is persistent; reconcile server-owned catalogs into the already-
+// initialized authoritative runtime at server boot.
+engine.syncContentItems(contentDB.get('items'));
 engine.syncContentMonsters(contentDB.get('monsters'));
 
 const MIME = {
@@ -474,6 +475,7 @@ function handleAdminAPI(req, res, route) {
       const existing = contentDB.get(type).find(i => i.id === data.id);
       if (existing) contentDB.update(type, data.id, data);
       else contentDB.add(type, data);
+      if (type === 'items') engine.syncContentItems(contentDB.get('items'));
       if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
       broadcastContentUpdate();
       return json(res, 200, { ok: true });
@@ -483,6 +485,7 @@ function handleAdminAPI(req, res, route) {
   if (req.method === 'DELETE' && id) {
     if (!ALLOWED_ADMIN_TYPES.has(type)) return json(res, 404, { error: 'Unknown content type' });
     contentDB.remove(type, id);
+    if (type === 'items') engine.syncContentItems(contentDB.get('items'));
     if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
     broadcastContentUpdate();
     return json(res, 200, { ok: true });

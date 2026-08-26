@@ -42,6 +42,7 @@ class GameEngine {
     this.monstersByMap = new Map();
     this.groundItemsByMap = new Map();
     this.pendingEvents = new Map();
+    this.contentItems = [];
     this.tickCount = 0;
     this.TICK_RATE = 50;
     this.init();
@@ -87,6 +88,12 @@ class GameEngine {
     const result = [];
     for (const p of this.players.values()) if (p.mapId === mapId) result.push(p);
     return result;
+  }
+
+  syncContentItems(itemContent = []) {
+    this.contentItems = Array.isArray(itemContent)
+      ? itemContent.filter(item => item && typeof item === 'object').map(item => ({ ...item }))
+      : [];
   }
 
   // Reconcile live monster overlays created in the server ContentDB.
@@ -313,7 +320,7 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind: 'quest_complete', targetId: player.id, text: `✅ ${comp.quest.name} COMPLETE!`, color: '#2ecc71', pos: { x: player.x, y: player.y } });
     }
 
-    const loot = rollLoot(monster, derived.goldBonus);
+    const loot = rollLoot(monster, derived.goldBonus, this.contentItems);
     if (loot.length > 0) {
       const groundItems = this.groundItemsByMap.get(player.mapId) || [];
       groundItems.push({ id: `ground_${Date.now()}_${Math.random()}`, x: monster.x, y: monster.y, items: loot, expireAt: Date.now() + 120000 });

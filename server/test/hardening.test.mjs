@@ -5,6 +5,7 @@ import { VOCATIONS } from '../engine/Vocations.mjs';
 import { WORLD } from '../engine/World.mjs';
 import { questEngine } from '../engine/QuestEngine.mjs';
 import { contentDB } from '../engine/ContentDB.mjs';
+import { buildEquipmentLootPool, rollLoot } from '../engine/Items.mjs';
 
 let seq = 0;
 function makePlayer(vocation = 'knight') {
@@ -284,4 +285,38 @@ test('authoritative content monsters spawn, fight and reconcile cleanly', () => 
   }
 
   assert.equal((engine.monstersByMap.get(mapId) || []).some(monster => monster.contentSourceId === sourceId), false);
+});
+
+
+test('authoritative content items override and extend the live loot pool', () => {
+  const originalCatalog = contentDB.get('items').map(item => ({ ...item }));
+  const custom = {
+    id: `admin_relic_${Date.now()}_${Math.random()}`,
+    name: 'Admin Relic', icon: '🗡', slot: 'weapon', rarity: 'legendary',
+    attack: 777, level: 1, value: 12345, description: 'Server-owned test relic',
+  };
+  const override = {
+    id: 'steel_sword', name: 'Steel Sword+', icon: '⚔', slot: 'weapon',
+    rarity: 'epic', attack: 321, level: 1, value: 999,
+  };
+
+  engine.syncContentItems([custom, override]);
+  const pool = buildEquipmentLootPool(engine.contentItems);
+  assert.equal(pool.filter(item => item.id === 'steel_sword').length, 1);
+  assert.equal(pool.find(item => item.id === 'steel_sword').attack, 321);
+  assert.equal(pool.find(item => item.id === custom.id).attack, 777);
+
+  const originalRandom = Math.random;
+  const rolls = [1, 1, 0, 0.999999];
+  Math.random = () => rolls.length ? rolls.shift() : 0.999999;
+  try {
+    const drops = rollLoot({ type: 'boss', level: 100 }, 0, engine.contentItems);
+    const equipmentDrop = drops.find(item => item.type === 'equipment');
+    assert.ok(equipmentDrop);
+    assert.equal(equipmentDrop.equipment.id, custom.id);
+    assert.equal(equipmentDrop.equipment.attack, 777);
+  } finally {
+    Math.random = originalRandom;
+    engine.syncContentItems(originalCatalog);
+  }
 });
