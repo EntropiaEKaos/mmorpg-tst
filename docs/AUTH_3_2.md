@@ -38,7 +38,16 @@ Character names are unique case-insensitively. Names already present in the lega
 
 The previous system did not have trustworthy account ownership metadata. Automatically attaching those saves to whoever asks for their character name would recreate the takeover vulnerability. For that reason, legacy names are reserved by default.
 
-Migration of a legacy save must be an explicit administrative operation after verifying the player through an out-of-band process. Do not add a public endpoint that claims a legacy character by name alone.
+After the player has been verified out-of-band by an administrator and has created a new account, migrate the legacy character from the server shell:
+
+```bash
+cd server
+npm run migrate:legacy -- <accountUsername> "<legacyCharacterName>"
+```
+
+The migration tool requires an existing account and an existing legacy PlayerDB save, rejects characters already owned by another account, obtains the vocation from the legacy server save, and adds only the ownership metadata. The original progression save remains intact and is loaded after authenticated login.
+
+There is deliberately no public endpoint that claims a legacy character by name alone.
 
 ## Rate limiting
 
@@ -47,6 +56,8 @@ Authentication endpoints apply IP-based limits:
 - register: 5 attempts / 15 minutes;
 - login: 10 attempts / 5 minutes;
 - recovery: 5 attempts / 15 minutes.
+
+The HTTP integration suite starts the real server and verifies that repeated invalid login attempts are rejected and that the next attempt is throttled with HTTP `429` and `Retry-After`.
 
 This is a baseline control. A future distributed deployment should move rate-limit state to a shared backing store and can add account-keyed throttling and abuse telemetry.
 
@@ -67,8 +78,9 @@ The hardening CI now blocks on:
 - root `npm audit`;
 - server `npm audit`;
 - production client build;
-- syntax validation of every server runtime module;
-- authentication tests;
+- syntax validation of every server runtime module and migration tool;
+- authentication unit and HTTP integration tests;
+- duplicate-session/replay tests;
 - anti-cheat/server-authority tests.
 
-A dependency advisory or authentication regression therefore makes the hardening PR fail instead of being silently reported.
+A dependency advisory, brute-force throttling regression, ownership regression, or authentication regression therefore makes the hardening PR fail instead of being silently reported.
