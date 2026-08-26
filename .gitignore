@@ -14,9 +14,11 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 moria-db.json
 moria-players.json
 moria-content.json
+moria-accounts.json
 server/moria-db.json
 server/moria-players.json
 server/moria-content.json
+server/moria-accounts.json
 
 # Dependency directories
 node_modules/
