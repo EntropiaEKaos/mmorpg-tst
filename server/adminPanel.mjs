@@ -52,42 +52,73 @@ export function adminPanelHTML() {
 </div>
 <div class="container">
   <div class="sidebar">
-    <button class="active" onclick="showTab('dashboard')">📊 Dashboard</button>
-    <button onclick="showTab('items')">⚔ Items</button>
-    <button onclick="showTab('monsters')">👹 Monsters</button>
-    <button onclick="showTab('npcs')">🧙 NPCs</button>
-    <button onclick="showTab('spells')">🔮 Spells</button>
-    <button onclick="showTab('quests')">📜 Quests</button>
-    <button onclick="showTab('maps')">🗺 Maps</button>
-    <button onclick="showTab('events')">🌍 Events</button>
+    <button class="active" onclick="showTab('dashboard', this)">📊 Dashboard</button>
+    <button onclick="showTab('items', this)">⚔ Items</button>
+    <button onclick="showTab('monsters', this)">👹 Monsters</button>
+    <button onclick="showTab('npcs', this)">🧙 NPCs</button>
+    <button onclick="showTab('spells', this)">🔮 Spells</button>
+    <button onclick="showTab('quests', this)">📜 Quests</button>
+    <button onclick="showTab('maps', this)">🗺 Maps</button>
+    <button onclick="showTab('events', this)">🌍 Events</button>
     <hr style="border-color:#3a2a1a;margin:1rem 0">
-    <button onclick="showTab('players')">👥 Players</button>
-    <button onclick="showTab('broadcast')">📡 Broadcast</button>
+    <button onclick="showTab('players', this)">👥 Players</button>
+    <button onclick="showTab('broadcast', this)">📡 Broadcast</button>
   </div>
   <div class="main" id="content">Loading...</div>
 </div>
 <script>
   let currentTab = 'dashboard';
   let editing = null;
+  let renderedItems = [];
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[ch]);
+  }
+
+  function displayValue(value) {
+    if (value && typeof value === 'object') {
+      try { return JSON.stringify(value).slice(0, 80); } catch { return '[object]'; }
+    }
+    return String(value ?? '');
+  }
 
   async function api(method, path, body) {
     const res = await fetch('/admin/api' + path, {
       method, headers: {'Content-Type':'application/json'},
       body: body ? JSON.stringify(body) : undefined
     });
-    return res.json();
+    let payload = {};
+    try { payload = await res.json(); } catch {}
+    if (!res.ok) throw new Error(payload.error || 'Admin API failed (' + res.status + ')');
+    return payload;
   }
 
-  function showTab(tab) {
+  function showTab(tab, button) {
     currentTab = tab; editing = null;
     document.querySelectorAll('.sidebar button').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
+    if (button instanceof HTMLElement) button.classList.add('active');
     render();
+  }
+
+  function editRow(index) {
+    const item = renderedItems[index];
+    if (!item || typeof item.id !== 'string') return;
+    editing = item.id;
+    render();
+  }
+
+  function deleteRow(index) {
+    const item = renderedItems[index];
+    if (!item || typeof item.id !== 'string') return;
+    del(item.id);
   }
 
   async function render() {
     const el = document.getElementById('content');
-    const data = await api('GET', '/' + currentTab);
+    try {
+      const data = await api('GET', '/' + currentTab);
     
     if (currentTab === 'dashboard') {
       el.innerHTML = \`
@@ -108,8 +139,9 @@ export function adminPanelHTML() {
       return;
     }
 
-    const items = data.items || [];
-    const fields = data.fields || [];
+    const items = Array.isArray(data.items) ? data.items : [];
+    const fields = Array.isArray(data.fields) ? data.fields : [];
+    renderedItems = items;
     
     let html = '<div class="card"><h2>' + currentTab.toUpperCase() + ' (' + items.length + ')</h2>';
     
@@ -121,14 +153,14 @@ export function adminPanelHTML() {
       html += '<h3>' + (editing === 'new' ? '➕ Create' : '✏ Edit') + '</h3>';
       html += '<div class="form-row">';
       for (const f of fields) {
-        html += '<div><label>' + f + '</label>';
+        html += '<div><label>' + escapeHtml(f) + '</label>';
         if (f === 'type' || f === 'rarity' || f === 'slot' || f === 'role' || f === 'biome' || f === 'vocation' || f === 'mapId') {
-          html += '<input value="' + (item[f]||'') + '" id="fld_' + f + '" list="' + f + '_list">';
+          html += '<input value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '" list="' + f + '_list">';
           html += '<datalist id="' + f + '_list">' + (f==='rarity'?'<option>common<option>uncommon<option>rare<option>epic<option>legendary':'') + (f==='slot'?'<option>weapon<option>armor<option>helmet<option>legs<option>boots<option>shield<option>ring<option>amulet':'') + (f==='mapId'?'<option>eldoria<option>frostpeak<option>shadowfen<option>emberhold<option>voidlands':'') + '</datalist>';
         } else if (f === 'description' || f === 'dialogue') {
-          html += '<textarea id="fld_' + f + '" rows="2">' + (item[f]||'') + '</textarea>';
+          html += '<textarea id="fld_' + f + '" rows="2">' + escapeHtml(item[f] ?? '') + '</textarea>';
         } else {
-          html += '<input type="' + (typeof item[f] === 'number' ? 'number' : 'text') + '" value="' + (item[f]||'') + '" id="fld_' + f + '">';
+          html += '<input type="' + (typeof item[f] === 'number' ? 'number' : 'text') + '" value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '">';
         }
         html += '</div>';
       }
@@ -141,20 +173,23 @@ export function adminPanelHTML() {
     // Items list
     html += '<button class="btn btn-amber" onclick="editing=\\'new\\';render()">➕ New ' + currentTab.replace(/s$/,'') + '</button>';
     html += '<table><thead><tr>';
-    for (const f of fields.slice(0, 6)) html += '<th>' + f + '</th>';
+    for (const f of fields.slice(0, 6)) html += '<th>' + escapeHtml(f) + '</th>';
     html += '<th>Actions</th></tr></thead><tbody>';
-    for (const item of items) {
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
       html += '<tr>';
       for (const f of fields.slice(0, 6)) {
-        let v = item[f] || '';
-        if (typeof v === 'object') v = JSON.stringify(v).slice(0,30);
-        html += '<td>' + v + '</td>';
+        html += '<td>' + escapeHtml(displayValue(item?.[f])) + '</td>';
       }
-      html += '<td><button class="btn btn-blue" onclick="editing=\\'' + item.id + '\\';render()">Edit</button> ';
-      html += '<button class="btn btn-red" onclick="del(\\'' + item.id + '\\')">🗑</button></td></tr>';
+      html += '<td><button class="btn btn-blue" onclick="editRow(' + index + ')">Edit</button> ';
+      html += '<button class="btn btn-red" onclick="deleteRow(' + index + ')">🗑</button></td></tr>';
     }
     html += '</tbody></table></div>';
     el.innerHTML = html;
+    } catch (error) {
+      renderedItems = [];
+      el.textContent = error instanceof Error ? error.message : 'Failed to load admin data';
+    }
   }
 
   async function saveItem() {
@@ -170,15 +205,24 @@ export function adminPanelHTML() {
       }
     }
     if (editing !== 'new') body.id = editing;
-    await api('POST', '/' + currentTab, body);
-    editing = null;
-    render();
+    try {
+      await api('POST', '/' + currentTab, body);
+      editing = null;
+      render();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Save failed');
+    }
   }
 
   async function del(id) {
     if (!confirm('Delete this?')) return;
-    await api('DELETE', '/' + currentTab + '/' + id);
-    render();
+    try {
+      await api('DELETE', '/' + currentTab + '/' + encodeURIComponent(id));
+      editing = null;
+      render();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Delete failed');
+    }
   }
 
   // Auto-refresh online count
