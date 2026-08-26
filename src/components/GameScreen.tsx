@@ -138,6 +138,62 @@ function serverNpcToClient(raw: any, quests: Quest[]): { mapId: string; npc: NPC
   };
 }
 
+const SERVER_SPELL_TYPES: Spell['type'][] = ['attack', 'heal', 'aoe'];
+
+function spellContentSlug(value: unknown): string {
+  return String(value || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function finiteSpellNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+}
+
+function mergeServerSpells(vocationId: string, baseSpells: Spell[], content: unknown): Spell[] {
+  const merged = baseSpells.map((spell) => ({ ...spell }));
+  if (!Array.isArray(content)) return merged;
+
+  for (const raw of content) {
+    if (!raw || typeof raw !== 'object') continue;
+    const record = raw as Record<string, unknown>;
+    const rawVocation = typeof record.vocation === 'string' ? record.vocation.trim().toLowerCase() : '';
+    if (rawVocation !== vocationId) continue;
+    if (typeof record.id !== 'string' || !record.id.trim()) continue;
+    if (typeof record.name !== 'string' || !record.name.trim()) continue;
+    const type = typeof record.type === 'string' && SERVER_SPELL_TYPES.includes(record.type as Spell['type'])
+      ? record.type as Spell['type']
+      : null;
+    if (!type) continue;
+
+    const contentId = record.id.trim().slice(0, 100);
+    const name = record.name.trim().slice(0, 100);
+    const matchIndex = merged.findIndex((spell) =>
+      spellContentSlug(spell.name) === spellContentSlug(contentId) || spellContentSlug(spell.name) === spellContentSlug(name)
+    );
+    const previous = matchIndex >= 0 ? merged[matchIndex] : undefined;
+    const rawColor = typeof record.color === 'string' ? record.color : '';
+    const next: Spell = {
+      ...(previous || {} as Spell),
+      id: previous?.id || `server_${contentId}`,
+      name,
+      icon: typeof record.icon === 'string' && record.icon ? record.icon.slice(0, 8) : (previous?.icon || '✨'),
+      mana: Math.floor(finiteSpellNumber(record.mana, 0, 100_000, previous?.mana ?? 10)),
+      cooldown: Math.floor(finiteSpellNumber(record.cooldown, 250, 600_000, previous?.cooldown ?? 1500)),
+      damage: Math.floor(finiteSpellNumber(record.damage, 0, 10_000_000, previous?.damage ?? 0)),
+      range: finiteSpellNumber(record.range, 0, 20, previous?.range ?? 1),
+      lastCast: previous?.lastCast ?? 0,
+      color: /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : (previous?.color || '#9bd4ff'),
+      type,
+      levelRequired: Math.floor(finiteSpellNumber(record.levelRequired, 1, 100_000, previous?.levelRequired ?? 1)),
+    };
+    if (Number.isFinite(Number(record.scalingCoeff))) next.scalingCoeff = finiteSpellNumber(record.scalingCoeff, 0, 20, 1);
+    if (matchIndex >= 0) merged[matchIndex] = next;
+    else if (merged.length < 8) merged.push(next);
+  }
+  return merged;
+}
+
 function serverQuestToClient(raw: any): Quest | null {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim()) return null;
   const target = typeof raw.target === 'string' && raw.target.trim() ? raw.target.trim() : 'objective';
@@ -568,7 +624,17 @@ export default function GameScreen({ account, onLogout }: Props) {
               : [];
             serverNpcCatalogRef.current = serverNpcs;
             npcsRef.current = serverNpcs.filter((entry) => entry.mapId === currentMapIdRef.current).map((entry) => entry.npc);
-            addMessage('System', `📡 Server content synced: ${content.items?.length||0} items, ${content.monsters?.length||0} monsters, ${quests.length} quests, ${serverNpcs.length} NPCs`, '#9bd4ff', 'system');
+            const vocationId = account.vocation.toLowerCase();
+            const baseSpells = (VOCATIONS[vocationId] || VOCATIONS.knight).spells;
+            const syncedSpells = mergeServerSpells(vocationId, baseSpells, content.spells);
+            const previousSpells = spellsRef.current;
+            for (const spell of syncedSpells) {
+              const previous = previousSpells.find((candidate) => candidate.id === spell.id || spellContentSlug(candidate.name) === spellContentSlug(spell.name));
+              if (previous) spell.lastCast = previous.lastCast;
+            }
+            spellsRef.current = syncedSpells;
+            setSpells(syncedSpells);
+            addMessage('System', `📡 Server content synced: ${content.items?.length||0} items, ${content.monsters?.length||0} monsters, ${quests.length} quests, ${serverNpcs.length} NPCs, ${syncedSpells.length} spells`, '#9bd4ff', 'system');
           } catch {}
           break;
         }
@@ -629,9 +695,9 @@ export default function GameScreen({ account, onLogout }: Props) {
         setShowAdmin((s) => !s);
         return;
       }
-      if (['1', '2', '3', '4'].includes(e.key)) {
+      if (/^[1-8]$/.test(e.key)) {
         e.preventDefault();
-        castSpell(parseInt(e.key) - 1);
+        castSpell(parseInt(e.key, 10) - 1);
       }
       if (e.key.toLowerCase() === 'i') setShowInventory((s) => !s);
       if (e.key.toLowerCase() === 'c') setShowCharacter((s) => !s);

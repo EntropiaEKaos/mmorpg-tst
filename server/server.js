@@ -34,6 +34,7 @@ const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || '')
 // ContentDB is persistent; reconcile server-owned catalogs into the already-
 // initialized authoritative runtime at server boot.
 engine.syncContentItems(contentDB.get('items'));
+engine.syncContentSpells(contentDB.get('spells'));
 engine.syncContentMonsters(contentDB.get('monsters'));
 
 const MIME = {
@@ -476,6 +477,7 @@ function handleAdminAPI(req, res, route) {
       if (existing) contentDB.update(type, data.id, data);
       else contentDB.add(type, data);
       if (type === 'items') engine.syncContentItems(contentDB.get('items'));
+      if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
       if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
       broadcastContentUpdate();
       return json(res, 200, { ok: true });
@@ -486,6 +488,7 @@ function handleAdminAPI(req, res, route) {
     if (!ALLOWED_ADMIN_TYPES.has(type)) return json(res, 404, { error: 'Unknown content type' });
     contentDB.remove(type, id);
     if (type === 'items') engine.syncContentItems(contentDB.get('items'));
+    if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
     if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
     broadcastContentUpdate();
     return json(res, 200, { ok: true });

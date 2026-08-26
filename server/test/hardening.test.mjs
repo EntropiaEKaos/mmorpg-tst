@@ -320,3 +320,41 @@ test('authoritative content items override and extend the live loot pool', () =>
     engine.syncContentItems(originalCatalog);
   }
 });
+
+
+test('authoritative content spells override base slots and execute custom spells', () => {
+  const originalCatalog = contentDB.get('spells').map(spell => ({ ...spell }));
+  try {
+    engine.syncContentSpells([
+      { id: 'fireball', name: 'Inferno Admin', icon: '🔥', vocation: 'sorcerer', type: 'attack', mana: 33, cooldown: 777, damage: 444, range: 6, color: '#ff2200', levelRequired: 5 },
+      { id: 'admin_heal', name: 'Admin Mend', icon: '💚', vocation: 'sorcerer', type: 'heal', mana: 7, cooldown: 500, damage: 40, range: 0, color: '#22ff88', levelRequired: 1 },
+      { id: 'bad_buff', name: 'Unsupported Buff', vocation: 'sorcerer', type: 'buff', mana: 0, cooldown: 500, damage: 0, range: 0 },
+    ]);
+
+    const spells = engine.getSpellList('sorcerer');
+    assert.equal(spells[1].name, 'Inferno Admin');
+    assert.equal(spells[1].damage, 444);
+    assert.equal(spells.filter(spell => spell.contentSpellId === 'fireball').length, 1);
+    assert.equal(spells.some(spell => spell.name === 'Unsupported Buff'), false);
+    const customIndex = spells.findIndex(spell => spell.contentSpellId === 'admin_heal');
+    assert.ok(customIndex >= 4);
+
+    const { id, player } = makePlayer('sorcerer');
+    try {
+      player.level = 20;
+      player.maxHp = 200;
+      player.hp = 100;
+      player.maxMana = 500;
+      player.mana = 500;
+      const manaBefore = player.mana;
+      assert.equal(engine.processIntent(id, { type: 'cast', payload: { spellIndex: customIndex } }), true);
+      assert.ok(player.hp > 100);
+      assert.equal(player.mana, manaBefore - 7);
+      assert.equal(player.stats.spellsCast, 1);
+    } finally {
+      cleanup(id);
+    }
+  } finally {
+    engine.syncContentSpells(originalCatalog);
+  }
+});

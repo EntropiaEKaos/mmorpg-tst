@@ -36,6 +36,13 @@ function boundedNumber(value, min, max, fallback) {
   return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
 }
 
+const CONTENT_SPELL_TYPES = new Set(['attack', 'heal', 'aoe']);
+
+function spellSlug(value) {
+  return String(value || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
 class GameEngine {
   constructor() {
     this.players = new Map();
@@ -43,6 +50,7 @@ class GameEngine {
     this.groundItemsByMap = new Map();
     this.pendingEvents = new Map();
     this.contentItems = [];
+    this.contentSpells = [];
     this.tickCount = 0;
     this.TICK_RATE = 50;
     this.init();
@@ -94,6 +102,51 @@ class GameEngine {
     this.contentItems = Array.isArray(itemContent)
       ? itemContent.filter(item => item && typeof item === 'object').map(item => ({ ...item }))
       : [];
+  }
+
+  syncContentSpells(spellContent = []) {
+    this.contentSpells = Array.isArray(spellContent)
+      ? spellContent.filter(spell => spell && typeof spell === 'object').map(spell => ({ ...spell }))
+      : [];
+  }
+
+  getSpellList(vocationId) {
+    const vocation = VOCATIONS[vocationId];
+    if (!vocation) return [];
+    const merged = vocation.spells.map(spell => ({ ...spell }));
+
+    for (const raw of this.contentSpells) {
+      const rawVocation = typeof raw.vocation === 'string' ? raw.vocation.trim().toLowerCase() : '';
+      if (rawVocation !== vocationId) continue;
+      if (typeof raw.id !== 'string' || !raw.id.trim()) continue;
+      if (typeof raw.name !== 'string' || !raw.name.trim()) continue;
+      const type = typeof raw.type === 'string' ? raw.type.trim().toLowerCase() : '';
+      if (!CONTENT_SPELL_TYPES.has(type)) continue;
+
+      const id = raw.id.trim().slice(0, 100);
+      const name = raw.name.trim().slice(0, 100);
+      const matchIndex = merged.findIndex(spell => spellSlug(spell.name) === spellSlug(id) || spellSlug(spell.name) === spellSlug(name));
+      const previous = matchIndex >= 0 ? merged[matchIndex] : null;
+      const rawColor = typeof raw.color === 'string' ? raw.color : '';
+      const next = {
+        ...(previous || {}),
+        contentSpellId: id,
+        name,
+        icon: typeof raw.icon === 'string' && raw.icon ? raw.icon.slice(0, 8) : (previous?.icon || '✨'),
+        mana: Math.floor(boundedNumber(raw.mana, 0, 100_000, previous?.mana ?? 10)),
+        cooldown: Math.floor(boundedNumber(raw.cooldown, 250, 600_000, previous?.cooldown ?? 1500)),
+        damage: Math.floor(boundedNumber(raw.damage, 0, 10_000_000, previous?.damage ?? 0)),
+        range: boundedNumber(raw.range, 0, 20, previous?.range ?? 1),
+        color: /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : (previous?.color || '#9bd4ff'),
+        type,
+        levelRequired: Math.floor(boundedNumber(raw.levelRequired, 1, 100_000, previous?.levelRequired ?? 1)),
+      };
+      if (Number.isFinite(Number(raw.scalingCoeff))) next.scalingCoeff = boundedNumber(raw.scalingCoeff, 0, 20, 1);
+
+      if (matchIndex >= 0) merged[matchIndex] = next;
+      else if (merged.length < 8) merged.push(next);
+    }
+    return merged;
   }
 
   // Reconcile live monster overlays created in the server ContentDB.
@@ -344,7 +397,7 @@ class GameEngine {
     const now = Date.now();
     const voc = VOCATIONS[player.vocation];
     if (!voc || !Number.isInteger(payload.spellIndex)) return false;
-    const spell = voc.spells[payload.spellIndex];
+    const spell = this.getSpellList(player.vocation)[payload.spellIndex];
     if (!spell) return false;
     if (player.level < (spell.levelRequired || 1)) return false;
     if (now - (player.cooldowns[spell.name] || 0) < spell.cooldown) return false;
