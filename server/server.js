@@ -1,5 +1,5 @@
 // ===================================================================
-//  ⚔  MOR'IA MMO — AUTHORITATIVE SERVER v3.1 HARDENED
+//  ⚔  MOR'IA MMO — AUTHORITATIVE SERVER v3.2 AUTH HARDENED
 //  Everything is controlled, saved, and governed HERE.
 // ===================================================================
 
@@ -14,6 +14,7 @@ import { playerDB } from './engine/PlayerDB.mjs';
 import { contentDB } from './engine/ContentDB.mjs';
 import { VOCATIONS } from './engine/Vocations.mjs';
 import { WORLD } from './engine/World.mjs';
+import { accountStore, sessionManager } from './engine/AuthService.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,6 +26,8 @@ const MAX_HTTP_BODY = 256 * 1024;
 const MAX_WS_PAYLOAD = 64 * 1024;
 const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
 const ACTIVE_NAMES = new Map();
+const AUTH_RATE_LIMITS = new Map();
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -32,6 +35,7 @@ const MIME = {
 };
 
 function json(res, status, payload) {
+  if (res.writableEnded) return;
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(payload));
 }
@@ -63,6 +67,11 @@ function getAdminToken(req, requestUrl) {
   return requestUrl.searchParams.get('token') || '';
 }
 
+function getBearerToken(req) {
+  const auth = String(req.headers.authorization || '');
+  return auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+}
+
 function isAdminAuthorized(req, requestUrl) {
   return Boolean(ADMIN_TOKEN) && tokenEqual(getAdminToken(req, requestUrl), ADMIN_TOKEN);
 }
@@ -72,8 +81,11 @@ function applyCors(req, res) {
   if (!origin) return;
   try {
     const parsed = new URL(origin);
-    const host = req.headers.host;
-    if (host && parsed.host === host) {
+    const host = String(req.headers.host || '');
+    const requestHostname = host.startsWith('[') ? host.slice(1, host.indexOf(']')) : host.split(':')[0];
+    const sameOrigin = host && parsed.host === host;
+    const localDev = LOCAL_HOSTS.has(parsed.hostname) && LOCAL_HOSTS.has(requestHostname);
+    if (sameOrigin || localDev) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Token');
@@ -101,23 +113,48 @@ function readJsonBody(req, res, callback) {
 
   req.on('end', () => {
     if (ended) return;
-    if (!body) { callback({}); return; }
-    try {
-      const data = JSON.parse(body);
-      if (!data || typeof data !== 'object' || Array.isArray(data)) return json(res, 400, { error: 'Invalid JSON object' });
-      callback(data);
-    } catch {
-      json(res, 400, { error: 'Invalid JSON' });
+    let data = {};
+    if (body) {
+      try {
+        data = JSON.parse(body);
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return json(res, 400, { error: 'Invalid JSON object' });
+      } catch {
+        return json(res, 400, { error: 'Invalid JSON' });
+      }
     }
+    Promise.resolve(callback(data)).catch(err => {
+      console.error('Request handler failed:', err?.message || err);
+      if (!res.writableEnded) json(res, 500, { error: 'Internal server error' });
+    });
   });
 }
 
-function normalizeName(value) {
-  if (typeof value !== 'string') return null;
-  const name = value.trim().replace(/\s+/g, ' ');
-  if (name.length < 2 || name.length > 24) return null;
-  if (!/^[\p{L}\p{N} _'-]+$/u.test(name)) return null;
-  return name;
+function getRequestIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || req.socket?.remoteAddress || 'unknown';
+}
+
+function consumeAuthRateLimit(req, res, bucket, limit, windowMs) {
+  const now = Date.now();
+  const key = `${bucket}:${getRequestIp(req)}`;
+  let state = AUTH_RATE_LIMITS.get(key);
+  if (!state || now >= state.resetAt) state = { count: 0, resetAt: now + windowMs };
+  state.count++;
+  AUTH_RATE_LIMITS.set(key, state);
+  if (state.count <= limit) return true;
+  res.setHeader('Retry-After', String(Math.max(1, Math.ceil((state.resetAt - now) / 1000))));
+  json(res, 429, { error: 'Too many authentication attempts. Try again later.' });
+  return false;
+}
+
+function requireSession(req, res, { touch = true } = {}) {
+  const token = getBearerToken(req);
+  const session = sessionManager.validate(token, { touch });
+  if (!session) {
+    json(res, 401, { error: 'Invalid or expired session' });
+    return null;
+  }
+  return { token, session };
 }
 
 function buildAuthoritativeSave(p) {
@@ -142,12 +179,10 @@ function buildAuthoritativeSave(p) {
   };
 }
 
-function restorePlayer(p, saved) {
+function restorePlayer(p, saved, expectedVocation) {
+  if (typeof expectedVocation === 'string' && VOCATIONS[expectedVocation]) p.vocation = expectedVocation;
   if (!saved || typeof saved !== 'object') return;
 
-  // A saved character owns its vocation. Re-authenticating with the same name
-  // cannot be used to swap class while keeping progression/equipment.
-  if (typeof saved.vocation === 'string' && VOCATIONS[saved.vocation]) p.vocation = saved.vocation;
   if (Number.isInteger(saved.level) && saved.level > 0) p.level = saved.level;
   if (Number.isFinite(saved.xp) && saved.xp >= 0) p.xp = saved.xp;
   if (Number.isFinite(saved.xpNext) && saved.xpNext > 0) p.xpNext = saved.xpNext;
@@ -196,6 +231,110 @@ function restorePlayer(p, saved) {
 }
 
 // ===================================================================
+//  AUTH HTTP API — accounts are credentials, characters are owned data
+// ===================================================================
+function handleAuthAPI(req, res, pathname) {
+  if (pathname === '/api/auth/register' && req.method === 'POST') {
+    if (!consumeAuthRateLimit(req, res, 'register', 5, 15 * 60 * 1000)) return;
+    return readJsonBody(req, res, async data => {
+      const result = await accountStore.register(data.username, data.password);
+      if (!result.ok) return json(res, result.error.includes('already') ? 409 : 400, { error: result.error });
+      const session = sessionManager.create(result.account.id, { revokeExisting: true });
+      return json(res, 201, {
+        account: result.account,
+        sessionToken: session.token,
+        expiresAt: session.expiresAt,
+        recoveryCode: result.recoveryCode,
+      });
+    });
+  }
+
+  if (pathname === '/api/auth/login' && req.method === 'POST') {
+    if (!consumeAuthRateLimit(req, res, 'login', 10, 5 * 60 * 1000)) return;
+    return readJsonBody(req, res, async data => {
+      const result = await accountStore.authenticate(data.username, data.password);
+      if (!result.ok) return json(res, 401, { error: result.error });
+      const session = sessionManager.create(result.account.id, { revokeExisting: true });
+      return json(res, 200, { account: result.account, sessionToken: session.token, expiresAt: session.expiresAt });
+    });
+  }
+
+  if (pathname === '/api/auth/recover' && req.method === 'POST') {
+    if (!consumeAuthRateLimit(req, res, 'recover', 5, 15 * 60 * 1000)) return;
+    return readJsonBody(req, res, async data => {
+      const result = await accountStore.recover(data.username, data.recoveryCode, data.newPassword);
+      if (!result.ok) return json(res, 401, { error: result.error });
+      sessionManager.revokeAccount(result.account.id);
+      const session = sessionManager.create(result.account.id);
+      return json(res, 200, {
+        account: result.account,
+        sessionToken: session.token,
+        expiresAt: session.expiresAt,
+        recoveryCode: result.recoveryCode,
+      });
+    });
+  }
+
+  if (pathname === '/api/auth/session' && req.method === 'GET') {
+    const token = getBearerToken(req);
+    const rotated = sessionManager.rotate(token);
+    if (!rotated) return json(res, 401, { error: 'Invalid or expired session' });
+    const account = accountStore.getPublicAccount(sessionManager.validate(rotated.token)?.accountId);
+    if (!account) {
+      sessionManager.revoke(rotated.token);
+      return json(res, 401, { error: 'Account not found' });
+    }
+    return json(res, 200, { account, sessionToken: rotated.token, expiresAt: rotated.expiresAt });
+  }
+
+  if (pathname === '/api/auth/logout' && req.method === 'POST') {
+    const token = getBearerToken(req);
+    sessionManager.revoke(token);
+    return json(res, 200, { ok: true });
+  }
+
+  if (pathname === '/api/auth/password' && req.method === 'POST') {
+    const auth = requireSession(req, res);
+    if (!auth) return;
+    return readJsonBody(req, res, async data => {
+      const result = await accountStore.changePassword(auth.session.accountId, data.currentPassword, data.newPassword);
+      if (!result.ok) return json(res, 400, { error: result.error });
+      sessionManager.revokeAccount(result.account.id);
+      const nextSession = sessionManager.create(result.account.id);
+      return json(res, 200, { account: result.account, sessionToken: nextSession.token, expiresAt: nextSession.expiresAt });
+    });
+  }
+
+  if (pathname === '/api/characters' && req.method === 'GET') {
+    const auth = requireSession(req, res);
+    if (!auth) return;
+    const account = accountStore.getPublicAccount(auth.session.accountId);
+    return account ? json(res, 200, { account }) : json(res, 404, { error: 'Account not found' });
+  }
+
+  if (pathname === '/api/characters' && req.method === 'POST') {
+    const auth = requireSession(req, res);
+    if (!auth) return;
+    return readJsonBody(req, res, data => {
+      const vocation = typeof data.vocation === 'string' ? data.vocation.toLowerCase() : '';
+      if (!VOCATIONS[vocation]) return json(res, 400, { error: 'Invalid vocation' });
+      if (playerDB.existsCaseInsensitive(data.name)) {
+        return json(res, 409, { error: 'Character name is reserved by legacy server data and requires admin migration' });
+      }
+      const result = accountStore.createCharacter(auth.session.accountId, data.name, vocation);
+      if (!result.ok) return json(res, result.error.includes('already') ? 409 : 400, { error: result.error });
+      return json(res, 201, { account: result.account, character: result.character });
+    });
+  }
+
+  if (pathname.startsWith('/api/auth/') || pathname === '/api/characters') {
+    return json(res, 405, { error: 'Method not allowed' });
+  }
+
+  return false;
+}
+
+// ===================================================================
 //  HTTP SERVER — Game client + Admin Panel + Content API
 // ===================================================================
 const server = http.createServer((req, res) => {
@@ -208,7 +347,18 @@ const server = http.createServer((req, res) => {
   const pathname = requestUrl.pathname;
 
   if (pathname === '/health' || pathname === '/status') {
-    return json(res, 200, { status: 'online', players: engine.getOnlineCount(), tick: engine.getTickCount(), content: { items: contentDB.get('items').length, monsters: contentDB.get('monsters').length } });
+    return json(res, 200, {
+      status: 'online',
+      players: engine.getOnlineCount(),
+      tick: engine.getTickCount(),
+      auth: 'accounts-v1',
+      content: { items: contentDB.get('items').length, monsters: contentDB.get('monsters').length },
+    });
+  }
+
+  if (pathname.startsWith('/api/auth/') || pathname === '/api/characters') {
+    handleAuthAPI(req, res, pathname);
+    return;
   }
 
   if (pathname === '/admin') {
@@ -334,13 +484,15 @@ function handleAdminAPI(req, res, route) {
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: MAX_WS_PAYLOAD });
 const wsClients = new Map();
 
-wss.on('connection', (ws) => {
+wss.on('connection', ws => {
   const clientId = `srv_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
   let authenticatedPlayer = null;
   let authenticatedKey = null;
+  let authenticatedAccountId = null;
+  let authenticatedSessionKey = null;
   let messagesInWindow = 0;
   let messageWindowStart = Date.now();
-  wsClients.set(clientId, { ws, name: null });
+  wsClients.set(clientId, { ws, name: null, accountId: null, sessionKey: null });
 
   ws.on('message', raw => {
     const now = Date.now();
@@ -354,9 +506,24 @@ wss.on('connection', (ws) => {
     if (msg.kind === 'auth') {
       if (authenticatedPlayer) return;
       const payload = msg.payload && typeof msg.payload === 'object' && !Array.isArray(msg.payload) ? msg.payload : {};
-      const name = normalizeName(payload.name);
-      const vocation = typeof payload.vocation === 'string' && VOCATIONS[payload.vocation] ? payload.vocation : 'knight';
-      if (!name) { ws.send(JSON.stringify({ kind: 'auth_error', payload: { text: 'Invalid name' } })); return; }
+      const session = sessionManager.validate(payload.sessionToken);
+      if (!session) {
+        ws.send(JSON.stringify({ kind: 'auth_error', payload: { text: 'Invalid or expired session' } }));
+        return;
+      }
+
+      const owned = accountStore.findCharacter(payload.characterName);
+      if (!owned || owned.accountId !== session.accountId) {
+        ws.send(JSON.stringify({ kind: 'auth_error', payload: { text: 'Character does not belong to this account' } }));
+        return;
+      }
+
+      const name = owned.character.name;
+      const vocation = owned.character.vocation;
+      if (!VOCATIONS[vocation]) {
+        ws.send(JSON.stringify({ kind: 'auth_error', payload: { text: 'Character has invalid vocation' } }));
+        return;
+      }
 
       const nameKey = name.toLocaleLowerCase('en-US');
       if (ACTIVE_NAMES.has(nameKey)) {
@@ -365,18 +532,25 @@ wss.on('connection', (ws) => {
       }
 
       const player = engine.playerConnect(clientId, name, vocation, ws);
-      restorePlayer(player, playerDB.get(name));
+      const saveKey = playerDB.findNameCaseInsensitive(name);
+      restorePlayer(player, saveKey ? playerDB.get(saveKey) : null, vocation);
       authenticatedPlayer = name;
       authenticatedKey = nameKey;
+      authenticatedAccountId = session.accountId;
+      authenticatedSessionKey = session.key;
       ACTIVE_NAMES.set(nameKey, clientId);
-      wsClients.set(clientId, { ws, name });
-      ws.send(JSON.stringify({ kind: 'auth_ok', payload: { id: clientId } }));
+      wsClients.set(clientId, { ws, name, accountId: session.accountId, sessionKey: session.key });
+      ws.send(JSON.stringify({ kind: 'auth_ok', payload: { id: clientId, accountId: session.accountId, characterName: name } }));
       ws.send(JSON.stringify({ kind: 'content_sync', payload: contentDB.getAllContent(), time: Date.now() }));
-      console.log(`✦ ${name} connected [${engine.getOnlineCount()} online]`);
+      console.log(`✦ ${name} authenticated [${engine.getOnlineCount()} online]`);
       return;
     }
 
-    if (!authenticatedPlayer) return;
+    if (!authenticatedPlayer || !authenticatedSessionKey) return;
+    if (!sessionManager.validateKey(authenticatedSessionKey)) {
+      ws.close(4001, 'Session expired');
+      return;
+    }
 
     if (msg.kind === 'intent') {
       const intent = msg.payload;
@@ -428,6 +602,8 @@ wss.on('connection', (ws) => {
       engine.playerDisconnect(clientId);
       console.log(`✦ ${authenticatedPlayer} left [${engine.getOnlineCount()} online]`);
     }
+    authenticatedAccountId = null;
+    authenticatedSessionKey = null;
   });
 });
 
@@ -435,11 +611,16 @@ wss.on('connection', (ws) => {
 //  GAME LOOP — 20fps tick + snapshot broadcast
 // ===================================================================
 setInterval(() => engine.tick(), engine.TICK_RATE);
+setInterval(() => sessionManager.prune(), 10 * 60 * 1000);
 
 setInterval(() => {
   const sentMaps = new Set();
   for (const [clientId, entry] of wsClients) {
     if (entry.ws.readyState !== WebSocket.OPEN) continue;
+    if (entry.sessionKey && !sessionManager.validateKey(entry.sessionKey, { touch: false })) {
+      entry.ws.close(4001, 'Session expired');
+      continue;
+    }
     const snapshot = engine.getSnapshot(clientId);
     if (snapshot) {
       const vocData = VOCATIONS[snapshot.player.vocation];
@@ -463,8 +644,8 @@ process.on('SIGINT', () => { playerDB.save(); contentDB.save(); process.exit(0);
 server.listen(PORT, () => {
   console.log('');
   console.log('  ⚔  ╔══════════════════════════════════════════╗');
-  console.log("     ║    MOR'IA MMO — AUTHORITATIVE v3.1       ║");
-  console.log('     ║     HARDENED SERVER-AUTHORITY            ║');
+  console.log("     ║    MOR'IA MMO — AUTHORITATIVE v3.2       ║");
+  console.log('     ║     ACCOUNT + SESSION AUTHORITY          ║');
   console.log('  ⚔  ╚══════════════════════════════════════════╝');
   console.log('');
   console.log(`  🌐  Game:       http://localhost:${PORT}`);
