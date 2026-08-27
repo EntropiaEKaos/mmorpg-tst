@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Player } from '../game/types';
 import { VOCATIONS } from '../game/classes';
 import { EQUIPMENT_LOOT, RARITY_COLORS } from '../game/equipment';
-import { MAPS } from '../game/maps';
+import { MAPS, MAP_WIDTH, MAP_HEIGHT } from '../game/maps';
 import {
   getAllBooks, saveBook, deleteBook, type Book,
   getCustomNPCs, saveCustomNPC, deleteCustomNPC, type CustomNPC,
@@ -23,10 +23,10 @@ export default function GameEditor({ player, setPlayer: _setPlayer, onClose }: P
   const [tab, setTab] = useState<EditorTab>('items');
 
   const tabs: { id: EditorTab; label: string; icon: string }[] = [
-    { id: 'items', label: 'Items', icon: '⚔' },
-    { id: 'spells', label: 'Spells', icon: '🔮' },
-    { id: 'classes', label: 'Classes', icon: '👤' },
-    { id: 'maps', label: 'Maps', icon: '🗺' },
+    { id: 'items', label: 'Items · Preview', icon: '⚔' },
+    { id: 'spells', label: 'Spells · Preview', icon: '🔮' },
+    { id: 'classes', label: 'Classes · View', icon: '👤' },
+    { id: 'maps', label: 'Maps · Preview', icon: '🗺' },
     { id: 'books', label: 'Books', icon: '📚' },
     { id: 'npcs', label: 'NPCs', icon: '🧙' },
     { id: 'monsters', label: 'Monsters', icon: '👹' },
@@ -58,8 +58,14 @@ export default function GameEditor({ player, setPlayer: _setPlayer, onClose }: P
           ))}
         </div>
 
+        {(['items', 'spells', 'classes', 'maps'] as EditorTab[]).includes(tab) && (
+          <div className="mb-3 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-100/80">
+            ⚠ This section is a design preview. Its data is not part of the live gameplay runtime yet, so it will not silently claim to change the active game. Books, NPCs and Monsters are live local content.
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto">
-          {tab === 'items' && <ItemEditor player={player} />}
+          {tab === 'items' && <ItemEditor />}
           {tab === 'spells' && <SpellEditor player={player} />}
           {tab === 'classes' && <ClassEditor player={player} />}
           {tab === 'maps' && <MapCreator player={player} />}
@@ -73,7 +79,7 @@ export default function GameEditor({ player, setPlayer: _setPlayer, onClose }: P
 }
 
 // ============ ITEM EDITOR ============
-function ItemEditor({ player }: { player: Player }) {
+function ItemEditor() {
   const [customItems, setCustomItems] = useState(() => {
     try { return JSON.parse(localStorage.getItem('tibia_custom_items') || '[]'); } catch { return []; }
   });
@@ -141,12 +147,7 @@ function ItemEditor({ player }: { player: Player }) {
         <div className="flex gap-2 mt-2 flex-wrap">
           <button onClick={handleSave} className="px-4 py-2 rounded bg-gradient-to-b from-green-500 to-green-700 text-white font-bold text-xs">💾 {editItem ? 'Update' : 'Create'} Item</button>
           {editItem && (
-            <button onClick={() => {
-              const inv = JSON.parse(localStorage.getItem(`tibia_inv_${player.name}`) || '[]');
-              inv.push({ ...editItem, quantity: 1, type: 'equipment' });
-              localStorage.setItem(`tibia_inv_${player.name}`, JSON.stringify(inv));
-              alert('Item given to player!');
-            }} className="px-4 py-2 rounded bg-gradient-to-b from-amber-500 to-amber-700 text-black font-bold text-xs">📦 Give to Player</button>
+            <button disabled title="Custom item runtime wiring is pending" className="cursor-not-allowed rounded bg-slate-800/70 px-4 py-2 text-xs font-bold text-slate-500">📦 Runtime wiring pending</button>
           )}
           {editItem && customItems.some((i: any) => i.id === editItem.id) && (
             <button onClick={() => { saveCustomItems(customItems.filter((i: any) => i.id !== editItem.id)); setEditItem(null); }} className="px-4 py-2 rounded bg-gradient-to-b from-red-500 to-red-700 text-white font-bold text-xs">🗑 Delete</button>
@@ -414,15 +415,23 @@ function BookCreator() {
 // ============ NPC CREATOR ============
 function NPCCreator() {
   const [npcs, setNpcs] = useState<CustomNPC[]>(getCustomNPCs());
-  const [form, setForm] = useState({ name: '', emoji: '🧙', color: '#9bd4ff', role: 'guard', posX: 40, posY: 42, dialogueText: 'Greetings, traveler!' });
+  const [form, setForm] = useState({ name: '', emoji: '🧙', color: '#9bd4ff', role: 'guard', mapId: 'eldoria', posX: 40, posY: 42, dialogueText: 'Greetings, traveler!' });
 
   const save = () => {
-    if (!form.name.trim()) return;
-    const npc: CustomNPC = { id: `npc_${Date.now()}`, ...form, createdAt: Date.now() };
+    const name = form.name.trim().slice(0, 64);
+    if (!name || !MAPS[form.mapId]) return;
+    const npc: CustomNPC = {
+      id: `npc_${Date.now()}`, ...form, name,
+      emoji: form.emoji.trim().slice(0, 8) || '🧙',
+      posX: Math.max(0, Math.min(MAP_WIDTH - 1, Math.floor(form.posX))),
+      posY: Math.max(0, Math.min(MAP_HEIGHT - 1, Math.floor(form.posY))),
+      dialogueText: form.dialogueText.trim().slice(0, 600) || 'Greetings, traveler!',
+      createdAt: Date.now(),
+    };
     saveCustomNPC(npc);
     setNpcs(getCustomNPCs());
-    setForm({ name: '', emoji: '🧙', color: '#9bd4ff', role: 'guard', posX: 40, posY: 42, dialogueText: 'Greetings, traveler!' });
-    alert(`🧙 NPC "${npc.name}" created! Reload map to see them.`);
+    setForm({ name: '', emoji: '🧙', color: '#9bd4ff', role: 'guard', mapId: form.mapId, posX: 40, posY: 42, dialogueText: 'Greetings, traveler!' });
+    alert(`🧙 NPC "${npc.name}" created in ${MAPS[npc.mapId || 'eldoria']?.name || 'Eldoria'}! Close the editor to refresh the world.`);
   };
 
   return (
@@ -433,7 +442,7 @@ function NPCCreator() {
           {npcs.map((n) => (
             <div key={n.id} className="flex items-center gap-2 p-2 rounded border border-purple-700/40 bg-black/40 text-xs">
               <span className="text-lg">{n.emoji}</span>
-              <div className="flex-1"><span className="text-purple-200 font-bold">{n.name}</span><span className="text-purple-200/50 text-[10px] ml-2">{n.role} · {n.posX},{n.posY}</span></div>
+              <div className="flex-1"><span className="text-purple-200 font-bold">{n.name}</span><span className="text-purple-200/50 text-[10px] ml-2">{MAPS[n.mapId || 'eldoria']?.name || n.mapId || 'Eldoria'} · {n.role} · {n.posX},{n.posY}</span></div>
               <button onClick={() => { deleteCustomNPC(n.id); setNpcs(getCustomNPCs()); }} className="text-red-400 text-[10px]">🗑</button>
             </div>
           ))}
@@ -445,6 +454,7 @@ function NPCCreator() {
           <Field label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
           <Field label="Emoji" value={form.emoji} onChange={(v) => setForm({ ...form, emoji: v })} />
           <SelectField label="Role" value={form.role} options={['guard', 'merchant', 'quest', 'innkeeper', 'banker', 'trainer']} onChange={(v) => setForm({ ...form, role: v })} />
+          <SelectField label="Map" value={form.mapId} options={Object.keys(MAPS)} optionLabels={Object.fromEntries(Object.values(MAPS).map((m) => [m.id, m.name]))} onChange={(v) => setForm({ ...form, mapId: v })} />
           <div>
             <label className="text-[9px] text-purple-200/60 block mb-0.5">Color</label>
             <div className="flex gap-1">{['#9bd4ff', '#9b59ff', '#f4e04d', '#2ecc71', '#ff8c00', '#ff9bcc'].map((c) => (
@@ -467,15 +477,29 @@ function NPCCreator() {
 // ============ MONSTER CREATOR ============
 function MonsterCreator() {
   const [monsters, setMonsters] = useState<CustomMonster[]>(getCustomMonsters());
-  const [form, setForm] = useState({ name: '', emoji: '👹', color: '#c13030', hp: 100, attack: 15, defense: 5, speed: 1100, xp: 50, size: 1, type: 'normal' as 'normal' | 'elite' | 'boss', level: 5, posX: 25, posY: 25 });
+  const [form, setForm] = useState({ name: '', emoji: '👹', color: '#c13030', hp: 100, attack: 15, defense: 5, speed: 1100, xp: 50, size: 1, type: 'normal' as 'normal' | 'elite' | 'boss', level: 5, mapId: 'eldoria', posX: 25, posY: 25 });
 
   const save = () => {
-    if (!form.name.trim()) return;
-    const m: CustomMonster = { id: `monster_${Date.now()}`, ...form, createdAt: Date.now() };
+    const name = form.name.trim().slice(0, 64);
+    if (!name || !MAPS[form.mapId]) return;
+    const m: CustomMonster = {
+      id: `monster_${Date.now()}`, ...form, name,
+      emoji: form.emoji.trim().slice(0, 8) || '👹',
+      hp: Math.max(1, Math.min(1_000_000, Math.floor(form.hp))),
+      attack: Math.max(0, Math.min(100_000, Math.floor(form.attack))),
+      defense: Math.max(0, Math.min(100_000, Math.floor(form.defense))),
+      speed: Math.max(100, Math.min(60_000, Math.floor(form.speed))),
+      xp: Math.max(0, Math.min(10_000_000, Math.floor(form.xp))),
+      size: Math.max(0.5, Math.min(4, Number(form.size) || 1)),
+      level: Math.max(1, Math.min(999, Math.floor(form.level))),
+      posX: Math.max(0, Math.min(MAP_WIDTH - 1, Math.floor(form.posX))),
+      posY: Math.max(0, Math.min(MAP_HEIGHT - 1, Math.floor(form.posY))),
+      createdAt: Date.now(),
+    };
     saveCustomMonster(m);
     setMonsters(getCustomMonsters());
-    setForm({ name: '', emoji: '👹', color: '#c13030', hp: 100, attack: 15, defense: 5, speed: 1100, xp: 50, size: 1, type: 'normal', level: 5, posX: 25, posY: 25 });
-    alert(`👹 Monster "${m.name}" created! Reload map to spawn it.`);
+    setForm({ name: '', emoji: '👹', color: '#c13030', hp: 100, attack: 15, defense: 5, speed: 1100, xp: 50, size: 1, type: 'normal', level: 5, mapId: form.mapId, posX: 25, posY: 25 });
+    alert(`👹 Monster "${m.name}" created in ${MAPS[m.mapId || 'eldoria']?.name || 'Eldoria'}! Close the editor to refresh the world.`);
   };
 
   return (
@@ -486,7 +510,7 @@ function MonsterCreator() {
           {monsters.map((m) => (
             <div key={m.id} className="flex items-center gap-2 p-2 rounded border border-purple-700/40 bg-black/40 text-xs">
               <span className="text-lg">{m.emoji}</span>
-              <div className="flex-1"><span className="text-purple-200 font-bold">{m.name}</span><span className="text-purple-200/50 text-[10px] ml-2">Lv{m.level} {m.type} · {m.hp}HP {m.attack}ATK · {m.posX},{m.posY}</span></div>
+              <div className="flex-1"><span className="text-purple-200 font-bold">{m.name}</span><span className="text-purple-200/50 text-[10px] ml-2">{MAPS[m.mapId || 'eldoria']?.name || m.mapId || 'Eldoria'} · Lv{m.level} {m.type} · {m.hp}HP {m.attack}ATK · {m.posX},{m.posY}</span></div>
               <button onClick={() => { deleteCustomMonster(m.id); setMonsters(getCustomMonsters()); }} className="text-red-400 text-[10px]">🗑</button>
             </div>
           ))}
@@ -498,6 +522,7 @@ function MonsterCreator() {
           <Field label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
           <Field label="Emoji" value={form.emoji} onChange={(v) => setForm({ ...form, emoji: v })} />
           <SelectField label="Type" value={form.type} options={['normal', 'elite', 'boss']} onChange={(v) => setForm({ ...form, type: v as 'normal' | 'elite' | 'boss' })} />
+          <SelectField label="Map" value={form.mapId} options={Object.keys(MAPS)} optionLabels={Object.fromEntries(Object.values(MAPS).map((m) => [m.id, m.name]))} onChange={(v) => setForm({ ...form, mapId: v })} />
           <Field label="Level" type="number" value={form.level} onChange={(v) => setForm({ ...form, level: parseInt(v) || 1 })} />
           <Field label="HP" type="number" value={form.hp} onChange={(v) => setForm({ ...form, hp: parseInt(v) || 1 })} />
           <Field label="Attack" type="number" value={form.attack} onChange={(v) => setForm({ ...form, attack: parseInt(v) || 1 })} />
@@ -530,12 +555,12 @@ function Field({ label, value, onChange, type = 'text' }: { label: string; value
   );
 }
 
-function SelectField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
+function SelectField({ label, value, options, optionLabels, onChange }: { label: string; value: string; options: string[]; optionLabels?: Record<string, string>; onChange: (v: string) => void }) {
   return (
     <div>
       <label className="text-[9px] text-purple-200/60 block mb-0.5">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full px-2 py-1 rounded bg-black/60 border border-purple-700/50 text-purple-100 text-xs focus:outline-none focus:border-purple-500">
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full px-2 py-1 rounded bg-black/60 border border-purple-700/40 text-purple-100">
+        {options.map((o) => <option key={o} value={o}>{optionLabels?.[o] || o}</option>)}
       </select>
     </div>
   );

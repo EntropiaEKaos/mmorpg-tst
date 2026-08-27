@@ -26,179 +26,116 @@ export default function Bestiary({ player, onClose }: Props) {
     : BESTIARY.filter((b) => b.category === selectedCategory);
 
   const completedCount = BESTIARY.filter((b) => (progress[b.name] || 0) >= b.killsRequired).length;
+  const completionPct = BESTIARY.length > 0 ? Math.round((completedCount / BESTIARY.length) * 100) : 0;
 
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center p-4 z-20"
-      style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="rounded-lg border-2 p-4 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-        style={{
-          background: 'linear-gradient(180deg, rgba(50,30,10,0.98) 0%, rgba(25,15,5,0.98) 100%)',
-          borderColor: '#8b6914',
-        }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h2 className="text-xl font-bold tracking-widest text-transparent bg-clip-text"
-                style={{ backgroundImage: 'linear-gradient(180deg, #f4e04d 0%, #8b6914 100%)' }}>
-              📖 BESTIARY
-            </h2>
-            <div className="text-xs text-amber-200/50">{completedCount}/{BESTIARY.length} completed</div>
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/68 p-4 backdrop-blur-md" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="moria-panel moria-fade-up flex max-h-[91vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-amber-200/20 p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="moria-eyebrow">Field knowledge</div>
+            <div className="mt-1 flex items-end gap-3">
+              <h2 className="moria-title text-2xl font-black">📖 Bestiary</h2>
+              <span className="mb-0.5 text-[10px] font-bold text-slate-500">{completedCount}/{BESTIARY.length} mastered</span>
+            </div>
           </div>
-          <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-xl">✕</button>
+          <div className="flex items-center gap-3">
+            <div className="hidden min-w-28 sm:block">
+              <div className="mb-1 flex justify-between text-[8px] font-bold tracking-wider text-slate-500"><span>DISCOVERY</span><span>{completionPct}%</span></div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-black/55"><div className="h-full rounded-full bg-gradient-to-r from-amber-700 to-amber-200" style={{ width: `${completionPct}%` }} /></div>
+            </div>
+            <button onClick={onClose} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400" aria-label="Close bestiary">✕</button>
+          </div>
         </div>
 
-        {/* Category tabs */}
-        <div className="flex gap-1 mb-3">
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedCategory(c.id)}
-              className={`px-2 py-1 rounded text-xs font-bold transition-all ${
-                selectedCategory === c.id
-                  ? 'bg-gradient-to-b from-amber-500 to-amber-700 text-black'
-                  : 'bg-black/40 text-amber-200/60 hover:bg-black/60'
-              }`}
-            >
-              {c.icon} {c.name}
-            </button>
-          ))}
+        <div className="moria-scrollbar mb-4 flex shrink-0 gap-1 overflow-x-auto pb-1">
+          {categories.map((category) => {
+            const active = selectedCategory === category.id;
+            return (
+              <button key={category.id} onClick={() => setSelectedCategory(category.id)} className={`shrink-0 rounded-xl border px-3 py-2 text-[10px] font-black tracking-wide transition-all ${active ? 'border-amber-200/35 bg-amber-200/10 text-amber-100' : 'border-white/[0.06] bg-white/[0.02] text-slate-500 hover:border-white/[0.12] hover:text-slate-300'}`}>
+                {category.icon} {category.name.toUpperCase()}
+              </button>
+            );
+          })}
         </div>
 
-        <div className="flex-1 flex gap-3 overflow-hidden">
-          {/* Monster list */}
-          <div className="w-1/2 overflow-y-auto space-y-1">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
+          <div className="moria-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 lg:w-[46%] lg:flex-none">
             {filtered.map((entry) => {
               const kills = progress[entry.name] || 0;
+              const required = Math.max(1, entry.killsRequired);
               const completed = kills >= entry.killsRequired;
-              const typeColor = entry.type === 'boss' ? '#ffd700' : entry.type === 'elite' ? '#c832ff' : '#aaaaaa';
+              const pct = Math.max(0, Math.min(100, (kills / required) * 100));
+              const typeColor = entry.type === 'boss' ? '#ffd87b' : entry.type === 'elite' ? '#b88aff' : '#94a3b8';
+              const selected = selectedEntry?.id === entry.id;
               return (
-                <button
-                  key={entry.id}
-                  onClick={() => setSelectedEntry(entry)}
-                  className={`w-full flex items-center gap-2 p-2 rounded border text-left transition-all ${
-                    selectedEntry?.id === entry.id
-                      ? 'border-amber-500 bg-amber-900/30'
-                      : 'border-amber-900/30 bg-black/30 hover:border-amber-700/50'
-                  }`}
-                >
-                  <span className="text-2xl">{entry.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="font-bold text-sm" style={{ color: typeColor }}>{entry.name}</span>
-                      {entry.type !== 'normal' && (
-                        <span className="text-[9px] px-1 rounded uppercase font-bold"
-                              style={{ background: typeColor + '30', color: typeColor }}>
-                          {entry.type}
-                        </span>
-                      )}
+                <button key={entry.id} onClick={() => setSelectedEntry(entry)} className={`moria-card group w-full rounded-xl border p-2.5 text-left transition-all ${selected ? 'border-amber-200/35 bg-amber-200/[0.06]' : 'hover:border-white/[0.12] hover:bg-white/[0.035]'}`}>
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-black/25 text-2xl" style={{ filter: `drop-shadow(0 0 6px ${typeColor}66)` }}>{entry.emoji}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-xs font-black" style={{ color: entry.type !== 'normal' ? typeColor : '#e2e8f0' }}>{entry.name}</span>
+                        {entry.type !== 'normal' && <span className="rounded-md border px-1 py-0.5 text-[7px] font-black uppercase" style={{ borderColor: `${typeColor}55`, color: typeColor }}>{entry.type}</span>}
+                      </div>
+                      <div className="mt-0.5 truncate text-[9px] text-slate-500">📍 {entry.location}</div>
+                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-black/55"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: completed ? '#58d6a8' : `linear-gradient(90deg, ${typeColor}88, ${typeColor})` }} /></div>
                     </div>
-                    <div className="text-[10px] text-amber-200/50">{entry.location}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-mono" style={{ color: completed ? '#2ecc71' : '#ff6060' }}>
-                      {kills}/{entry.killsRequired}
+                    <div className="shrink-0 text-right">
+                      <div className="font-mono text-[10px]" style={{ color: completed ? '#58d6a8' : '#94a3b8' }}>{kills}/{entry.killsRequired}</div>
+                      <div className="mt-0.5 text-[8px] font-bold" style={{ color: completed ? '#58d6a8' : '#64748b' }}>{completed ? 'MASTERED' : `${Math.round(pct)}%`}</div>
                     </div>
-                    {completed && <div className="text-[10px] text-green-400">✓ Complete</div>}
                   </div>
                 </button>
               );
             })}
           </div>
 
-          {/* Detail panel */}
-          <div className="w-1/2 overflow-y-auto">
+          <div className="moria-scrollbar min-h-0 flex-1 overflow-y-auto lg:w-[54%]">
             {selectedEntry ? (
-              <div className="p-3 rounded border-2 border-amber-700/50 bg-black/40">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="text-5xl">{selectedEntry.emoji}</div>
-                  <div>
-                    <div className="text-lg font-bold" style={{
-                      color: selectedEntry.type === 'boss' ? '#ffd700' : selectedEntry.type === 'elite' ? '#c832ff' : '#f4e04d'
-                    }}>
-                      {selectedEntry.name}
-                    </div>
-                    <div className="text-xs text-amber-200/60 capitalize">
-                      {selectedEntry.category} · {selectedEntry.type} · Lv{
-                        selectedEntry.type === 'boss' ? (selectedEntry.xp > 1000 ? 40 : selectedEntry.xp > 500 ? 25 : 35) :
-                        selectedEntry.type === 'elite' ? 15 : 5
-                      }
-                    </div>
+              <div className="moria-card rounded-2xl p-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-white/[0.07] bg-black/25 text-5xl shadow-inner">{selectedEntry.emoji}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="moria-eyebrow" style={{ color: selectedEntry.type === 'boss' ? '#ffd87b' : selectedEntry.type === 'elite' ? '#b88aff' : '#94a3b8' }}>{selectedEntry.category} · {selectedEntry.type}</div>
+                    <div className="moria-title mt-1 truncate text-2xl font-black">{selectedEntry.name}</div>
+                    <div className="mt-1 text-[10px] text-slate-500">Known habitat · {selectedEntry.location}</div>
                   </div>
                 </div>
 
-                <div className="text-sm italic text-amber-200/80 mb-3 p-2 rounded bg-black/40 border-l-2 border-amber-600">
-                  "{selectedEntry.description}"
+                <div className="mt-4 rounded-xl border-l-2 bg-black/20 p-3 text-xs italic leading-5 text-slate-400" style={{ borderColor: selectedEntry.type === 'boss' ? '#ffd87b' : selectedEntry.type === 'elite' ? '#b88aff' : '#64748b' }}>
+                  “{selectedEntry.description}”
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-                  <StatRow icon="❤" label="HP" value={selectedEntry.hp} color="#ff6060" />
-                  <StatRow icon="⚔" label="Attack" value={selectedEntry.attack} color="#ff9060" />
-                  <StatRow icon="🛡" label="Defense" value={selectedEntry.defense} color="#6090ff" />
-                  <StatRow icon="★" label="XP" value={selectedEntry.xp} color="#f4e04d" />
-                  {selectedEntry.damageType && (
-                    <StatRow icon="💀" label="Dmg Type" value={selectedEntry.damageType} color="#c832ff" />
-                  )}
-                  <StatRow icon="📍" label="Location" value={selectedEntry.location} color="#9bd4ff" />
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <Stat icon="❤" label="HP" value={selectedEntry.hp} color="#ff7b88" />
+                  <Stat icon="⚔" label="Attack" value={selectedEntry.attack} color="#ff9a6b" />
+                  <Stat icon="🛡" label="Defense" value={selectedEntry.defense} color="#7eabff" />
+                  <Stat icon="★" label="XP" value={selectedEntry.xp} color="#e5c477" />
+                  <Stat icon="💀" label="Damage" value={selectedEntry.damageType || 'physical'} color="#b88aff" />
+                  <Stat icon="📍" label="Region" value={selectedEntry.location} color="#8fc8ff" />
                 </div>
 
-                <div className="mb-3">
-                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1">DROPS</div>
-                  <div className="flex gap-1 flex-wrap">
-                    {selectedEntry.loot.map((l, i) => (
-                      <span key={i} className="px-2 py-0.5 rounded bg-amber-900/30 border border-amber-700/40 text-amber-200 text-xs">
-                        {l}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                <InfoGroup title="DROPS" items={selectedEntry.loot} color="#e5c477" />
+                {selectedEntry.weaknesses?.length ? <InfoGroup title="WEAKNESSES" items={selectedEntry.weaknesses} color="#58d6a8" /> : null}
+                {selectedEntry.resistances?.length ? <InfoGroup title="RESISTANCES" items={selectedEntry.resistances} color="#ff7b88" /> : null}
 
-                {selectedEntry.weaknesses && (
-                  <div className="mb-2">
-                    <div className="text-[10px] text-green-400 tracking-widest mb-1">WEAKNESSES</div>
-                    <div className="flex gap-1">
-                      {selectedEntry.weaknesses.map((w, i) => (
-                        <span key={i} className="px-2 py-0.5 rounded bg-green-900/30 border border-green-700/40 text-green-300 text-xs capitalize">{w}</span>
-                      ))}
-                    </div>
+                <div className="moria-card mt-4 rounded-xl p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="moria-eyebrow text-[8px]">YOUR PROGRESS</div>
+                    <div className="font-mono text-[10px] text-amber-100">{progress[selectedEntry.name] || 0}/{selectedEntry.killsRequired}</div>
                   </div>
-                )}
-                {selectedEntry.resistances && (
-                  <div className="mb-2">
-                    <div className="text-[10px] text-red-400 tracking-widest mb-1">RESISTANCES</div>
-                    <div className="flex gap-1">
-                      {selectedEntry.resistances.map((r, i) => (
-                        <span key={i} className="px-2 py-0.5 rounded bg-red-900/30 border border-red-700/40 text-red-300 text-xs capitalize">{r}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-3 p-2 rounded bg-black/40 border border-amber-900/30">
-                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1">YOUR PROGRESS</div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-3 bg-black/60 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${Math.min(100, ((progress[selectedEntry.name] || 0) / selectedEntry.killsRequired) * 100)}%`,
-                          background: 'linear-gradient(90deg, #f4e04d, #8b6914)',
-                        }}
-                      />
-                    </div>
-                    <span className="text-xs font-bold text-amber-300">
-                      {progress[selectedEntry.name] || 0}/{selectedEntry.killsRequired}
-                    </span>
+                  <div className="h-2 overflow-hidden rounded-full bg-black/60 p-[1px]">
+                    <div className="h-full rounded-full bg-gradient-to-r from-amber-700 to-amber-200" style={{ width: `${Math.max(0, Math.min(100, ((progress[selectedEntry.name] || 0) / Math.max(1, selectedEntry.killsRequired)) * 100))}%` }} />
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-full text-amber-200/40 text-sm">
-                Select a monster to view details
+              <div className="moria-card flex min-h-56 h-full items-center justify-center rounded-2xl p-8 text-center">
+                <div>
+                  <div className="text-4xl opacity-60">📚</div>
+                  <div className="moria-eyebrow mt-3">Select an entry</div>
+                  <div className="mt-2 text-xs leading-5 text-slate-500">Choose a creature to inspect its stats, drops, weaknesses and mastery progress.</div>
+                </div>
               </div>
             )}
           </div>
@@ -208,11 +145,22 @@ export default function Bestiary({ player, onClose }: Props) {
   );
 }
 
-function StatRow({ icon, label, value, color }: { icon: string; label: string; value: string | number; color: string }) {
+function Stat({ icon, label, value, color }: { icon: string; label: string; value: string | number; color: string }) {
   return (
-    <div className="flex items-center justify-between bg-black/30 rounded px-2 py-1">
-      <span className="text-amber-200/70">{icon} {label}</span>
-      <span className="font-bold" style={{ color }}>{value}</span>
+    <div className="moria-card min-w-0 rounded-xl p-2.5">
+      <div className="text-[8px] font-bold tracking-widest text-slate-500">{icon} {label.toUpperCase()}</div>
+      <div className="mt-1 truncate text-sm font-black" style={{ color }} title={String(value)}>{value}</div>
+    </div>
+  );
+}
+
+function InfoGroup({ title, items, color }: { title: string; items: string[]; color: string }) {
+  return (
+    <div className="mt-4">
+      <div className="moria-eyebrow mb-2 text-[8px]" style={{ color }}>{title}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item, index) => <span key={`${item}-${index}`} className="moria-chip rounded-lg px-2 py-1 text-[10px] capitalize" style={{ borderColor: `${color}40`, color }}>{item}</span>)}
+      </div>
     </div>
   );
 }

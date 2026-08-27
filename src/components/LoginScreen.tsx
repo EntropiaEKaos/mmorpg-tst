@@ -1,31 +1,42 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { Account } from '../game/types';
 import { VOCATIONS } from '../game/classes';
 import { audio } from '../game/audio';
+import {
+  createCharacter,
+  loginAccount,
+  recoverAccount,
+  registerAccount,
+  toGameAccount,
+  type ServerAccount,
+} from '../game/auth';
+
 const VOCATION_LIST = Object.values(VOCATIONS);
+
+type Mode = 'login' | 'create' | 'recover' | 'character';
 
 interface Props {
   onLogin: (account: Account) => void;
 }
 
 export default function LoginScreen({ onLogin }: Props) {
-  const [mode, setMode] = useState<'login' | 'create'>('login');
+  const [mode, setMode] = useState<Mode>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
   const [charName, setCharName] = useState('');
-  const [vocation, setVocation] = useState('Knight');
+  const [vocation, setVocation] = useState('knight');
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [sessionToken, setSessionToken] = useState('');
+  const [serverAccount, setServerAccount] = useState<ServerAccount | null>(null);
+  const [oneTimeRecoveryCode, setOneTimeRecoveryCode] = useState('');
 
   useEffect(() => {
-    const saved = localStorage.getItem('tibia_current');
-    if (saved) {
-      setUsername(saved);
-    }
-    const accs: Account[] = JSON.parse(localStorage.getItem('tibia_accounts') || '[]');
-    setAccounts(accs);
-    // Start menu music on first interaction
+    localStorage.removeItem('tibia_accounts');
+    localStorage.removeItem('tibia_current');
+
     const startMusic = () => {
       audio.init();
       audio.resume();
@@ -41,361 +52,305 @@ export default function LoginScreen({ onLogin }: Props) {
     };
   }, []);
 
-  const deleteAccount = (username: string) => {
-    if (confirm(`Delete account "${username}"? This cannot be undone.`)) {
-      const accs: Account[] = JSON.parse(localStorage.getItem('tibia_accounts') || '[]');
-      const filtered = accs.filter((a) => a.username !== username);
-      localStorage.setItem('tibia_accounts', JSON.stringify(filtered));
-      if (localStorage.getItem('tibia_current') === username) {
-        localStorage.removeItem('tibia_current');
-      }
-      setAccounts(filtered);
-      if (username === savedUsername) {
-        setUsername('');
-      }
-    }
-  };
-  const savedUsername = localStorage.getItem('tibia_current') || '';
-
-  const handleLogin = () => {
+  const begin = () => {
     setError('');
-    if (!username || !password) {
-      setError('Fill in all fields.');
-      return;
-    }
-    const accounts: Account[] = JSON.parse(localStorage.getItem('tibia_accounts') || '[]');
-    const acc = accounts.find((a) => a.username === username && a.password === password);
-    if (!acc) {
-      setError('Invalid account name or password.');
-      return;
-    }
-    localStorage.setItem('tibia_current', username);
-    setStatus('Connecting to server...');
-    setTimeout(() => {
-      setStatus('Entering game world...');
-      setTimeout(() => onLogin(acc), 600);
-    }, 600);
+    setStatus('');
   };
 
-  const handleCreate = () => {
-    setError('');
-    if (!username || !password || !charName) {
-      setError('Fill in all fields.');
-      return;
+  const handleLogin = async () => {
+    begin();
+    if (!username || !password) return setError('Fill in account name and password.');
+    setStatus('Authenticating with server...');
+    try {
+      const result = await loginAccount(username, password);
+      setSessionToken(result.sessionToken);
+      setServerAccount(result.account);
+      if (!result.account.characters.length) {
+        setMode('character');
+        setStatus('Account authenticated. Create your first character.');
+        return;
+      }
+      onLogin(toGameAccount(result.account, result.sessionToken));
+    } catch (err) {
+      setStatus('');
+      setError(err instanceof Error ? err.message : 'Authentication failed.');
     }
-    if (username.length < 3) {
-      setError('Account name must be at least 3 characters.');
-      return;
+  };
+
+  const handleRegister = async () => {
+    begin();
+    if (!username || !password) return setError('Fill in account name and password.');
+    if (password.length < 10) return setError('Password must be at least 10 characters.');
+    setStatus('Creating secure server account...');
+    try {
+      const result = await registerAccount(username, password);
+      setSessionToken(result.sessionToken);
+      setServerAccount(result.account);
+      setOneTimeRecoveryCode(result.recoveryCode || '');
+      setStatus('Account created. Save your recovery code before continuing.');
+    } catch (err) {
+      setStatus('');
+      setError(err instanceof Error ? err.message : 'Account creation failed.');
     }
-    if (password.length < 3) {
-      setError('Password must be at least 3 characters.');
-      return;
+  };
+
+  const handleRecover = async () => {
+    begin();
+    if (!username || !recoveryCode || !newPassword) return setError('Fill in account, recovery code and new password.');
+    if (newPassword.length < 10) return setError('New password must be at least 10 characters.');
+    setStatus('Verifying recovery code...');
+    try {
+      const result = await recoverAccount(username, recoveryCode, newPassword);
+      setSessionToken(result.sessionToken);
+      setServerAccount(result.account);
+      setOneTimeRecoveryCode(result.recoveryCode || '');
+      setStatus('Password reset. Your recovery code was rotated; save the new code.');
+    } catch (err) {
+      setStatus('');
+      setError(err instanceof Error ? err.message : 'Recovery failed.');
     }
-    if (charName.length < 3) {
-      setError('Character name must be at least 3 characters.');
-      return;
+  };
+
+  const continueAfterRecovery = () => {
+    if (!serverAccount || !sessionToken) return;
+    setOneTimeRecoveryCode('');
+    if (serverAccount.characters.length) onLogin(toGameAccount(serverAccount, sessionToken));
+    else setMode('character');
+  };
+
+  const handleCreateCharacter = async () => {
+    begin();
+    if (!sessionToken || !serverAccount) return setError('Authenticate the account first.');
+    if (charName.trim().length < 3) return setError('Character name must be at least 3 characters.');
+    setStatus('Creating server-owned character...');
+    try {
+      const result = await createCharacter(sessionToken, charName, vocation);
+      onLogin(toGameAccount(result.account, sessionToken, result.character));
+    } catch (err) {
+      setStatus('');
+      setError(err instanceof Error ? err.message : 'Character creation failed.');
     }
-    const accounts: Account[] = JSON.parse(localStorage.getItem('tibia_accounts') || '[]');
-    if (accounts.some((a) => a.username === username)) {
-      setError('Account already exists.');
-      return;
-    }
-    if (accounts.some((a) => a.characterName === charName)) {
-      setError('Character name is already in use.');
-      return;
-    }
-    const newAcc: Account = {
-      username,
-      password,
-      characterName: charName,
-      vocation,
-      level: 1,
-      created: Date.now(),
-    };
-    accounts.push(newAcc);
-    localStorage.setItem('tibia_accounts', JSON.stringify(accounts));
-    localStorage.setItem('tibia_current', username);
-    setAccounts([...accounts]);
-    setStatus('Creating your character...');
-    setTimeout(() => onLogin(newAcc), 800);
   };
 
   const handleDemoLogin = () => {
-    const accounts: Account[] = JSON.parse(localStorage.getItem('tibia_accounts') || '[]');
-    let demo = accounts.find((a) => a.username === 'demo');
-    if (!demo) {
-      demo = {
-        username: 'demo',
-        password: 'demo',
-        characterName: 'Hero',
-        vocation: 'Knight',
-        level: 1,
-        created: Date.now(),
-      };
-      accounts.push(demo);
-      localStorage.setItem('tibia_accounts', JSON.stringify(accounts));
-    }
-    setStatus('Connecting...');
-    setTimeout(() => onLogin(demo!), 500);
+    const demo = {
+      accountId: 'offline-demo',
+      username: 'offline-demo',
+      characterName: 'Hero',
+      vocation: 'knight',
+      level: 1,
+      created: Date.now(),
+      offline: true,
+    } as Account;
+    onLogin(demo);
   };
 
-  return (
-    <div
-      className="relative min-h-screen w-full overflow-hidden flex items-center justify-center p-4"
-      style={{
-        backgroundImage: 'url(/images/login-bg.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-      }}
-    >
-      {/* Dark overlay for readability */}
-      <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(180deg, rgba(10,5,3,0.7) 0%, rgba(10,5,3,0.5) 50%, rgba(10,5,3,0.85) 100%)' }} />
-      {/* Background stars/embers */}
-      <div className="absolute inset-0 pointer-events-none">
-        {Array.from({ length: 50 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full bg-amber-200 opacity-40"
-            style={{
-              left: `${(i * 37) % 100}%`,
-              top: `${(i * 53) % 100}%`,
-              width: `${1 + (i % 3)}px`,
-              height: `${1 + (i % 3)}px`,
-              animation: `twinkle ${2 + (i % 3)}s ease-in-out ${i * 0.1}s infinite`,
-            }}
-          />
-        ))}
-      </div>
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    setError('');
+    setStatus('');
+    setOneTimeRecoveryCode('');
+  };
 
-      {/* Mountain silhouettes */}
-      <svg
-        className="absolute bottom-0 left-0 w-full h-64 opacity-40"
-        viewBox="0 0 1200 300"
-        preserveAspectRatio="none"
-      >
-        <polygon points="0,300 150,100 300,200 450,50 600,180 750,80 900,150 1050,60 1200,180 1200,300" fill="#1a0f05" />
-        <polygon points="0,300 200,180 400,240 600,140 800,220 1000,160 1200,240 1200,300" fill="#2a1a0a" />
-      </svg>
+  const submit = () => {
+    if (mode === 'login') void handleLogin();
+    else if (mode === 'create') void handleRegister();
+    else if (mode === 'recover') void handleRecover();
+    else void handleCreateCharacter();
+  };
 
-      <style>{`
-        @keyframes twinkle {
-          0%, 100% { opacity: 0.2; }
-          50% { opacity: 0.9; }
-        }
-        @keyframes glow {
-          0%, 100% { text-shadow: 0 0 20px rgba(255,180,50,0.6), 0 0 40px rgba(255,120,0,0.4); }
-          50% { text-shadow: 0 0 30px rgba(255,200,80,0.9), 0 0 60px rgba(255,150,0,0.6); }
-        }
-        @keyframes float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-8px); }
-        }
-      `}</style>
-
-      <div className="relative z-10 w-full max-w-md">
-        {/* Title */}
-        <div className="text-center mb-6">
-          <img
-            src="/images/logo.png"
-            alt="Mor'ia"
-            className="mx-auto max-w-[280px] w-full drop-shadow-[0_0_30px_rgba(255,180,50,0.5)]"
-            style={{ animation: 'float 4s ease-in-out infinite' }}
-          />
-          <p className="text-amber-200/70 mt-3 text-sm tracking-[0.3em] font-semibold">
-            ✦ REALM OF SHADOWS ✦
+  if (oneTimeRecoveryCode) {
+    return (
+      <Shell>
+        <div className="moria-panel moria-fade-up mx-auto w-full max-w-xl rounded-3xl p-7 sm:p-9">
+          <div className="mb-6 flex items-start gap-4">
+            <div className="moria-chip flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl">🔐</div>
+            <div>
+              <div className="moria-eyebrow mb-1">Account recovery</div>
+              <h2 className="moria-title text-2xl font-bold">Save your recovery code</h2>
+            </div>
+          </div>
+          <p className="mb-5 text-sm leading-6 text-slate-300/75">
+            This code is shown once. Store it somewhere private: anyone holding it can recover the account.
           </p>
-          <p className="text-amber-100/40 mt-1 text-[10px] tracking-widest">A LIVING ONLINE WORLD</p>
+          <div className="select-all break-all rounded-2xl border border-amber-300/25 bg-black/45 p-5 font-mono text-sm leading-6 text-amber-100 shadow-inner">
+            {oneTimeRecoveryCode}
+          </div>
+          <button onClick={continueAfterRecovery} className="moria-button-primary mt-6 w-full rounded-xl py-3.5 text-sm font-black tracking-[0.16em]">
+            I SAVED IT — CONTINUE
+          </button>
         </div>
+      </Shell>
+    );
+  }
 
-        {/* Login box */}
-        <div
-          className="rounded-lg border-2 p-6 backdrop-blur-sm"
-          style={{
-            background:
-              'linear-gradient(180deg, rgba(60,40,20,0.9) 0%, rgba(30,20,10,0.95) 100%)',
-            borderColor: '#8b6914',
-            boxShadow:
-              '0 0 40px rgba(255,150,50,0.15), inset 0 0 20px rgba(0,0,0,0.5)',
-          }}
-        >
-          {/* Tabs */}
-          <div className="flex mb-5 gap-2">
-            <button
-              onClick={() => { setMode('login'); setError(''); }}
-              className={`flex-1 py-2 rounded font-semibold text-sm tracking-wide transition-all ${
-                mode === 'login'
-                  ? 'bg-gradient-to-b from-amber-500 to-amber-700 text-black shadow-lg'
-                  : 'bg-black/40 text-amber-200/60 hover:bg-black/60'
-              }`}
-            >
-              ENTER GAME
-            </button>
-            <button
-              onClick={() => { setMode('create'); setError(''); }}
-              className={`flex-1 py-2 rounded font-semibold text-sm tracking-wide transition-all ${
-                mode === 'create'
-                  ? 'bg-gradient-to-b from-amber-500 to-amber-700 text-black shadow-lg'
-                  : 'bg-black/40 text-amber-200/60 hover:bg-black/60'
-              }`}
-            >
-              CREATE ACCOUNT
-            </button>
+  return (
+    <Shell>
+      <div className="grid w-full max-w-5xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+        <section className="hidden lg:block moria-fade-up">
+          <div className="moria-eyebrow mb-5">Persistent online realm</div>
+          <h1 className="moria-title max-w-xl text-5xl font-black leading-[1.02] xl:text-6xl">
+            Enter a world built for <span className="text-amber-200">danger</span>, mastery and legend.
+          </h1>
+          <p className="mt-6 max-w-lg text-base leading-7 text-slate-300/70">
+            Mor'ia blends old-school MMO tension with a modern authoritative server, living progression and a world that grows with its players.
+          </p>
+          <div className="mt-8 grid max-w-lg grid-cols-3 gap-3">
+            <Feature icon="⚔" title="Authoritative" subtitle="Server-owned combat" />
+            <Feature icon="🌍" title="Persistent" subtitle="Characters & quests" />
+            <Feature icon="✦" title="Evolving" subtitle="Live world content" />
+          </div>
+        </section>
+
+        <section className="moria-panel moria-fade-up w-full rounded-3xl p-5 sm:p-7" style={{ animationDelay: '80ms' }}>
+          <div className="mb-6 text-center">
+            <div className="relative mx-auto mb-2 w-full max-w-[260px]">
+              <div className="absolute inset-6 rounded-full bg-amber-200/10 blur-3xl" />
+              <img src="/images/logo.png" alt="Mor'ia" className="relative mx-auto w-full drop-shadow-[0_10px_30px_rgba(0,0,0,0.75)]" />
+            </div>
+            <p className="moria-eyebrow">Realm of Shadows</p>
+            <p className="mt-2 text-[11px] tracking-[0.16em] text-slate-400">SECURE ACCOUNT · AUTHORITATIVE WORLD</p>
           </div>
 
-          <div className="space-y-3">
-            <div>
-              <label className="block text-amber-200/80 text-xs mb-1 tracking-wider">
-                ACCOUNT NAME
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (mode === 'login' ? handleLogin() : handleCreate())}
-                className="w-full px-3 py-2 rounded bg-black/60 border border-amber-900/50 text-amber-100 focus:outline-none focus:border-amber-500 focus:shadow-[0_0_10px_rgba(255,180,50,0.3)]"
-                placeholder="Enter account name"
-                autoFocus
-              />
-            </div>
-
-            <div>
-              <label className="block text-amber-200/80 text-xs mb-1 tracking-wider">
-                PASSWORD
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (mode === 'login' ? handleLogin() : handleCreate())}
-                className="w-full px-3 py-2 rounded bg-black/60 border border-amber-900/50 text-amber-100 focus:outline-none focus:border-amber-500 focus:shadow-[0_0_10px_rgba(255,180,50,0.3)]"
-                placeholder="Enter password"
-              />
-            </div>
-
-            {mode === 'create' && (
-              <>
-                <div>
-                  <label className="block text-amber-200/80 text-xs mb-1 tracking-wider">
-                    CHARACTER NAME
-                  </label>
-                  <input
-                    type="text"
-                    value={charName}
-                    onChange={(e) => setCharName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                    className="w-full px-3 py-2 rounded bg-black/60 border border-amber-900/50 text-amber-100 focus:outline-none focus:border-amber-500 focus:shadow-[0_0_10px_rgba(255,180,50,0.3)]"
-                    placeholder="Your hero's name"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-amber-200/80 text-xs mb-1 tracking-wider">
-                    VOCATION ({VOCATION_LIST.length} CLASSES)
-                  </label>
-                  <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto">
-                    {VOCATION_LIST.map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => setVocation(v.name)}
-                        className={`py-2 text-[10px] font-semibold rounded transition-all flex flex-col items-center ${
-                          vocation === v.name
-                            ? 'bg-gradient-to-b from-amber-500 to-amber-700 text-black'
-                            : 'bg-black/40 text-amber-200/70 hover:bg-black/60'
-                        }`}
-                        title={v.description}
-                      >
-                        <span className="text-lg">{v.icon}</span>
-                        <span>{v.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {VOCATIONS[vocation.toLowerCase()] && (
-                    <div className="mt-2 p-2 rounded bg-black/40 border border-amber-900/40 text-[10px] text-amber-200/70">
-                      <div className="font-bold text-amber-300 text-xs">{VOCATIONS[vocation.toLowerCase()].name}</div>
-                      <div className="italic">{VOCATIONS[vocation.toLowerCase()].description}</div>
-                      <div className="mt-1 text-green-400">★ {VOCATIONS[vocation.toLowerCase()].passive}</div>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {error && (
-              <div className="text-red-400 text-sm text-center bg-red-950/40 border border-red-900/50 rounded py-2">
-                ⚠ {error}
-              </div>
-            )}
-
-            {status && (
-              <div className="text-amber-300 text-sm text-center bg-amber-950/40 border border-amber-900/50 rounded py-2 animate-pulse">
-                ⏳ {status}
-              </div>
-            )}
-
-            <button
-              onClick={mode === 'login' ? handleLogin : handleCreate}
-              className="w-full py-3 rounded font-bold tracking-widest text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
-              style={{
-                background:
-                  'linear-gradient(180deg, #f4e04d 0%, #d4a017 50%, #8b6914 100%)',
-                boxShadow:
-                  '0 4px 20px rgba(255,180,50,0.4), inset 0 1px 0 rgba(255,255,255,0.3)',
-              }}
-            >
-              {mode === 'login' ? '⚔ ENTER TIBIA ⚔' : '✦ CREATE HERO ✦'}
-            </button>
-
-            {mode === 'login' && (
-              <button
-                onClick={handleDemoLogin}
-                className="w-full py-2 rounded text-sm text-amber-200/70 hover:text-amber-100 bg-black/30 hover:bg-black/50 border border-amber-900/30 transition-all"
-              >
-                ▶ Quick Play (demo / demo)
-              </button>
-            )}
-          </div>
-
-          {/* Saved Accounts */}
-          {accounts.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-amber-900/30">
-              <div className="text-amber-200/60 text-xs mb-2 tracking-wider">💾 SAVED ACCOUNTS ({accounts.length})</div>
-              <div className="space-y-1 max-h-32 overflow-y-auto">
-                {accounts.map((acc) => (
-                  <div
-                    key={acc.username}
-                    className="flex items-center gap-2 p-2 rounded bg-black/40 border border-amber-900/30 hover:border-amber-600/50 transition-all"
-                  >
-                    <div className="text-lg">{VOCATIONS[acc.vocation.toLowerCase()]?.icon || '⚔'}</div>
-                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { setUsername(acc.username); setPassword(acc.password); setMode('login'); }}>
-                      <div className="text-amber-100 text-sm font-semibold truncate">{acc.characterName}</div>
-                      <div className="text-amber-200/50 text-[10px]">{acc.username} · Lv {acc.level} {acc.vocation}</div>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); deleteAccount(acc.username); }}
-                      className="text-red-400 hover:text-red-300 text-xs px-2"
-                      title="Delete account"
-                    >
-                      🗑
-                    </button>
-                  </div>
-                ))}
-              </div>
+          {mode !== 'character' && (
+            <div className="moria-card mb-5 grid grid-cols-3 gap-1 rounded-xl p-1">
+              <Tab active={mode === 'login'} onClick={() => switchMode('login')}>LOGIN</Tab>
+              <Tab active={mode === 'create'} onClick={() => switchMode('create')}>REGISTER</Tab>
+              <Tab active={mode === 'recover'} onClick={() => switchMode('recover')}>RECOVER</Tab>
             </div>
           )}
 
-          <div className="mt-5 pt-4 border-t border-amber-900/30 text-center text-amber-200/40 text-xs">
-            <p>🌍 Players Online: <span className="text-amber-300 font-semibold">1,247</span></p>
-            <p className="mt-1">Realm: Eldoria · Build 2.0</p>
-          </div>
-        </div>
+          {mode === 'character' ? (
+            <>
+              <div className="mb-5">
+                <div className="moria-eyebrow">New adventurer</div>
+                <h2 className="moria-title mt-1 text-2xl font-bold">Create your character</h2>
+                <p className="mt-1 text-xs text-slate-400">Signed in as {serverAccount?.username}</p>
+              </div>
+              <Field label="CHARACTER NAME" value={charName} onChange={setCharName} type="text" onEnter={submit} autoComplete="off" />
+              <div className="mt-4">
+                <label className="mb-2 block text-[10px] font-bold tracking-[0.18em] text-slate-400">VOCATION</label>
+                <div className="moria-scrollbar grid max-h-56 grid-cols-2 gap-2 overflow-y-auto pr-1">
+                  {VOCATION_LIST.map(v => {
+                    const active = vocation === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setVocation(v.id)}
+                        className={`relative rounded-xl border p-3 text-left transition-all ${active ? 'border-amber-200/55 bg-amber-200/10 shadow-[0_0_22px_rgba(229,196,119,0.08)]' : 'border-slate-500/15 bg-white/[0.025] hover:border-slate-400/30 hover:bg-white/[0.045]'}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-black/25 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${v.color})` }}>{v.icon}</span>
+                          <div className="min-w-0">
+                            <div className={`truncate text-xs font-bold ${active ? 'text-amber-100' : 'text-slate-200'}`}>{v.name}</div>
+                            <div className="mt-1 text-[9px] tracking-wider text-slate-500">{active ? 'SELECTED' : 'CHOOSE'}</div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <Field label="ACCOUNT NAME" value={username} onChange={setUsername} type="text" onEnter={submit} autoComplete="username" />
+              {mode === 'recover' ? (
+                <>
+                  <Field label="RECOVERY CODE" value={recoveryCode} onChange={setRecoveryCode} type="text" onEnter={submit} autoComplete="off" />
+                  <Field label="NEW PASSWORD" value={newPassword} onChange={setNewPassword} type="password" onEnter={submit} autoComplete="new-password" />
+                </>
+              ) : (
+                <Field label="PASSWORD" value={password} onChange={setPassword} type="password" onEnter={submit} autoComplete={mode === 'create' ? 'new-password' : 'current-password'} />
+              )}
+            </>
+          )}
 
-        {/* Footer tips */}
-        <div className="mt-4 text-center text-amber-200/40 text-xs space-y-1">
-          <p>🗡 Use <span className="text-amber-300">WASD</span> or arrow keys to move · Click monsters to attack</p>
-          <p>✨ Press <span className="text-amber-300">1-4</span> for spells · <span className="text-amber-300">I</span> for inventory</p>
-        </div>
+          {error && (
+            <div role="alert" className="mt-4 rounded-xl border border-rose-400/20 bg-rose-500/8 px-3 py-2.5 text-center text-xs text-rose-200">
+              <span className="mr-1.5">⚠</span>{error}
+            </div>
+          )}
+          {status && (
+            <div aria-live="polite" className="mt-4 rounded-xl border border-sky-300/15 bg-sky-400/7 px-3 py-2.5 text-center text-xs text-sky-100/80">
+              <span className="mr-1.5 inline-block moria-soft-pulse">✦</span>{status}
+            </div>
+          )}
+
+          <button onClick={submit} className="moria-button-primary mt-5 w-full rounded-xl py-3.5 text-sm font-black tracking-[0.14em]">
+            {mode === 'login' ? 'ENTER MOR\'IA' : mode === 'create' ? 'CREATE ACCOUNT' : mode === 'recover' ? 'RESET PASSWORD' : 'CREATE HERO'}
+          </button>
+
+          {mode === 'login' && (
+            <button onClick={handleDemoLogin} className="moria-button mt-2.5 w-full rounded-xl py-2.5 text-xs font-semibold tracking-wide text-slate-300">
+              ▶ OFFLINE QUICK PLAY
+            </button>
+          )}
+
+          <div className="mt-5 flex items-center justify-center gap-2 text-[10px] text-slate-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80 shadow-[0_0_8px_rgba(52,211,153,0.55)]" />
+            Passwords are hashed server-side and never stored in browser account lists.
+          </div>
+        </section>
       </div>
+    </Shell>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#05070c] p-4 sm:p-7">
+      <div className="absolute inset-0 scale-[1.035] bg-cover bg-center" style={{ backgroundImage: 'url(/images/login-bg.jpg)' }} />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,5,9,0.96)_0%,rgba(4,7,12,0.80)_45%,rgba(4,6,10,0.88)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(110,168,255,0.16),transparent_28%),radial-gradient(circle_at_80%_72%,rgba(229,196,119,0.13),transparent_30%)]" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-200/40 to-transparent" />
+      <div className="relative z-10 flex w-full justify-center">{children}</div>
+    </div>
+  );
+}
+
+function Feature({ icon, title, subtitle }: { icon: string; title: string; subtitle: string }) {
+  return (
+    <div className="moria-card rounded-2xl p-3.5">
+      <div className="text-xl">{icon}</div>
+      <div className="mt-2 text-xs font-bold text-slate-100">{title}</div>
+      <div className="mt-1 text-[10px] leading-4 text-slate-400">{subtitle}</div>
+    </div>
+  );
+}
+
+function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg py-2.5 text-[10px] font-black tracking-[0.14em] transition-all ${active ? 'bg-white/[0.08] text-amber-100 shadow-inner' : 'text-slate-500 hover:bg-white/[0.035] hover:text-slate-300'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Field({ label, value, onChange, type, onEnter, autoComplete }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type: 'text' | 'password';
+  onEnter: () => void;
+  autoComplete: string;
+}) {
+  return (
+    <div className="mt-3.5">
+      <label className="mb-1.5 block text-[10px] font-bold tracking-[0.18em] text-slate-400">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && onEnter()}
+        className="moria-input w-full rounded-xl px-3.5 py-3 text-sm placeholder:text-slate-600 focus:outline-none"
+        autoComplete={autoComplete}
+      />
     </div>
   );
 }

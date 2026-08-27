@@ -12,39 +12,115 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DB_FILE = path.join(__dirname, '..', 'moria-content.json');
+const COLLECTION_KEYS = Object.freeze(['items', 'monsters', 'npcs', 'quests', 'spells', 'maps', 'worldEvents', 'shops', 'lootTables']);
+const TYPE_ALIASES = Object.freeze({ events: 'worldEvents' });
 
-class ContentDB {
-  constructor() {
-    this.data = {
-      version: 1,
-      items: [],
-      monsters: [],
-      npcs: [],
-      quests: [],
-      spells: [],
-      maps: [],
-      worldEvents: [],
-      shops: [],
-      lootTables: [],
-    };
-    this.load();
-    // Seed defaults if empty
-    if (this.data.items.length === 0) this.seedDefaults();
+function emptyContentData() {
+  return {
+    version: 1,
+    items: [], monsters: [], npcs: [], quests: [], spells: [], maps: [],
+    worldEvents: [], shops: [], lootTables: [],
+  };
+}
+
+function canonicalContentType(type) {
+  const key = TYPE_ALIASES[type] || type;
+  return COLLECTION_KEYS.includes(key) ? key : null;
+}
+
+function normalizeCollection(value, { requireId = true } = {}) {
+  if (!Array.isArray(value)) return [];
+  const records = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    if (requireId && (typeof entry.id !== 'string' || !entry.id.trim())) continue;
+    const copy = { ...entry };
+    if (typeof copy.id === 'string') copy.id = copy.id.trim().slice(0, 100);
+    records.push(copy);
+  }
+  return records;
+}
+
+function dedupeById(records) {
+  const byId = new Map();
+  for (const record of records) {
+    if (typeof record.id !== 'string' || !record.id) continue;
+    byId.set(record.id, record);
+  }
+  return Array.from(byId.values());
+}
+
+export function normalizeContentData(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Content database must be an object');
+  const recognized = Number.isFinite(Number(raw.version))
+    || COLLECTION_KEYS.some(key => Array.isArray(raw[key]))
+    || Array.isArray(raw.events);
+  if (!recognized) throw new Error('Content database has no recognized schema fields');
+
+  const normalized = emptyContentData();
+  const version = Number(raw.version);
+  normalized.version = Number.isInteger(version) && version > 0 ? version : 1;
+  for (const key of COLLECTION_KEYS) {
+    if (key === 'worldEvents') continue;
+    normalized[key] = normalizeCollection(raw[key], { requireId: key !== 'shops' && key !== 'lootTables' });
+  }
+  normalized.worldEvents = dedupeById([
+    ...normalizeCollection(raw.worldEvents),
+    ...normalizeCollection(raw.events),
+  ]);
+  return normalized;
+}
+
+export class ContentDB {
+  constructor(dbFile = DB_FILE) {
+    this.dbFile = dbFile;
+    this.data = emptyContentData();
+    // Only seed a brand-new or unrecoverably corrupt database. A valid empty
+    // collection is intentional admin state and must stay empty after restart.
+    if (!this.load()) this.seedDefaults();
   }
 
   load() {
-    try {
-      if (fs.existsSync(DB_FILE)) {
-        this.data = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+    const tempFile = `${this.dbFile}.tmp`;
+    const candidates = [this.dbFile, tempFile];
+    for (const candidate of candidates) {
+      if (!fs.existsSync(candidate)) continue;
+      try {
+        const parsed = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
+        this.data = normalizeContentData(parsed);
+        if (candidate === tempFile) {
+          fs.mkdirSync(path.dirname(this.dbFile), { recursive: true });
+          fs.renameSync(tempFile, this.dbFile);
+          console.warn('⚠ Content DB recovered from atomic temp file');
+        } else if (fs.existsSync(tempFile)) {
+          fs.rmSync(tempFile, { force: true });
+        }
         console.log(`📦 Content DB: ${this.data.items.length} items, ${this.data.monsters.length} monsters, ${this.data.npcs.length} NPCs, ${this.data.quests.length} quests`);
+        return true;
+      } catch (e) {
+        console.warn(`⚠ Content DB load failed (${path.basename(candidate)}):`, e.message);
+        if (candidate === this.dbFile) {
+          try { fs.renameSync(this.dbFile, `${this.dbFile}.corrupt-${Date.now()}`); } catch {}
+        } else {
+          try { fs.rmSync(tempFile, { force: true }); } catch {}
+        }
       }
-    } catch (e) { console.warn('⚠ Content DB load failed:', e.message); }
+    }
+    return false;
   }
 
   save() {
+    const tempFile = `${this.dbFile}.tmp`;
     try {
-      fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2));
-    } catch (e) { console.warn('⚠ Content DB save failed:', e.message); }
+      fs.mkdirSync(path.dirname(this.dbFile), { recursive: true });
+      fs.writeFileSync(tempFile, JSON.stringify(this.data, null, 2));
+      fs.renameSync(tempFile, this.dbFile);
+      return true;
+    } catch (e) {
+      try { fs.rmSync(tempFile, { force: true }); } catch {}
+      console.warn('⚠ Content DB save failed:', e.message);
+      return false;
+    }
   }
 
   seedDefaults() {
@@ -131,29 +207,50 @@ class ContentDB {
   }
 
   // ===== CRUD for all content types =====
-  get(type) { return this.data[type] || []; }
+  get(type) {
+    const key = canonicalContentType(type);
+    return key ? this.data[key] : [];
+  }
   
   add(type, item) {
-    if (!this.data[type]) this.data[type] = [];
-    item.id = item.id || `${type}_${Date.now()}`;
-    this.data[type].push(item);
+    const key = canonicalContentType(type);
+    if (!key || !item || typeof item !== 'object' || Array.isArray(item)) return null;
+
+    const explicitId = typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 100) : '';
+    if (explicitId && this.data[key].some(record => record.id === explicitId)) return null;
+
+    let id = explicitId;
+    if (!id) {
+      do {
+        id = `${key}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      } while (this.data[key].some(record => record.id === id));
+    }
+
+    const record = { ...item, id };
+    this.data[key].push(record);
     this.save();
-    return item;
+    return record;
   }
 
   update(type, id, updates) {
-    const arr = this.data[type];
-    if (!arr) return false;
-    const idx = arr.findIndex(i => i.id === id);
+    const key = canonicalContentType(type);
+    if (!key || typeof id !== 'string' || !updates || typeof updates !== 'object' || Array.isArray(updates)) return false;
+    const canonicalId = id.trim().slice(0, 100);
+    const arr = this.data[key];
+    const idx = arr.findIndex(i => i.id === canonicalId);
     if (idx < 0) return false;
-    arr[idx] = { ...arr[idx], ...updates, id };
+    arr[idx] = { ...arr[idx], ...updates, id: canonicalId };
     this.save();
     return true;
   }
 
   remove(type, id) {
-    if (!this.data[type]) return false;
-    this.data[type] = this.data[type].filter(i => i.id !== id);
+    const key = canonicalContentType(type);
+    if (!key || typeof id !== 'string') return false;
+    const canonicalId = id.trim().slice(0, 100);
+    const before = this.data[key].length;
+    this.data[key] = this.data[key].filter(i => i.id !== canonicalId);
+    if (this.data[key].length === before) return false;
     this.save();
     return true;
   }

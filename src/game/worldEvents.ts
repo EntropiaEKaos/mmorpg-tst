@@ -51,19 +51,44 @@ export function deleteWorldEvent(id: string) {
   saveWorldEvents(getWorldEvents().filter((e) => e.id !== id));
 }
 
-export function contributeToWorldEvent(eventId: string, playerName: string, amount: number): { completed: boolean; contribution: number } {
+export interface WorldEventContributionResult {
+  completed: boolean;
+  contribution: number;
+  accepted: number;
+  current: number;
+  required: number;
+}
+
+export function contributeToWorldEvent(eventId: string, playerName: string, amount: number): WorldEventContributionResult {
   const events = getWorldEvents();
   const event = events.find((e) => e.id === eventId);
-  if (!event || event.status !== 'active') return { completed: false, contribution: 0 };
-  event.progress.current = Math.min(event.progress.required, event.progress.current + amount);
-  event.contributors[playerName] = (event.contributors[playerName] || 0) + amount;
-  let completed = false;
-  if (event.progress.current >= event.progress.required) {
-    event.status = 'completed';
-    completed = true;
+  if (!event || event.status !== 'active') {
+    return { completed: false, contribution: 0, accepted: 0, current: 0, required: 0 };
   }
+  const requested = Math.max(0, Math.floor(Number.isFinite(amount) ? amount : 0));
+  const remaining = Math.max(0, event.progress.required - event.progress.current);
+  const accepted = Math.min(requested, remaining);
+  if (accepted <= 0) {
+    return {
+      completed: false,
+      contribution: event.contributors[playerName] || 0,
+      accepted: 0,
+      current: event.progress.current,
+      required: event.progress.required,
+    };
+  }
+  event.progress.current += accepted;
+  event.contributors[playerName] = (event.contributors[playerName] || 0) + accepted;
+  const completed = event.progress.current >= event.progress.required;
+  if (completed) event.status = 'completed';
   saveWorldEvents(events);
-  return { completed, contribution: event.contributors[playerName] };
+  return {
+    completed,
+    contribution: event.contributors[playerName],
+    accepted,
+    current: event.progress.current,
+    required: event.progress.required,
+  };
 }
 
 // Auto-generate periodic system events (simulates a live server)

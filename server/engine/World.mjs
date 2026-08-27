@@ -1,8 +1,70 @@
-// Server-side World — plain JS ESM
+// ===================================================================
+//  MOR'IA SERVER WORLD — deterministic and authoritative
+//  Keep terrain/portal metadata aligned with src/game/maps.ts.
+// ===================================================================
+
 class Monster {
   constructor(data) {
     Object.assign(this, data);
   }
+}
+
+const MAP_WIDTH = 80;
+const MAP_HEIGHT = 80;
+
+const MAP_CONFIG = Object.freeze({
+  eldoria: {
+    id: 'eldoria', biome: 'plains', spawnPoint: { x: 40, y: 40 },
+    townCenter: { x: 40, y: 40 }, townRange: 10,
+    portals: [
+      { pos: { x: 10, y: 40 }, targetMap: 'frostpeak', targetSpawn: { x: 70, y: 40 } },
+      { pos: { x: 70, y: 10 }, targetMap: 'shadowfen', targetSpawn: { x: 40, y: 70 } },
+    ],
+  },
+  frostpeak: {
+    id: 'frostpeak', biome: 'snow', spawnPoint: { x: 70, y: 40 },
+    townCenter: { x: 65, y: 40 }, townRange: 8,
+    portals: [
+      { pos: { x: 75, y: 40 }, targetMap: 'eldoria', targetSpawn: { x: 12, y: 40 } },
+      { pos: { x: 10, y: 70 }, targetMap: 'emberhold', targetSpawn: { x: 70, y: 10 } },
+    ],
+  },
+  shadowfen: {
+    id: 'shadowfen', biome: 'swamp', spawnPoint: { x: 40, y: 70 },
+    townCenter: { x: 40, y: 65 }, townRange: 8,
+    portals: [
+      { pos: { x: 40, y: 75 }, targetMap: 'eldoria', targetSpawn: { x: 70, y: 12 } },
+      { pos: { x: 10, y: 10 }, targetMap: 'voidlands', targetSpawn: { x: 70, y: 70 } },
+    ],
+  },
+  emberhold: {
+    id: 'emberhold', biome: 'desert', spawnPoint: { x: 70, y: 10 },
+    townCenter: { x: 65, y: 15 }, townRange: 8,
+    portals: [
+      { pos: { x: 75, y: 10 }, targetMap: 'frostpeak', targetSpawn: { x: 12, y: 70 } },
+    ],
+  },
+  voidlands: {
+    id: 'voidlands', biome: 'shadow', spawnPoint: { x: 70, y: 70 },
+    townCenter: { x: 40, y: 40 }, townRange: 6, levelRequired: 25,
+    portals: [
+      { pos: { x: 75, y: 75 }, targetMap: 'shadowfen', targetSpawn: { x: 12, y: 12 } },
+    ],
+  },
+});
+
+const SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
+
+function seededRandom(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+}
+
+function isPortal(config, x, y) {
+  return config.portals.some(portal => portal.pos.x === x && portal.pos.y === y);
 }
 
 class WorldManager {
@@ -11,30 +73,77 @@ class WorldManager {
   }
 
   init() {
-    for (const id of ['eldoria', 'frostpeak', 'shadowfen', 'emberhold', 'voidlands']) {
-      this.maps.set(id, this.generate(id));
-    }
+    this.maps.clear();
+    for (const id of Object.keys(MAP_CONFIG)) this.maps.set(id, this.generate(id));
   }
 
   getMapIds() { return Array.from(this.maps.keys()); }
   getMap(id) { return this.maps.get(id); }
 
   generate(id) {
-    const W = 80, H = 80;
+    const config = MAP_CONFIG[id] || MAP_CONFIG.eldoria;
+    const rand = seededRandom(SEEDS[config.biome]);
     const tiles = [];
-    for (let y = 0; y < H; y++) {
+
+    for (let y = 0; y < MAP_HEIGHT; y++) {
       const row = [];
-      for (let x = 0; x < W; x++) {
-        let walkable = true;
+      for (let x = 0; x < MAP_WIDTH; x++) {
         let type = 'grass';
-        if (x === 0 || y === 0 || x === W - 1 || y === H - 1) { walkable = false; type = 'wall'; }
-        else if (x >= 35 && x <= 45 && y >= 35 && y <= 45) { type = 'floor'; }
-        else if (Math.random() < 0.12) { walkable = false; type = 'tree'; }
-        row.push({ walkable, type });
+        let walkable = true;
+        let blocksSight = false;
+
+        if (x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1) {
+          type = 'wall'; walkable = false; blocksSight = true;
+        } else if (Math.abs(x - config.townCenter.x) <= config.townRange && Math.abs(y - config.townCenter.y) <= config.townRange) {
+          type = 'floor';
+        } else if (isPortal(config, x, y)) {
+          type = 'path';
+        } else {
+          const r = rand();
+          if (config.biome === 'snow') {
+            if (r < 0.15) { type = 'tree'; walkable = false; blocksSight = true; }
+            else if (r < 0.20) { type = 'rock'; walkable = false; }
+            else if (r < 0.22) { type = 'stone'; walkable = false; }
+          } else if (config.biome === 'swamp') {
+            if (r < 0.10) { type = 'bush'; walkable = false; }
+            else if (r < 0.25) { type = 'water'; walkable = false; }
+            else if (r < 0.30) { type = 'tree'; walkable = false; blocksSight = true; }
+          } else if (config.biome === 'desert') {
+            if (r < 0.08) { type = 'rock'; walkable = false; }
+            else if (r < 0.12) { type = 'stone'; walkable = false; }
+            else if (r < 0.20 && (Math.pow(x - 10, 2) + Math.pow(y - 10, 2) < 40)) { type = 'lava'; walkable = false; }
+          } else if (config.biome === 'shadow') {
+            if (r < 0.18) { type = 'rock'; walkable = false; blocksSight = true; }
+            else if (r < 0.30 && (Math.pow(x - 40, 2) + Math.pow(y - 40, 2) < 100)) { type = 'lava'; walkable = false; }
+          } else {
+            if (r < 0.04) { type = 'bush'; walkable = false; }
+            else if (r < 0.06) { type = 'stone'; walkable = false; }
+            else if (r < 0.18 && ((x < 25 && y < 30) || (x > 50 && y < 30))) { type = 'tree'; walkable = false; blocksSight = true; }
+          }
+        }
+        row.push({ walkable, type, blocksSight });
       }
       tiles.push(row);
     }
-    return { id, name: id.charAt(0).toUpperCase() + id.slice(1), width: W, height: H, tiles };
+
+    return {
+      ...config,
+      name: id.charAt(0).toUpperCase() + id.slice(1),
+      width: MAP_WIDTH,
+      height: MAP_HEIGHT,
+      tiles,
+      portals: config.portals.map(p => ({ pos: { ...p.pos }, targetMap: p.targetMap, targetSpawn: { ...p.targetSpawn } })),
+    };
+  }
+
+  findWalkableSpawn(map, preferred) {
+    if (preferred && map.tiles?.[preferred.y]?.[preferred.x]?.walkable) return { ...preferred };
+    for (let attempt = 0; attempt < 300; attempt++) {
+      const x = 5 + Math.floor(Math.random() * 70);
+      const y = 5 + Math.floor(Math.random() * 70);
+      if (map.tiles?.[y]?.[x]?.walkable) return { x, y };
+    }
+    return { ...map.spawnPoint };
   }
 
   spawnMonsters(mapId) {
@@ -60,19 +169,20 @@ class WorldManager {
         { name: 'Lich', emoji: '🧙', hp: 1000, attack: 75, defense: 25, xp: 1500, level: 35, color: '#4a0a4a', size: 1.4, count: 1, type: 'boss' },
       ],
     };
+
+    const map = this.getMap(mapId);
     const list = templates[mapId] || [];
     const monsters = [];
     let id = 0;
-    for (const t of list) {
-      for (let i = 0; i < t.count; i++) {
-        const x = 5 + Math.floor(Math.random() * 70);
-        const y = 5 + Math.floor(Math.random() * 70);
+    for (const template of list) {
+      for (let i = 0; i < template.count; i++) {
+        const pos = this.findWalkableSpawn(map);
         monsters.push({
-          id: `${mapId}_m_${id++}`, name: t.name, emoji: t.emoji,
-          x, y, spawnX: x, spawnY: y,
-          hp: t.hp, maxHp: t.hp, attack: t.attack, defense: t.defense,
-          xp: t.xp, level: t.level, color: t.color, size: t.size || 1,
-          type: t.type || 'normal', dead: false, respawnAt: 0,
+          id: `${mapId}_m_${id++}`, name: template.name, emoji: template.emoji,
+          x: pos.x, y: pos.y, spawnX: pos.x, spawnY: pos.y,
+          hp: template.hp, maxHp: template.hp, attack: template.attack, defense: template.defense,
+          xp: template.xp, level: template.level, color: template.color, size: template.size || 1,
+          type: template.type || 'normal', dead: false, respawnAt: 0,
           lastMove: 0, lastAttack: 0, speed: 1200,
         });
       }
@@ -82,4 +192,4 @@ class WorldManager {
 }
 
 export const WORLD = new WorldManager();
-export { Monster };
+export { Monster, MAP_CONFIG };

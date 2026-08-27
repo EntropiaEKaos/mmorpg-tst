@@ -105,6 +105,7 @@ export function getActivePet(playerName: string): string | null {
 }
 
 export function buyPet(playerName: string, petId: string): boolean {
+  if (!PETS.some((pet) => pet.id === petId)) return false;
   const owned = getOwnedPets(playerName);
   if (owned.includes(petId)) return false;
   owned.push(petId);
@@ -112,9 +113,14 @@ export function buyPet(playerName: string, petId: string): boolean {
   return true;
 }
 
-export function setActivePet(playerName: string, petId: string | null) {
-  if (petId) localStorage.setItem(`tibia_activepet_${playerName}`, petId);
-  else localStorage.removeItem(`tibia_activepet_${playerName}`);
+export function setActivePet(playerName: string, petId: string | null): boolean {
+  if (petId) {
+    if (!PETS.some((pet) => pet.id === petId) || !getOwnedPets(playerName).includes(petId)) return false;
+    localStorage.setItem(`tibia_activepet_${playerName}`, petId);
+  } else {
+    localStorage.removeItem(`tibia_activepet_${playerName}`);
+  }
+  return true;
 }
 
 export interface ActivePetState {

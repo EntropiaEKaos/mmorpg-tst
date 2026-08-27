@@ -11,21 +11,18 @@ interface Props {
 
 export default function DungeonPortal({ player: _player, onClose, onEnterDungeon, highestWave }: Props) {
   const [selectedWaves, setSelectedWaves] = useState(10);
+  const completionReward = getDungeonReward(selectedWaves);
 
   return (
     <div
-      className="absolute inset-0 flex items-center justify-center p-4 z-20"
+      className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
       style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="rounded-xl border-2 p-5 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-        style={{
-          background: 'linear-gradient(180deg, rgba(80,20,80,0.95) 0%, rgba(30,5,30,0.98) 100%)',
-          borderColor: '#c832ff',
-          boxShadow: '0 0 50px rgba(200,50,255,0.4)',
-        }}
+        className="moria-panel moria-scrollbar w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl border border-violet-300/25 p-4 sm:p-6"
+        style={{ boxShadow: '0 30px 90px rgba(0,0,0,.58), 0 0 60px rgba(139,92,246,.12)' }}
       >
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -47,7 +44,7 @@ export default function DungeonPortal({ player: _player, onClose, onEnterDungeon
         {/* Wave selector */}
         <div className="mb-4">
           <div className="text-xs text-purple-200/60 tracking-widest mb-2">NUMBER OF WAVES</div>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-4 gap-2">
             {[3, 5, 7, 10].map((n) => (
               <button key={n} onClick={() => setSelectedWaves(n)}
                       className={`py-2 rounded border-2 font-bold text-sm transition-all ${
@@ -72,7 +69,7 @@ export default function DungeonPortal({ player: _player, onClose, onEnterDungeon
                   <span className="font-bold text-purple-300 w-14">Wave {w.wave}</span>
                   <div className="flex-1 flex flex-wrap gap-1">
                     {w.monsters.map((m, i) => (
-                      <span key={i} className="text-base">{m.emoji}</span>
+                      <span key={i} className="moria-chip rounded-md px-1.5 py-0.5 text-[10px] text-slate-300">{m.emoji} ×{m.count}</span>
                     ))}
                   </div>
                   <span className="text-amber-400">+{reward.gold}🪙</span>
@@ -88,11 +85,11 @@ export default function DungeonPortal({ player: _player, onClose, onEnterDungeon
           <div className="text-xs text-amber-300 tracking-widest mb-1">COMPLETION REWARD</div>
           <div className="flex justify-around text-center">
             <div>
-              <div className="text-2xl font-black text-amber-400">{selectedWaves * 100}🪙</div>
+              <div className="text-2xl font-black text-amber-400">{completionReward.gold}🪙</div>
               <div className="text-[10px] text-amber-200/60">Gold</div>
             </div>
             <div>
-              <div className="text-2xl font-black text-green-400">{selectedWaves * 150}</div>
+              <div className="text-2xl font-black text-green-400">{completionReward.xp}</div>
               <div className="text-[10px] text-amber-200/60">XP</div>
             </div>
             <div>
@@ -110,7 +107,7 @@ export default function DungeonPortal({ player: _player, onClose, onEnterDungeon
         {/* Enter button */}
         <button
           onClick={() => onEnterDungeon(selectedWaves)}
-          className="w-full py-3 rounded-lg font-black tracking-widest text-lg transition-all hover:scale-[1.02]"
+          className="moria-button-primary w-full rounded-xl py-3 text-base font-black tracking-[0.12em] sm:text-lg"
           style={{
             background: 'linear-gradient(180deg, #c832ff 0%, #6a0a6a 100%)',
             boxShadow: '0 0 30px rgba(200,50,255,0.5)',

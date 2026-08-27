@@ -1,23 +1,38 @@
+import { sendSystemMail } from './content';
+
 // ============ PREMIUM CURRENCY (Coins) ============
 export function getCoins(playerName: string): number {
   try {
-    return JSON.parse(localStorage.getItem(`moria_coins_${playerName}`) || '0');
+    const value = JSON.parse(localStorage.getItem(`moria_coins_${playerName}`) || '0');
+    return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   } catch { return 0; }
 }
 
 export function setCoins(playerName: string, amount: number) {
-  localStorage.setItem(`moria_coins_${playerName}`, JSON.stringify(Math.max(0, Math.floor(amount))));
+  const safe = Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0;
+  localStorage.setItem(`moria_coins_${playerName}`, JSON.stringify(safe));
 }
 
 export function addCoins(playerName: string, amount: number) {
+  if (!Number.isFinite(amount)) return;
   const cur = getCoins(playerName);
-  setCoins(playerName, cur + amount);
+  setCoins(playerName, cur + Math.floor(amount));
 }
 
 export function spendCoins(playerName: string, amount: number): boolean {
+  const cost = Number.isFinite(amount) ? Math.floor(amount) : 0;
+  if (cost <= 0) return false;
   const cur = getCoins(playerName);
-  if (cur < amount) return false;
-  setCoins(playerName, cur - amount);
+  if (cur < cost) return false;
+  setCoins(playerName, cur - cost);
+  return true;
+}
+
+export function claimDemoCoinGrant(playerName: string, amount = 500): boolean {
+  const key = `moria_demo_coins_claimed_${playerName}`;
+  if (localStorage.getItem(key) === '1') return false;
+  localStorage.setItem(key, '1');
+  addCoins(playerName, Math.max(0, Math.floor(amount)));
   return true;
 }
 
@@ -73,21 +88,28 @@ export function getAuctionListings(): AuctionListing[] {
 }
 
 export function saveAuctionListings(listings: AuctionListing[]) {
-  // Auto-expire listings older than 24h
-  const now = Date.now();
-  const active = listings.filter((l) => l.expiresAt > now);
-  localStorage.setItem(AH_KEY, JSON.stringify(active));
+  // Keep escrowed items until they are bought or explicitly cancelled. Automatic
+  // expiry previously deleted the listing while the seller's item stayed removed.
+  localStorage.setItem(AH_KEY, JSON.stringify(listings));
 }
 
-export function listOnAuction(listing: Omit<AuctionListing, 'id' | 'listedAt' | 'expiresAt'>): void {
+export function listOnAuction(listing: Omit<AuctionListing, 'id' | 'listedAt' | 'expiresAt'>): boolean {
+  const price = Math.floor(listing.buyoutPrice);
+  const quantity = Math.floor(listing.quantity);
+  if (!listing.sellerName.trim() || !listing.itemName.trim() || !Number.isFinite(price) || price < 1 || !Number.isFinite(quantity) || quantity < 1) return false;
   const listings = getAuctionListings();
   listings.push({
     ...listing,
+    buyoutPrice: price,
+    quantity,
     id: `ah_${Date.now()}_${Math.random()}`,
     listedAt: Date.now(),
-    expiresAt: Date.now() + 86400000, // 24h
+    // Retained for forward compatibility; expiration is not destructive until a
+    // proper server-side return-to-seller escrow flow exists.
+    expiresAt: Date.now() + 86400000,
   });
   saveAuctionListings(listings);
+  return true;
 }
 
 export function buyFromAuction(listingId: string, buyerName: string): { success: boolean; listing?: AuctionListing; reason?: string } {
@@ -97,8 +119,7 @@ export function buyFromAuction(listingId: string, buyerName: string): { success:
   if (listing.sellerName === buyerName) return { success: false, reason: 'Cannot buy your own listing' };
   // Remove listing
   saveAuctionListings(listings.filter((l) => l.id !== listingId));
-  // Send gold to seller via mail
-  const { sendSystemMail } = require('./content');
+  // Send gold to seller via mail.
   sendSystemMail(listing.sellerName, 'Auction House',
     `Auction Sold: ${listing.itemName}`,
     `Your ${listing.itemName} sold on the Auction House for ${listing.buyoutPrice} gold!\n\nThe gold has been deposited to your account.`,
@@ -106,12 +127,12 @@ export function buyFromAuction(listingId: string, buyerName: string): { success:
   return { success: true, listing };
 }
 
-export function cancelListing(listingId: string, sellerName: string): boolean {
+export function cancelListing(listingId: string, sellerName: string): AuctionListing | null {
   const listings = getAuctionListings();
   const listing = listings.find((l) => l.id === listingId && l.sellerName === sellerName);
-  if (!listing) return false;
+  if (!listing) return null;
   saveAuctionListings(listings.filter((l) => l.id !== listingId));
-  return true;
+  return listing;
 }
 
 // Seed the auction house with some NPC listings on first load

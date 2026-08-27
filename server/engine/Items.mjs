@@ -35,7 +35,43 @@ export function getStarterInventory() {
   ];
 }
 
-export function rollLoot(monster, goldBonus = 0) {
+const VALID_EQUIPMENT_SLOTS = new Set(['weapon', 'armor', 'helmet', 'legs', 'boots', 'shield', 'ring', 'amulet']);
+const VALID_RARITIES = new Set(['common', 'uncommon', 'rare', 'epic', 'legendary']);
+
+function finiteStat(value, fallback = 0, max = 1_000_000) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(max, number)) : fallback;
+}
+
+export function buildEquipmentLootPool(contentItems = []) {
+  const byId = new Map(EQUIPMENT_LOOT.map(item => [item.id, { ...item }]));
+  if (!Array.isArray(contentItems)) return Array.from(byId.values());
+
+  for (const raw of contentItems) {
+    if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim()) continue;
+    if (typeof raw.slot !== 'string' || !VALID_EQUIPMENT_SLOTS.has(raw.slot)) continue;
+    const id = raw.id.trim().slice(0, 100);
+    const rarity = typeof raw.rarity === 'string' && VALID_RARITIES.has(raw.rarity) ? raw.rarity : 'common';
+    const item = {
+      id,
+      name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 100) : id,
+      icon: typeof raw.icon === 'string' && raw.icon ? raw.icon.slice(0, 8) : '⚔',
+      slot: raw.slot,
+      rarity,
+      level: Math.max(1, Math.floor(finiteStat(raw.level, 1, 100_000))),
+      value: Math.floor(finiteStat(raw.value, 0, 100_000_000)),
+    };
+    for (const stat of ['attack', 'defense', 'armor', 'hp', 'mana', 'magic', 'critChance', 'lifesteal', 'thorns', 'moveSpeed', 'xpBonus', 'goldBonus', 'damageReduction']) {
+      const value = finiteStat(raw[stat], 0, 1_000_000);
+      if (value > 0) item[stat] = value;
+    }
+    if (typeof raw.description === 'string' && raw.description.trim()) item.description = raw.description.trim().slice(0, 500);
+    byId.set(id, item);
+  }
+  return Array.from(byId.values());
+}
+
+export function rollLoot(monster, goldBonus = 0, contentItems = []) {
   const drops = [];
   const goldChance = monster.type === 'boss' ? 1 : monster.type === 'elite' ? 0.8 : 0.5;
   if (Math.random() < goldChance) {
@@ -53,7 +89,7 @@ export function rollLoot(monster, goldBonus = 0) {
   const equipChance = monster.type === 'boss' ? 0.8 : monster.type === 'elite' ? 0.3 : 0.04;
   if (Math.random() < equipChance) {
     // Pick a valid item based on monster level
-    const eligible = EQUIPMENT_LOOT.filter(e => e.level <= monster.level + 3);
+    const eligible = buildEquipmentLootPool(contentItems).filter(e => e.level <= monster.level + 3);
     if (eligible.length > 0) {
       const drop = eligible[Math.floor(Math.random() * eligible.length)];
       drops.push({

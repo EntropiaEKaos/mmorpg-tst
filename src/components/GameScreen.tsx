@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type {
   Player, Monster, Projectile, FloatingText, Particle, ChatMessage,
-  Item, Spell, Account, NPC, Toast, ActiveQuest, Equipment,
+  Item, Spell, Account, NPC, Toast, ActiveQuest, Equipment, Quest,
 } from '../game/types';
 import { computeDerivedStats } from '../game/types';
 import {
@@ -28,8 +28,9 @@ import DungeonPortal from './DungeonPortal';
 import PetShop from './PetShop';
 import { DUNGEON_WAVES, spawnDungeonWave, getDungeonReward, PETS, getActivePet, buyPet, type ActivePetState } from '../game/dungeons';
 import { randomGemDrop, GEMS } from '../game/itemSets';
+import { RECIPES, canCraft } from '../game/crafting';
 import { generateMap, MAPS, MAP_WIDTH, MAP_HEIGHT } from '../game/maps';
-import { createCorpse, rollLoot, CORPSE_LIFETIME, type GroundItem, type LootItem } from '../game/loot';
+import { createCorpse, createLootBag, rollLoot, CORPSE_LIFETIME, type GroundItem, type LootItem } from '../game/loot';
 import QuestCreator from './QuestCreator';
 import MysteryQuestBook from './MysteryQuestBook';
 import Depot from './Depot';
@@ -47,7 +48,7 @@ import { getWorldEvents, maybeSpawnSystemEvent, contributeToWorldEvent, generate
 import { net, broadcastPlayer, broadcastChat, type NetPlayer, type NetMessage } from '../game/network';
 import { serverSync } from '../game/ServerSync';
 import { loadLocal, saveLocal, applySave, persistSubSystems } from '../game/SaveManager';
-import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, type CustomNPC, type CustomMonster } from '../game/content';
+import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, getUILayout, saveUILayout, DEFAULT_UI_PANEL_ORDER, type UILayout, type CustomNPC, type CustomMonster } from '../game/content';
 import { getTownBuildings } from '../game/world';
 import { drawBuilding, type Building } from '../game/render';
 import Weather from './Weather';
@@ -58,6 +59,8 @@ import { showRaidWarning } from './RaidWarning';
 import TalentTree from './TalentTree';
 import Bestiary from './Bestiary';
 import DPSMeter from './DPSMeter';
+import AdventureBoard, { type AdventureSnapshot } from './AdventureBoard';
+import OfficialSystemsHub, { type OfficialTab } from './OfficialSystemsHub';
 import { dpsMeter } from '../game/dpsMeter';
 import { recordKill } from '../game/bestiary';
 import {
@@ -66,7 +69,7 @@ import {
   gatherFromTile, addReputation, getShopDiscountFromRep,
   getStamina, saveStamina, getStaminaMultiplier,
   canClaimDaily, claimDaily,
-  FOOD_ITEMS, applyFoodBuff, getActiveFoodBonus,
+  FOOD_ITEMS, applyFoodBuff, getActiveFoodBonus, grantAllBlessings,
 } from '../game/systems';
 
 interface Props {
@@ -77,14 +80,173 @@ interface Props {
 const VIEW_W = 19;
 const VIEW_H = 13;
 
+function customNpcToRuntime(npc: CustomNPC): NPC {
+  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper'];
+  const role: NPC['role'] = validRoles.includes(npc.role as NPC['role']) ? npc.role as NPC['role'] : 'guard';
+  const options: NPC['dialogues'][number]['options'] = [{ text: 'Farewell.', action: 'bye' }];
+  if (role === 'banker') options.unshift({ text: 'Bank & depot', action: 'bank' });
+  if (role === 'trainer') options.unshift({ text: 'Train me', action: 'train' });
+  if (role === 'innkeeper') {
+    options.unshift({ text: 'Food & drinks', action: 'food' });
+    options.unshift({ text: 'Rest (50 gold)', action: 'heal' });
+  }
+  return {
+    id: npc.id, name: npc.name, pos: { x: npc.posX, y: npc.posY },
+    emoji: npc.emoji, color: npc.color, role,
+    dialogues: [{ text: npc.dialogueText || 'Greetings, traveler!', options }],
+  };
+}
+
+function customMonsterToRuntime(monster: CustomMonster): Monster {
+  const pos = { x: monster.posX, y: monster.posY };
+  return {
+    id: monster.id, name: monster.name, pos: { ...pos }, hp: monster.hp, maxHp: monster.hp,
+    attack: monster.attack, defense: monster.defense, speed: monster.speed, xp: monster.xp,
+    color: monster.color, emoji: monster.emoji, lastMove: 0, lastAttack: 0,
+    respawnPos: { ...pos }, dead: false, respawnAt: 0, size: monster.size,
+    level: monster.level, type: monster.type,
+  };
+}
+
+const customContentOnMap = <T extends { mapId?: string }>(content: T[], mapId: string) =>
+  content.filter((entry) => (entry.mapId || 'eldoria') === mapId);
+
+function serverNpcToClient(raw: any, quests: Quest[]): { mapId: string; npc: NPC } | null {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim()) return null;
+  const x = Math.floor(Number(raw.posX));
+  const y = Math.floor(Number(raw.posY));
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) return null;
+  const mapId = typeof raw.mapId === 'string' && MAPS[raw.mapId] ? raw.mapId : 'eldoria';
+  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper'];
+  const role: NPC['role'] = validRoles.includes(raw.role as NPC['role']) ? raw.role as NPC['role'] : 'guard';
+  const options: NPC['dialogues'][number]['options'] = quests
+    .filter((quest) => quest.npcId === raw.id)
+    .map((quest) => ({ text: `📜 ${quest.name}`, action: 'quest' as const, questId: quest.id }));
+  options.push({ text: 'Farewell.', action: 'bye' });
+  return {
+    mapId,
+    npc: {
+      id: raw.id.trim(),
+      name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : raw.id.trim(),
+      pos: { x, y },
+      emoji: typeof raw.emoji === 'string' && raw.emoji ? raw.emoji.slice(0, 8) : '🧙',
+      color: typeof raw.color === 'string' && raw.color ? raw.color : '#9bd4ff',
+      role,
+      dialogues: [{
+        text: typeof raw.dialogue === 'string' && raw.dialogue.trim() ? raw.dialogue.trim() : 'Greetings, traveler!',
+        options,
+      }],
+    },
+  };
+}
+
+const SERVER_SPELL_TYPES: Spell['type'][] = ['attack', 'heal', 'aoe', 'buff'];
+const SERVER_BUFF_TYPES: NonNullable<Spell['buffType']>[] = ['shield', 'haste', 'invisible', 'frenzy'];
+
+function spellContentSlug(value: unknown): string {
+  return String(value || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function finiteSpellNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+}
+
+function mergeServerSpells(vocationId: string, baseSpells: Spell[], content: unknown): Spell[] {
+  const merged = baseSpells.map((spell) => ({ ...spell }));
+  if (!Array.isArray(content)) return merged;
+
+  for (const raw of content) {
+    if (!raw || typeof raw !== 'object') continue;
+    const record = raw as Record<string, unknown>;
+    const rawVocation = typeof record.vocation === 'string' ? record.vocation.trim().toLowerCase() : '';
+    if (rawVocation !== vocationId) continue;
+    if (typeof record.id !== 'string' || !record.id.trim()) continue;
+    if (typeof record.name !== 'string' || !record.name.trim()) continue;
+    const type = typeof record.type === 'string' && SERVER_SPELL_TYPES.includes(record.type as Spell['type'])
+      ? record.type as Spell['type']
+      : null;
+    if (!type) continue;
+
+    const contentId = record.id.trim().slice(0, 100);
+    const name = record.name.trim().slice(0, 100);
+    const matchIndex = merged.findIndex((spell) =>
+      spellContentSlug(spell.name) === spellContentSlug(contentId) || spellContentSlug(spell.name) === spellContentSlug(name)
+    );
+    const previous = matchIndex >= 0 ? merged[matchIndex] : undefined;
+    const rawColor = typeof record.color === 'string' ? record.color : '';
+    const next: Spell = {
+      ...(previous || {} as Spell),
+      id: previous?.id || `server_${contentId}`,
+      name,
+      icon: typeof record.icon === 'string' && record.icon ? record.icon.slice(0, 8) : (previous?.icon || '✨'),
+      mana: Math.floor(finiteSpellNumber(record.mana, 0, 100_000, previous?.mana ?? 10)),
+      cooldown: Math.floor(finiteSpellNumber(record.cooldown, 250, 600_000, previous?.cooldown ?? 1500)),
+      damage: Math.floor(finiteSpellNumber(record.damage, 0, 10_000_000, previous?.damage ?? 0)),
+      range: finiteSpellNumber(record.range, 0, 20, previous?.range ?? 1),
+      lastCast: previous?.lastCast ?? 0,
+      color: /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : (previous?.color || '#9bd4ff'),
+      type,
+      levelRequired: Math.floor(finiteSpellNumber(record.levelRequired, 1, 100_000, previous?.levelRequired ?? 1)),
+    };
+    if (Number.isFinite(Number(record.scalingCoeff))) next.scalingCoeff = finiteSpellNumber(record.scalingCoeff, 0, 20, 1);
+    if (type === 'buff') {
+      const requestedBuffType = typeof record.buffType === 'string'
+        ? record.buffType.trim().toLowerCase() as NonNullable<Spell['buffType']>
+        : undefined;
+      next.buffType = requestedBuffType && SERVER_BUFF_TYPES.includes(requestedBuffType)
+        ? requestedBuffType
+        : (previous?.buffType && SERVER_BUFF_TYPES.includes(previous.buffType) ? previous.buffType : 'shield');
+      next.buffDuration = Math.floor(finiteSpellNumber(record.buffDuration, 1000, 60_000, previous?.buffDuration ?? 8000));
+      const defaultBuffValue = next.buffType === 'haste' ? 35 : next.buffType === 'invisible' ? 1 : 25;
+      next.buffValue = finiteSpellNumber(record.buffValue, 0, 100, previous?.buffValue ?? defaultBuffValue);
+    }
+    if (matchIndex >= 0) merged[matchIndex] = next;
+    else if (merged.length < 8) merged.push(next);
+  }
+  return merged;
+}
+
+function serverQuestToClient(raw: any): Quest | null {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim()) return null;
+  const target = typeof raw.target === 'string' && raw.target.trim() ? raw.target.trim() : 'objective';
+  const count = Math.max(1, Math.floor(Number(raw.count) || 1));
+  return {
+    id: raw.id.trim(),
+    name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : raw.id.trim(),
+    description: typeof raw.description === 'string' ? raw.description : '',
+    npcId: typeof raw.npcId === 'string' ? raw.npcId : '',
+    objectives: [{ type: 'kill', target, targetName: target, count, current: 0 }],
+    rewards: {
+      xp: Math.max(0, Math.floor(Number(raw.rewardXp) || 0)),
+      gold: Math.max(0, Math.floor(Number(raw.rewardGold) || 0)),
+    },
+    requires: Array.isArray(raw.requires) ? raw.requires.filter((id: unknown): id is string => typeof id === 'string') : [],
+    levelRequired: Math.max(1, Math.floor(Number(raw.levelRequired) || 1)),
+  };
+}
+
 export default function GameScreen({ account, onLogout }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const onlineAccount = Boolean(account.sessionToken && !account.offline);
+  const allowLocalAdmin = account.offline === true;
 
   // Panels state
   const [showInventory, setShowInventory] = useState(false);
   const [showCharacter, setShowCharacter] = useState(false);
   const [showQuestLog, setShowQuestLog] = useState(false);
+  const [showAdventure, setShowAdventure] = useState(false);
+  const [adventureState, setAdventureState] = useState<AdventureSnapshot | null>(null);
+  const lastAdventureSignatureRef = useRef('');
+  const [showOfficialHub, setShowOfficialHub] = useState(false);
+  const [officialTab, setOfficialTab] = useState<OfficialTab>('progress');
+  const [officialState, setOfficialState] = useState<any>(null);
+  const lastOfficialSignatureRef = useRef('');
+  const openOfficial = useCallback((tab: OfficialTab) => { setOfficialTab(tab); setShowOfficialHub(true); }, []);
   const serverQuestsRef = useRef<{ active: any[]; completed: string[] } | null>(null);
+  const [serverQuestCatalog, setServerQuestCatalog] = useState<Quest[]>([]);
+  const serverNpcCatalogRef = useRef<Array<{ mapId: string; npc: NPC }>>([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showTalents, setShowTalents] = useState(false);
   const [showBestiary, setShowBestiary] = useState(false);
@@ -102,6 +264,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [showCoinShop, setShowCoinShop] = useState(false);
   const [showWorldEvents, setShowWorldEvents] = useState(false);
   const [showWorldEventCreator, setShowWorldEventCreator] = useState(false);
+  const [uiLayout, setUILayoutState] = useState<UILayout>(() => getUILayout(account.characterName));
   const simPlayersRef = useRef<SimPlayer[]>(generateSimPlayers(6, MAP_WIDTH, MAP_HEIGHT));
   const lastSimChatRef = useRef(0);
   const lastEventCheckRef = useRef(0);
@@ -113,6 +276,8 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [showConnect, setShowConnect] = useState(false);
   const [netStatus, setNetStatus] = useState('');
   const lastBroadcastRef = useRef(0);
+  const lastHudTickRef = useRef(0);
+  const lastStaminaDrainRef = useRef(0);
   const [onlineCount, setOnlineCount] = useState(1);
   const [muted, setMuted] = useState(false);
   // Server-authoritative state refs (used when connected to authoritative server)
@@ -129,8 +294,19 @@ export default function GameScreen({ account, onLogout }: Props) {
   const customMonstersRef = useRef<CustomMonster[]>(getCustomMonsters());
   // Force refresh of custom content (used after admin edits)
   const refreshCustomContent = () => {
+    const previousNpcIds = new Set(customNpcsRef.current.map((npc) => npc.id));
+    const previousMonsterIds = new Set(customMonstersRef.current.map((monster) => monster.id));
     customNpcsRef.current = getCustomNPCs();
     customMonstersRef.current = getCustomMonsters();
+    const mapId = currentMapIdRef.current;
+    npcsRef.current = [
+      ...npcsRef.current.filter((npc) => !previousNpcIds.has(npc.id)),
+      ...customContentOnMap(customNpcsRef.current, mapId).map(customNpcToRuntime),
+    ];
+    monstersRef.current = [
+      ...monstersRef.current.filter((monster) => !previousMonsterIds.has(monster.id)),
+      ...customContentOnMap(customMonstersRef.current, mapId).map(customMonsterToRuntime),
+    ];
   };
 
   // Dungeon state
@@ -145,7 +321,6 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   // Pet state
   const petStateRef = useRef<ActivePetState | null>(null);
-  const [, setPetTick] = useState(0);
 
   // Auto-attack
   const autoAttackRef = useRef(true);
@@ -203,8 +378,14 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [currentMapId, setCurrentMapId] = useState('eldoria');
   const currentMapIdRef = useRef('eldoria');
   const worldRef = useRef(generateMap('eldoria'));
-  const monstersRef = useRef<Monster[]>(spawnInitialMonsters());
-  const npcsRef = useRef<NPC[]>(spawnNPCs());
+  const monstersRef = useRef<Monster[]>([
+    ...spawnInitialMonsters(),
+    ...customContentOnMap(customMonstersRef.current, 'eldoria').map(customMonsterToRuntime),
+  ]);
+  const npcsRef = useRef<NPC[]>([
+    ...spawnNPCs(),
+    ...customContentOnMap(customNpcsRef.current, 'eldoria').map(customNpcToRuntime),
+  ]);
   const groundItemsRef = useRef<GroundItem[]>([]);
   const projectilesRef = useRef<Projectile[]>([]);
   const floatingTextsRef = useRef<FloatingText[]>([]);
@@ -223,13 +404,18 @@ export default function GameScreen({ account, onLogout }: Props) {
   const spellsRef = useRef(spells);
   spellsRef.current = spells;
 
-  const [inventory, setInventory] = useState<Item[]>([
-    { id: 'hp1', name: 'Health Potion', icon: '🧪', type: 'potion', quantity: 10, value: 50, description: 'Restores 50 HP' },
-    { id: 'mp1', name: 'Mana Potion', icon: '🧴', type: 'potion', quantity: 5, value: 50, description: 'Restores 50 Mana' },
-    { id: 'hpg', name: 'Greater Health Potion', icon: '🍷', type: 'potion', quantity: 2, value: 150, description: 'Restores 200 HP' },
-  ]);
+  const [inventory, setInventory] = useState<Item[]>(() => {
+    const loadedSave = loadLocal(account.characterName);
+    if (loadedSave && Array.isArray(loadedSave.inventory)) return loadedSave.inventory;
+    return [
+      { id: 'hp1', name: 'Health Potion', icon: '🧪', type: 'potion', quantity: 10, value: 50, description: 'Restores 50 HP' },
+      { id: 'mp1', name: 'Mana Potion', icon: '🧴', type: 'potion', quantity: 5, value: 50, description: 'Restores 50 Mana' },
+      { id: 'hpg', name: 'Greater Health Potion', icon: '🍷', type: 'potion', quantity: 2, value: 150, description: 'Restores 200 HP' },
+    ];
+  });
   const inventoryRef = useRef(inventory);
   inventoryRef.current = inventory;
+  const lastServerInventorySignatureRef = useRef('');
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 'w', sender: 'System', text: `Welcome to Mor'ia, ${account.characterName}!`, color: '#f4e04d', time: Date.now(), channel: 'system' },
@@ -244,7 +430,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     { id: 't9', sender: 'System', text: '🔒 Spells, items, and regions unlock by level! Watch for 🔴 red portals (locked zones) and 🔒 spells. Level up to unlock more!', color: '#ff6060', time: Date.now(), channel: 'system' },
     { id: 't10', sender: 'System', text: '🏛 Visit the Auction House (top bar) to buy/sell items! Drag items in your inventory to drop them on the ground.', color: '#f4e04d', time: Date.now(), channel: 'system' },
     { id: 't11', sender: 'System', text: '⚔ Enable PvP (top-right) for skull system like Tibia. Aggression raises your skull: White→Yellow→Orange→Red→Black.', color: '#ff6060', time: Date.now(), channel: 'system' },
-    { id: 't12', sender: 'System', text: '💎 Check the Coin Shop (top bar) for premium mounts, boosts, and cosmetics! Claim free coins to start.', color: '#c8a0ff', time: Date.now(), channel: 'system' },
+    { id: 't12', sender: 'System', text: '💎 Earn Moria Coins from hunts, dungeons, events and achievements, then spend them in the official Coin Shop.', color: '#c8a0ff', time: Date.now(), channel: 'system' },
     { id: 't13', sender: 'System', text: '🌍 World Events happen automatically! Check the World button to join global missions for big rewards.', color: '#ff6a00', time: Date.now(), channel: 'system' },
     { id: 't14', sender: 'System', text: '✨ Other adventurers roam the world. Loot is auto-collected when you walk near corpses!', color: '#9bd4ff', time: Date.now(), channel: 'system' },
   ]);
@@ -299,52 +485,37 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (serverSync.isActive()) {
         serverSync.uploadSave(playerRef.current, inventoryRef.current);
       }
-      // Also update account list for login screen (level display)
-      const accounts: Account[] = JSON.parse(localStorage.getItem('tibia_accounts') || '[]');
-      const idx = accounts.findIndex((a) => a.username === account.username);
-      if (idx >= 0) {
-        accounts[idx] = { ...accounts[idx], savedPlayer: JSON.stringify(playerRef.current), level: playerRef.current.level };
-        localStorage.setItem('tibia_accounts', JSON.stringify(accounts));
-      }
     }, 5000);
     // Save on unmount too (critical for tab close)
     const onUnload = () => saveLocal(playerRef.current, inventoryRef.current);
     window.addEventListener('beforeunload', onUnload);
-    return () => { clearInterval(interval); window.removeEventListener('beforeunload', onUnload); };
-  }, [account.username]);
+    return () => {
+      saveLocal(playerRef.current, inventoryRef.current);
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, []);
 
-  // Spawn custom monsters on mount + check mail welcome + seed AH + welcome coins
+  // Seed local-only starter content exactly once per character.
   useEffect(() => {
-    seedAuctionHouse(); // populate AH with NPC listings on first load
-    // Welcome coins for new players
-    if (getCoins(account.characterName) === 0) {
-      addCoins(account.characterName, 200);
+    if (onlineAccount) return;
+    seedAuctionHouse();
+
+    const welcomeCoinsKey = `moria_welcome_coins_${account.characterName}`;
+    if (localStorage.getItem(welcomeCoinsKey) !== '1') {
+      if (getCoins(account.characterName) === 0) addCoins(account.characterName, 200);
+      localStorage.setItem(welcomeCoinsKey, '1');
     }
-    const customs = getCustomMonsters();
-    if (customs.length > 0) {
-      const spawned: Monster[] = customs.map((cm) => ({
-        id: `customm_${cm.id}`,
-        name: cm.name,
-        pos: { x: cm.posX, y: cm.posY },
-        hp: cm.hp, maxHp: cm.hp,
-        attack: cm.attack, defense: cm.defense,
-        speed: cm.speed, xp: cm.xp,
-        color: cm.color, emoji: cm.emoji, size: cm.size,
-        level: cm.level, type: cm.type,
-        lastMove: 0, lastAttack: 0,
-        respawnPos: { x: cm.posX, y: cm.posY },
-        dead: false, respawnAt: 0,
-        loot: [{ name: 'Gold', icon: '🪙', chance: 0.8, value: cm.level * 10 }],
-      }));
-      monstersRef.current = [...monstersRef.current, ...spawned];
-    }
-    // Welcome mail for new players
-    const mail = getMail(account.characterName);
-    if (mail.length === 0) {
-      sendSystemMail(account.characterName, 'Postmaster Edwin',
-        'Welcome to Mor\'ia!',
-        `Dear ${account.characterName},\n\nWelcome to the realm of Mor'ia! May your adventures be legendary.\n\nTo help you get started, here is some gold. Visit me at the post office (near the bank) anytime.\n\nSafe travels,\nPostmaster Edwin`,
-        100);
+
+    const welcomeMailKey = `moria_welcome_mail_${account.characterName}`;
+    if (localStorage.getItem(welcomeMailKey) !== '1') {
+      if (getMail(account.characterName).length === 0) {
+        sendSystemMail(account.characterName, 'Postmaster Edwin',
+          'Welcome to Mor\'ia!',
+          `Dear ${account.characterName},\n\nWelcome to the realm of Mor'ia! May your adventures be legendary.\n\nTo help you get started, here is some gold. Visit me at the post office (near the bank) anytime.\n\nSafe travels,\nPostmaster Edwin`,
+          100);
+      }
+      localStorage.setItem(welcomeMailKey, '1');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -379,18 +550,23 @@ export default function GameScreen({ account, onLogout }: Props) {
       setNetMode('local');
       addMessage('System', '🟡 Local multiplayer active — other browser tabs can join your world!', '#9bd4ff', 'system');
     }
-    // AUTO-CONNECT to server (works in dev AND production deployments)
-    net.connectOnline().then((ok) => {
-      if (ok) {
-        setNetMode('online');
-        addMessage('System', '🟢 CONNECTED to Mor\'ia authoritative server! Anti-cheat active.', '#2ecc71', 'system');
-        addToast('info', 'Online!', `Connected to ${net.isHosted() ? 'world server' : 'local server'}`, '🟢', '#2ecc71');
-        // AUTHENTICATE — sends player identity to server for authoritative mode
-        serverSync.authenticate(account.characterName, account.vocation);
-      } else if (net.isHosted()) {
-        setTimeout(() => net.connectOnline().then(ok2 => ok2 && setNetMode('online')), 3000);
-      }
-    });
+    // Only authenticated online accounts connect to the authoritative world.
+    // Quick Play remains local and never opens an unauthenticated server session.
+    if (onlineAccount && account.sessionToken) {
+      // Store auth payload before connecting so reconnect/retry authenticates on open.
+      serverSync.authenticate(account.sessionToken, account.characterName);
+      net.connectOnline().then((ok) => {
+        if (ok) {
+          setNetMode('online');
+          addMessage('System', '🟢 CONNECTED to Mor\'ia authoritative server! Anti-cheat active.', '#2ecc71', 'system');
+          addToast('info', 'Online!', `Connected to ${net.isHosted() ? 'world server' : 'local server'}`, '🟢', '#2ecc71');
+        } else if (net.isHosted()) {
+          setTimeout(() => net.connectOnline().then(ok2 => {
+            if (ok2) setNetMode('online');
+          }), 3000);
+        }
+      });
+    }
 
     // Handle incoming network messages
     const handler = (msg: NetMessage) => {
@@ -428,12 +604,14 @@ export default function GameScreen({ account, onLogout }: Props) {
         }
         // ===== AUTHORITATIVE MODE: server sends the truth =====
         case 'auth_ok': {
+          serverSync.handleAuthOk();
           addMessage('System', '🔒 Authenticated! Server-authoritative mode active.', '#2ecc71', 'system');
           // Request our full save from the server (talents, gems, blessings, etc.)
           serverSync.requestServerSave();
           break;
         }
         case 'auth_error': {
+          serverSync.handleAuthError();
           addMessage('System', `🔴 Auth failed: ${msg.payload?.text}`, '#ff6060', 'system');
           break;
         }
@@ -460,7 +638,26 @@ export default function GameScreen({ account, onLogout }: Props) {
           try {
             const content = msg.payload;
             localStorage.setItem('moria_server_content', JSON.stringify(content));
-            addMessage('System', `📡 Server content synced: ${content.items?.length||0} items, ${content.monsters?.length||0} monsters`, '#9bd4ff', 'system');
+            const quests = Array.isArray(content.quests)
+              ? content.quests.map(serverQuestToClient).filter((q: Quest | null): q is Quest => Boolean(q))
+              : [];
+            setServerQuestCatalog(quests);
+            const serverNpcs: Array<{ mapId: string; npc: NPC }> = Array.isArray(content.npcs)
+              ? content.npcs.map((npc: any) => serverNpcToClient(npc, quests)).filter((entry: { mapId: string; npc: NPC } | null): entry is { mapId: string; npc: NPC } => Boolean(entry))
+              : [];
+            serverNpcCatalogRef.current = serverNpcs;
+            npcsRef.current = serverNpcs.filter((entry) => entry.mapId === currentMapIdRef.current).map((entry) => entry.npc);
+            const vocationId = account.vocation.toLowerCase();
+            const baseSpells = (VOCATIONS[vocationId] || VOCATIONS.knight).spells;
+            const syncedSpells = mergeServerSpells(vocationId, baseSpells, content.spells);
+            const previousSpells = spellsRef.current;
+            for (const spell of syncedSpells) {
+              const previous = previousSpells.find((candidate) => candidate.id === spell.id || spellContentSlug(candidate.name) === spellContentSlug(spell.name));
+              if (previous) spell.lastCast = previous.lastCast;
+            }
+            spellsRef.current = syncedSpells;
+            setSpells(syncedSpells);
+            addMessage('System', `📡 Server content synced: ${content.items?.length||0} items, ${content.monsters?.length||0} monsters, ${quests.length} quests, ${serverNpcs.length} NPCs, ${syncedSpells.length} spells`, '#9bd4ff', 'system');
           } catch {}
           break;
         }
@@ -470,16 +667,22 @@ export default function GameScreen({ account, onLogout }: Props) {
         }
       }
     };
-    net.on(handler);
+    const unsubscribeNet = net.on(handler);
 
     // Cleanup on unmount
     return () => {
+      unsubscribeNet();
+      serverSync.reset();
       net.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const doConnectServer = async () => {
+    if (!onlineAccount || !account.sessionToken) {
+      setNetStatus('🔒 Sign in to an online account first.');
+      return;
+    }
     setNetStatus('Connecting...');
     let url = serverUrl.trim();
     if (!url) return;
@@ -510,22 +713,24 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable) return;
       keysRef.current.add(e.key.toLowerCase());
       // Admin Panel: Ctrl+Shift+A
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') {
+      if (allowLocalAdmin && e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         setShowAdmin((s) => !s);
         return;
       }
-      if (['1', '2', '3', '4'].includes(e.key)) {
+      if (/^[1-8]$/.test(e.key)) {
         e.preventDefault();
-        castSpell(parseInt(e.key) - 1);
+        castSpell(parseInt(e.key, 10) - 1);
       }
       if (e.key.toLowerCase() === 'i') setShowInventory((s) => !s);
       if (e.key.toLowerCase() === 'c') setShowCharacter((s) => !s);
       if (e.key.toLowerCase() === 'q') setShowQuestLog((s) => !s);
+      if (e.key.toLowerCase() === 'h') setShowAdventure((s) => !s);
       if (e.key.toLowerCase() === 't') setShowTalents((s) => !s);
       if (e.key.toLowerCase() === 'r') setAutoAttack((s) => { autoAttackRef.current = !s; return !s; });
-      if (e.key.toLowerCase() === 'b') setShowBestiary((s) => !s);
-      if (e.key.toLowerCase() === 'd') setShowDPS((s) => !s);
+      if (e.key.toLowerCase() === 'b') onlineAccount ? openOfficial('progress') : setShowBestiary((s) => !s);
+      if (e.key.toLowerCase() === 'd') onlineAccount ? openOfficial('progress') : setShowDPS((s) => !s);
+      if (e.key.toLowerCase() === 'o' && onlineAccount) openOfficial('progress');
       if (e.key.toLowerCase() === 'p') usePotion('hp');
       if (e.key.toLowerCase() === 'm') usePotion('mp');
       if (e.key.toLowerCase() === 'e') interactNPC();
@@ -544,6 +749,8 @@ export default function GameScreen({ account, onLogout }: Props) {
   }, []);
 
   const toggleMount = () => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { serverSync.sendMount(); return; }
     const p = playerRef.current;
     const ownedMounts = MOUNTS.filter((m) => m.levelRequired <= p.level);
     if (ownedMounts.length === 0) {
@@ -577,6 +784,15 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const usePotion = (type: 'hp' | 'mp' | 'hpg') => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) {
+      const desired = type === 'mp' ? 'Mana Potion' : type === 'hpg' ? 'Greater Health Potion' : 'Health Potion';
+      const serverItems = serverSync.getRenderState()?.player?.inventory;
+      const item = Array.isArray(serverItems) ? serverItems.find((i: any) => i?.name === desired && i.quantity > 0) : null;
+      if (!item) addMessage('System', `No ${desired}.`, '#ff9090', 'system');
+      else serverSync.sendUseItem(item.id);
+      return;
+    }
     const inv = inventoryRef.current;
     const id = type === 'hp' ? 'hp1' : type === 'mp' ? 'mp1' : 'hpg';
     const potion = inv.find((i) => i.id === id);
@@ -585,19 +801,20 @@ export default function GameScreen({ account, onLogout }: Props) {
       return;
     }
     const p = playerRef.current;
+    const potionDerived = computeDerivedStats(p);
     if (type === 'hp') {
-      if (p.hp >= p.maxHp) return;
-      p.hp = Math.min(p.maxHp, p.hp + 50);
+      if (p.hp >= potionDerived.totalMaxHp) return;
+      p.hp = Math.min(potionDerived.totalMaxHp, p.hp + 50);
       addFloatingText('+50 HP', p.pos, '#2ecc71');
       spawnParticles(p.pos, '#2ecc71', 8);
     } else if (type === 'mp') {
-      if (p.mana >= p.maxMana) return;
-      p.mana = Math.min(p.maxMana, p.mana + 50);
+      if (p.mana >= potionDerived.totalMaxMana) return;
+      p.mana = Math.min(potionDerived.totalMaxMana, p.mana + 50);
       addFloatingText('+50 MP', p.pos, '#3498db');
       spawnParticles(p.pos, '#3498db', 8);
     } else {
-      if (p.hp >= p.maxHp) return;
-      p.hp = Math.min(p.maxHp, p.hp + 200);
+      if (p.hp >= potionDerived.totalMaxHp) return;
+      p.hp = Math.min(potionDerived.totalMaxHp, p.hp + 200);
       addFloatingText('+200 HP', p.pos, '#2ecc71', true);
       spawnParticles(p.pos, '#2ecc71', 15);
     }
@@ -608,6 +825,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const castSpell = (idx: number) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     // AUTHORITATIVE MODE: send cast intent to server
     if (serverSync.isActive()) {
       serverSync.sendCast(idx);
@@ -698,13 +916,13 @@ export default function GameScreen({ account, onLogout }: Props) {
         addMessage('System', '💀 Unholy Frenzy! +50% damage!', '#6a0a6a', 'battle');
       } else if (spell.id === 'blood_tap') {
         const heal = 80;
-        p.hp = Math.min(p.maxHp, p.hp + heal);
+        p.hp = Math.min(derivedForSpell.totalMaxHp, p.hp + heal);
         p.stats.healingDone += heal;
         addFloatingText(`+${heal} HP`, p.pos, '#c13030', true);
         spawnParticles(p.pos, '#c13030', 12);
       } else {
         const healAmt = Math.floor((spell.damage + Math.random() * 20) * magicBonus);
-        p.hp = Math.min(p.maxHp, p.hp + healAmt);
+        p.hp = Math.min(derivedForSpell.totalMaxHp, p.hp + healAmt);
         p.stats.healingDone += healAmt;
         addFloatingText(`+${healAmt}`, p.pos, '#2ecc71', true);
         spawnParticles(p.pos, '#2ecc71', 10);
@@ -809,12 +1027,17 @@ export default function GameScreen({ account, onLogout }: Props) {
     for (const event of activeEvents) {
       if (event.monsterTemplate && event.monsterTemplate.name === m.name) {
         const result = contributeToWorldEvent(event.id, p.name, 1);
-        addMessage('World', `🌍 ${event.name}: ${event.progress.current}/${event.progress.required} (${result.contribution} contributed)`, '#ff6a00', 'world');
+        if (result.accepted > 0 && result.required > 0) {
+          const rewardGold = Math.floor(event.rewardGold * (result.accepted / result.required));
+          const rewardXp = Math.floor(event.rewardXp * (result.accepted / result.required));
+          p.gold += rewardGold;
+          p.xp += rewardXp;
+          p.stats.goldEarned += rewardGold;
+        }
+        addMessage('World', `🌍 ${event.name}: ${result.current}/${result.required} (${result.contribution} contributed)`, '#ff6a00', 'world');
         if (result.completed) {
-          p.gold += event.rewardGold;
-          p.xp += event.rewardXp;
-          addMessage('System', `🌍 WORLD EVENT COMPLETE: ${event.name}! +${event.rewardGold}g, +${event.rewardXp} XP`, '#ffd700', 'system');
-          addToast('loot', 'World Event Done!', `${event.name}: +${event.rewardGold}g +${event.rewardXp}XP`, event.icon, '#ff6a00');
+          addMessage('System', `🌍 WORLD EVENT COMPLETE: ${event.name}!`, '#ffd700', 'system');
+          addToast('loot', 'World Event Done!', event.name, event.icon, '#ff6a00');
           showRaidWarning('WORLD EVENT COMPLETE!', event.icon, '#ff6a00', 4000);
         }
       }
@@ -844,7 +1067,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
       // Check completion
       if (aq.objectives.every((o) => o.current >= o.count)) {
-        const quest = QUESTS.find((q) => q.id === aq.questId);
+        const quest = questCatalog.find((q) => q.id === aq.questId);
         if (quest) {
           p.quests.push(aq.questId);
           p.activeQuests = p.activeQuests.filter((x) => x.questId !== aq.questId);
@@ -945,6 +1168,8 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const travelToMap = (targetMapId: string, spawn: { x: number; y: number }) => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { serverSync.sendTravel(targetMapId); return; }
     const p = playerRef.current;
     const mapData = MAPS[targetMapId];
     if (!mapData) return;
@@ -958,9 +1183,17 @@ export default function GameScreen({ account, onLogout }: Props) {
     setCurrentMapId(targetMapId);
     worldRef.current = generateMap(targetMapId);
     buildingsRef.current = getTownBuildings(mapData.biome);
-    // Reset monsters and NPCs for the new map
-    monstersRef.current = spawnInitialMonsters();
-    npcsRef.current = spawnNPCs();
+    // Reset monsters and NPCs for the new map, including local admin-created content.
+    customNpcsRef.current = getCustomNPCs();
+    customMonstersRef.current = getCustomMonsters();
+    monstersRef.current = [
+      ...spawnInitialMonsters(),
+      ...customContentOnMap(customMonstersRef.current, targetMapId).map(customMonsterToRuntime),
+    ];
+    npcsRef.current = [
+      ...spawnNPCs(),
+      ...customContentOnMap(customNpcsRef.current, targetMapId).map(customNpcToRuntime),
+    ];
     groundItemsRef.current = [];
     p.pos = { ...spawn };
     addMessage('System', `🌍 You traveled to ${mapData.name}. ${mapData.description}`, '#9bd4ff', 'system');
@@ -971,6 +1204,8 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const pickupGroundItem = (ground: GroundItem) => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { serverSync.sendPickup(ground.id); return; }
     const p = playerRef.current;
     let pickedUp: string[] = [];
     for (const item of ground.items) {
@@ -1012,6 +1247,8 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const handleMysteryComplete = (gold: number, xp: number, itemName?: string, itemIcon?: string) => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { openOfficial('library'); return; }
     const p = playerRef.current;
     p.gold += gold;
     p.xp += xp;
@@ -1031,6 +1268,8 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const enterDungeon = (totalWaves: number) => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { serverSync.sendOfficial('dungeon_start', { waves: totalWaves }); setShowDungeon(false); return; }
     const p = playerRef.current;
     dungeonTotalWavesRef.current = totalWaves;
     dungeonWaveRef.current = 1;
@@ -1052,6 +1291,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const attackTarget = (m: Monster) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     // AUTHORITATIVE MODE: send attack intent to server
     if (serverSync.isActive()) {
       serverSync.sendAttack(m.id);
@@ -1112,7 +1352,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     // Lifesteal
     if (derived.lifesteal > 0 && !oneHitKillRef.current) {
       const heal = Math.max(1, Math.floor(dmg * (derived.lifesteal / 100)));
-      p.hp = Math.min(p.maxHp, p.hp + heal);
+      p.hp = Math.min(derived.totalMaxHp, p.hp + heal);
       addFloatingText(`+${heal}`, p.pos, '#ff5599');
       p.stats.healingDone += heal;
     }
@@ -1145,9 +1385,25 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const handleCanvasClick = () => {
+    if (onlineAccount && !serverSync.isActive()) return;
     const tile = mouseTileRef.current;
     if (!tile) return;
     const p = playerRef.current;
+    if (serverSync.isActive()) {
+      const ground = serverGroundRef.current.find((g: any) => g.x === tile.x && g.y === tile.y);
+      if (ground && Math.hypot(tile.x - p.pos.x, tile.y - p.pos.y) <= 2) { serverSync.sendPickup(ground.id); return; }
+      const monster = serverMonstersRef.current.find((m: any) => m.x === tile.x && m.y === tile.y && m.hp > 0);
+      if (monster) { p.targetId = monster.id; serverSync.sendAttack(monster.id); return; }
+      const npc = npcsRef.current.find((candidate) => candidate.pos.x === tile.x && candidate.pos.y === tile.y);
+      if (npc && Math.abs(npc.pos.x - p.pos.x) <= 2 && Math.abs(npc.pos.y - p.pos.y) <= 2) {
+        setActiveDialog(npc);
+        return;
+      }
+      const otherPlayer = serverPlayersRef.current.find((candidate: any) => candidate.x === tile.x && candidate.y === tile.y);
+      if (otherPlayer && officialState?.state?.pvp?.enabled) { serverSync.sendOfficial('pvp_attack', { targetId: otherPlayer.id }); return; }
+      p.targetId = undefined;
+      return;
+    }
     // Click corpse to loot (Tibia-style)
     const ground = groundItemsRef.current.find((g) => g.pos.x === tile.x && g.pos.y === tile.y);
     if (ground && Math.hypot(tile.x - p.pos.x, tile.y - p.pos.y) <= 2) {
@@ -1174,6 +1430,16 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const handleNPCAction = (action: string, npc: NPC, questId?: string) => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) {
+      if (action === 'quest' && questId) serverSync.sendQuestAccept(questId);
+      else if (action === 'bank' || action === 'depot') openOfficial('depot');
+      else if (action === 'mail') openOfficial('mail');
+      else if (action === 'books') openOfficial('library');
+      else if (action === 'food' || action === 'heal' || action === 'train' || action === 'shop') openOfficial('services');
+      setActiveDialog(null);
+      return;
+    }
     const p = playerRef.current;
       if (action === 'shop' && npc.shop) {
         addMessage('System', `🛒 ${npc.name}'s shop opened.`, '#f4e04d', 'system');
@@ -1257,6 +1523,8 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const buyItem = (shopItem: { name: string; icon: string; type: Item['type']; price: number; description?: string; equipment?: Equipment }) => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { const itemId = shopItem.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); serverSync.sendOfficial('shop_buy', { itemId, quantity: 1 }); return; }
     const p = playerRef.current;
     const discount = getShopDiscountFromRep(p);
     const finalPrice = Math.floor(shopItem.price * (1 - discount));
@@ -1290,6 +1558,8 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   // Drop item on the ground (Tibia-style)
   const dropItemOnGround = (item: Item) => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { serverSync.sendDrop(item.id); return; }
     const p = playerRef.current;
     // Create a loot bag / ground item at player's position
     const bagItems = [];
@@ -1303,7 +1573,6 @@ export default function GameScreen({ account, onLogout }: Props) {
     } else {
       bagItems.push({ id: `drop_${Date.now()}`, name: item.name, icon: item.icon, quantity: item.quantity, value: item.value });
     }
-    const { createLootBag } = require('../game/loot');
     groundItemsRef.current.push(createLootBag({ ...p.pos }, bagItems));
     // Remove from inventory
     inventoryRef.current = inventoryRef.current.filter((i) => i.id !== item.id);
@@ -1315,6 +1584,8 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [pvpEnabled, setPvpEnabled] = useState(isPvpEnabled(player.name));
 
   const socketGem = (itemId: string, gemId: string) => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { const targetGem = inventoryRef.current.find((i: any) => i.gemId === gemId || i.name === GEMS.find((g) => g.id === gemId)?.name); if (targetGem) serverSync.sendOfficial('socket_gem', { itemId, gemItemId: targetGem.id }); return; }
     const inv = inventoryRef.current;
     const item = inv.find((i) => i.id === itemId);
     if (!item?.equipment) return;
@@ -1349,8 +1620,9 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const craftItem = (name: string, icon: string, value: number, description?: string) => {
-    const { RECIPES: recipes, canCraft } = require('../game/crafting');
-    const recipe = recipes.find((r: any) => r.result.name === name);
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { const onlineRecipe = RECIPES.find((r) => r.result.name === name || r.name === name); if (onlineRecipe) serverSync.sendOfficial('craft', { recipeId: onlineRecipe.id }); return; }
+    const recipe = RECIPES.find((r) => r.result.name === name);
     if (!recipe) return;
     if (!canCraft(recipe, inventoryRef.current, playerRef.current.level)) {
       addMessage('System', 'Not enough materials.', '#ff9090', 'system');
@@ -1393,7 +1665,9 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const equipItem = (item: Item) => {
+    if (onlineAccount && !serverSync.isActive()) return;
     if (!item.equipment) return;
+    if (serverSync.isActive()) { serverSync.sendEquip(item.id); return; }
     const p = playerRef.current;
     // Level requirement check
     if ((item.equipment.level || 1) > p.level) {
@@ -1423,6 +1697,8 @@ export default function GameScreen({ account, onLogout }: Props) {
   };
 
   const unequipItem = (slot: keyof Player['equipment']) => {
+    if (onlineAccount && !serverSync.isActive()) return;
+    if (serverSync.isActive()) { serverSync.sendUnequip(String(slot)); return; }
     const p = playerRef.current;
     const eq = p.equipment[slot];
     if (!eq) return;
@@ -1467,16 +1743,63 @@ export default function GameScreen({ account, onLogout }: Props) {
         // Sync player state from server snapshot (THE TRUTH)
         const renderState = serverSync.getRenderState();
         if (renderState) {
-          const sp = renderState.player;
-          playerRef.current = { ...playerRef.current, ...sp };
-          // Sync monsters + nearby players from server
+          const sp = renderState.player || {};
+          const { x, y, inventory: serverInventory, quests: serverQuestState, adventure: serverAdventure, skills: serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
+          const serverOfficial = renderState.official;
+          Object.assign(p, compatibleServerPlayer);
+          if (serverSkills && typeof serverSkills === 'object') p.skills = serverSkills;
+          if (Number.isFinite(x) && Number.isFinite(y)) p.pos = { x, y };
+          if (serverStats && typeof serverStats === 'object') p.stats = { ...p.stats, ...serverStats };
+          if (serverAdventure && typeof serverAdventure === 'object') {
+            const signature = JSON.stringify(serverAdventure);
+            if (signature !== lastAdventureSignatureRef.current) {
+              lastAdventureSignatureRef.current = signature;
+              setAdventureState(serverAdventure as AdventureSnapshot);
+            }
+          }
+          if (serverOfficial && typeof serverOfficial === 'object') {
+            const signature = JSON.stringify(serverOfficial);
+            if (signature !== lastOfficialSignatureRef.current) {
+              lastOfficialSignatureRef.current = signature;
+              setOfficialState(serverOfficial);
+              if (Array.isArray(serverOfficial.state?.achievements)) p.achievements = serverOfficial.state.achievements;
+              if (serverOfficial.state?.reputation && typeof serverOfficial.state.reputation === 'object') p.reputation = serverOfficial.state.reputation;
+            }
+          }
+          if (serverQuestState && typeof serverQuestState === 'object') {
+            p.quests = Array.isArray(serverQuestState.completed) ? serverQuestState.completed : p.quests;
+            p.activeQuests = Array.isArray(serverQuestState.active) ? serverQuestState.active.map((q: any) => ({
+              questId: q.questId,
+              objectives: [{ type: 'kill', target: q.target, targetName: q.target, count: q.needed, current: q.current }],
+              startedAt: 0,
+            })) : p.activeQuests;
+          }
+          if (Array.isArray(serverInventory)) {
+            const signature = JSON.stringify(serverInventory);
+            if (signature !== lastServerInventorySignatureRef.current) {
+              lastServerInventorySignatureRef.current = signature;
+              inventoryRef.current = serverInventory;
+              setInventory(serverInventory);
+            }
+          }
+          if (typeof sp.mapId === 'string' && MAPS[sp.mapId] && sp.mapId !== currentMapIdRef.current) {
+            currentMapIdRef.current = sp.mapId;
+            setCurrentMapId(sp.mapId);
+            worldRef.current = generateMap(sp.mapId);
+            buildingsRef.current = getTownBuildings(MAPS[sp.mapId].biome);
+            if (serverNpcCatalogRef.current.length > 0) {
+              npcsRef.current = serverNpcCatalogRef.current
+                .filter((entry) => entry.mapId === sp.mapId)
+                .map((entry) => entry.npc);
+            }
+            audio.teleport();
+          }
           serverMonstersRef.current = renderState.monsters;
           serverPlayersRef.current = renderState.nearbyPlayers;
           serverGroundRef.current = renderState.groundItems;
-          // Process server events (damage numbers, loot, etc.)
           serverSync.processEvents(addFloatingText, addMessage);
         }
-      } else {
+      } else if (!onlineAccount) {
       // LOCAL MODE (single-player or BroadcastChannel): original simulation
       const moveSpeed = Math.max(80, p.speed * 0.7);
       if (now - lastMoveRef.current > moveSpeed) {
@@ -1541,6 +1864,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
       } // end else (local mode)
 
+      if (!onlineAccount) {
       // Auto-loot adjacent corpses (within 1 tile) for fluidity
       const adjacentCorpse = groundItemsRef.current.find((g) => {
         const d = Math.hypot(g.pos.x - p.pos.x, g.pos.y - p.pos.y);
@@ -1565,8 +1889,10 @@ export default function GameScreen({ account, onLogout }: Props) {
       // Buff expiry
       p.buffs = p.buffs.filter((b) => now - b.startTime < b.duration);
 
-      // Stamina decreases over time (1 min per 30s real time)
-      if (now % 30000 < 20) {
+      // Stamina decreases once per 30s. Modulo-based checks could execute on
+      // multiple animation frames inside the same time window.
+      if (now - lastStaminaDrainRef.current >= 30000) {
+        lastStaminaDrainRef.current = now;
         const currentStamina = getStamina(p);
         if (currentStamina > 0) saveStamina(p, currentStamina - 1);
       }
@@ -1626,7 +1952,6 @@ export default function GameScreen({ account, onLogout }: Props) {
               }
             }
           }
-          setPetTick((t) => t + 1);
         }
       } else {
         petStateRef.current = null;
@@ -1837,6 +2162,8 @@ export default function GameScreen({ account, onLogout }: Props) {
         }
       }
 
+      } // end local-only simulation
+
       // Update projectiles & particles
       projectilesRef.current = projectilesRef.current.filter((pp) => now - pp.startTime < pp.duration);
       floatingTextsRef.current = floatingTextsRef.current.filter((ft) => now - ft.startTime < ft.duration);
@@ -1853,7 +2180,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       cameraRef.current.y = Math.max(0, Math.min(MAP_HEIGHT - VIEW_H, p.pos.y - Math.floor(VIEW_H / 2)));
 
       // Broadcast player position to network every ~150ms (throttled)
-      if (net.mode !== 'offline' && now - lastBroadcastRef.current > 150) {
+      if (net.mode === 'local' && now - lastBroadcastRef.current > 150) {
         lastBroadcastRef.current = now;
         const voc = VOCATIONS[p.vocation];
         const mount = p.mountId ? MOUNTS.find((m) => m.id === p.mountId) : null;
@@ -1877,7 +2204,12 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
 
       render(now);
-      setHudTick((t) => (t + 1) % 100000);
+      // Keep the canvas at display refresh rate without forcing a full React
+      // reconciliation every frame. 10fps is ample for cooldown/HUD text.
+      if (now - lastHudTickRef.current >= 100) {
+        lastHudTickRef.current = now;
+        setHudTick((t) => (t + 1) % 100000);
+      }
       rafId = requestAnimationFrame(loop);
     };
     rafId = requestAnimationFrame(loop);
@@ -1955,14 +2287,6 @@ export default function GameScreen({ account, onLogout }: Props) {
       const sy = (b.y - cam.y) * TILE_SIZE;
       if (sx > canvas.width || sy > canvas.height || sx + b.w * TILE_SIZE < 0 || sy + b.h * TILE_SIZE < 0) continue;
       drawBuilding(ctx, sx, sy, b, TILE_SIZE, now);
-    }
-
-    // Custom NPCs (from admin creator)
-    for (const n of customNpcsRef.current) {
-      const sx = (n.posX - cam.x) * TILE_SIZE;
-      const sy = (n.posY - cam.y) * TILE_SIZE;
-      if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
-      drawNPC(ctx, sx, sy, TILE_SIZE, { name: n.name, emoji: n.emoji, color: n.color, role: n.role }, now);
     }
 
     // NPCs
@@ -2109,8 +2433,15 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
     }
 
-    // Draw active pet
-    if (petStateRef.current) {
+    // Draw active pet (server-owned online, local state in Quick Play).
+    if (serverSync.isActive() && officialState?.state?.pets?.active) {
+      const petData = officialState?.catalogs?.pets?.find((pet: any) => pet.id === officialState.state.pets.active);
+      if (petData) {
+        const petX = (p.pos.x + 1 - cam.x) * TILE_SIZE;
+        const petY = (p.pos.y - cam.y) * TILE_SIZE;
+        drawMonster(ctx, petX, petY, TILE_SIZE, { name: petData.name, hp: 1, maxHp: 1, color: petData.color, emoji: petData.icon, msSize: 0.7 }, now);
+      }
+    } else if (petStateRef.current) {
       const pet = petStateRef.current;
       const petData = PETS.find((pd) => pd.id === pet.petId);
       if (petData) {
@@ -2265,65 +2596,80 @@ export default function GameScreen({ account, onLogout }: Props) {
     ctx.restore();
   };
 
-  const availableQuests = getAvailableQuests(player.quests, player.level, player.activeQuests.map((a) => a.questId));
+  const localAvailableQuests = getAvailableQuests(player.quests, player.level, player.activeQuests.map((a) => a.questId));
+  const questCatalog = serverSync.isActive() && serverQuestCatalog.length > 0 ? serverQuestCatalog : QUESTS;
+  const activeQuestIds = new Set(player.activeQuests.map((quest) => quest.questId));
+  const completedQuestIds = new Set(player.quests);
+  const authoritativeAvailableQuests = questCatalog.filter((quest) =>
+    player.level >= quest.levelRequired
+    && !activeQuestIds.has(quest.id)
+    && !completedQuestIds.has(quest.id)
+    && (quest.requires || []).every((required) => completedQuestIds.has(required))
+  );
+  const availableQuests = serverSync.isActive() ? authoritativeAvailableQuests : localAvailableQuests;
+
+  const quickActions: Record<string, { icon: string; label: string; hotkey: string; onClick: () => void }> = {
+    adventure: { icon: '⚔', label: 'Hunts', hotkey: 'H', onClick: () => setShowAdventure((v) => !v) },
+    quests: { icon: '📜', label: 'Quests', hotkey: 'Q', onClick: () => setShowQuestLog((v) => !v) },
+    char: { icon: '👤', label: 'Char', hotkey: 'C', onClick: () => setShowCharacter((v) => !v) },
+    talents: { icon: '🌟', label: 'Talents', hotkey: 'T', onClick: () => setShowTalents((v) => !v) },
+    bestiary: { icon: '📖', label: 'Bestiary', hotkey: 'B', onClick: () => onlineAccount ? openOfficial('progress') : setShowBestiary((v) => !v) },
+    dps: { icon: '📊', label: 'DPS', hotkey: 'D', onClick: () => onlineAccount ? openOfficial('progress') : setShowDPS((v) => !v) },
+    dungeon: { icon: '🌀', label: 'Dungeon', hotkey: '', onClick: () => onlineAccount ? openOfficial('dungeon') : setShowDungeon(true) },
+    pet: { icon: '🐾', label: 'Pet', hotkey: '', onClick: () => onlineAccount ? openOfficial('pets') : setShowPetShop(true) },
+    mystery: { icon: '✦', label: 'Mystery', hotkey: '', onClick: () => onlineAccount ? openOfficial('library') : setShowMysteryBook(true) },
+    depot: { icon: '🗄', label: 'Depot', hotkey: '', onClick: () => onlineAccount ? openOfficial('depot') : setShowDepot(true) },
+    books: { icon: '📚', label: 'Books', hotkey: '', onClick: () => onlineAccount ? openOfficial('library') : setShowBooks(true) },
+    auction: { icon: '🏛', label: 'AH', hotkey: '', onClick: () => onlineAccount ? openOfficial('auction') : setShowAuction(true) },
+    coins: { icon: '💎', label: 'Coins', hotkey: '', onClick: () => onlineAccount ? openOfficial('coins') : setShowCoinShop(true) },
+    world: { icon: '🌍', label: 'World', hotkey: '', onClick: () => onlineAccount ? openOfficial('world') : setShowWorldEvents(true) },
+    mail: { icon: '📮', label: 'Mail', hotkey: '', onClick: () => onlineAccount ? openOfficial('mail') : setShowMail(true) },
+    inv: { icon: '📦', label: 'Inv', hotkey: 'I', onClick: () => setShowInventory((v) => !v) },
+  };
+  const orderedQuickActions = uiLayout.panelOrder.map((id) => ({ id, action: quickActions[id] })).filter((entry) => Boolean(entry.action));
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-black text-amber-100 overflow-hidden select-none">
+    <div className="w-screen h-screen flex flex-col bg-[#05070c] text-slate-100 overflow-hidden select-none">
       {/* Top bar */}
-      <div
-        className="flex items-center justify-between px-3 py-1 border-b-2 text-xs"
-        style={{
-          background: 'linear-gradient(180deg, #3a2a1a 0%, #1a0f05 100%)',
-          borderColor: '#8b6914',
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-amber-400 font-bold tracking-widest" style={{ fontFamily: 'serif' }}>MOR'IA</span>
-          <span className="text-amber-200/50">· {VOCATIONS[player.vocation]?.name} Lv{player.level} ·</span>
-          <span className="px-2 py-0.5 rounded text-[10px] border" style={{ color: MAPS[currentMapId]?.biome === 'snow' ? '#9bd4ff' : MAPS[currentMapId]?.biome === 'shadow' ? '#9b59ff' : '#2ecc71', borderColor: 'currentColor' }}>🌍 {MAPS[currentMapId]?.name}</span>
+      <div className="moria-panel relative z-40 flex min-h-12 shrink-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-1.5 text-xs">
+        <div className="flex shrink-0 items-center gap-3 pr-2">
+          <span className="moria-title text-base font-black tracking-[0.16em] text-amber-100">MOR'IA</span>
+          <span className="hidden text-slate-500 md:inline">{VOCATIONS[player.vocation]?.name} · Lv {player.level}</span>
+          <span className="moria-chip rounded-lg px-2 py-1 text-[9px] font-bold tracking-wider" style={{ color: MAPS[currentMapId]?.biome === 'snow' ? '#9bd4ff' : MAPS[currentMapId]?.biome === 'shadow' ? '#b398ff' : '#71d8ac', borderColor: 'currentColor' }}>◆ {MAPS[currentMapId]?.name}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <TopButton icon="📜" label="Quests" hotkey="Q" onClick={() => setShowQuestLog((s) => !s)} />
-          <TopButton icon="👤" label="Char" hotkey="C" onClick={() => setShowCharacter((s) => !s)} />
-          <TopButton icon="🌟" label="Talents" hotkey="T" onClick={() => setShowTalents((s) => !s)} />
-          <TopButton icon="📖" label="Bestiary" hotkey="B" onClick={() => setShowBestiary((s) => !s)} />
-          <TopButton icon="📊" label="DPS" hotkey="D" onClick={() => setShowDPS((s) => !s)} />
-          <TopButton icon="🌀" label="Dungeon" hotkey="" onClick={() => setShowDungeon(true)} />
-          <TopButton icon="🐾" label="Pet" hotkey="" onClick={() => setShowPetShop(true)} />
-          <TopButton icon="✦" label="Mystery" hotkey="" onClick={() => setShowMysteryBook(true)} />
-          <TopButton icon="🗄" label="Depot" hotkey="" onClick={() => setShowDepot(true)} />
-          <TopButton icon="📚" label="Books" hotkey="" onClick={() => setShowBooks(true)} />
-          <TopButton icon="🏛" label="AH" hotkey="" onClick={() => { setShowAuction(true); }} />
-          <TopButton icon="💎" label="Coins" hotkey="" onClick={() => { setShowCoinShop(true); }} />
-          <TopButton icon="🌍" label="World" hotkey="" onClick={() => setShowWorldEvents(true)} />
-          <TopButton icon="📮" label="Mail" hotkey="" onClick={() => setShowMail(true)} />
-          <TopButton icon="📦" label="Inv" hotkey="I" onClick={() => setShowInventory((s) => !s)} />
+        <div className="moria-scrollbar flex min-w-0 flex-1 items-center justify-end gap-1 overflow-x-auto pb-0.5">
+          {orderedQuickActions.map(({ id, action }) => (
+            <TopButton key={id} icon={action.icon} label={action.label} hotkey={action.hotkey} onClick={action.onClick} />
+          ))}
+          {onlineAccount && <TopButton icon="🌐" label="Hub" hotkey="O" onClick={() => openOfficial('progress')} />}
           <TopButton icon="⚙" label="UI" hotkey="" onClick={() => setShowUIEditor(true)} />
           <TopButton icon="🐎" label="Mount" hotkey="SPACE" onClick={toggleMount} />
-          <button
-            onClick={() => setShowAdmin((s) => !s)}
-            className="px-2 py-0.5 text-xs rounded bg-purple-900/50 hover:bg-purple-800/60 text-purple-100 border border-purple-700/50 flex items-center gap-1"
-            title="Admin Panel (Ctrl+Shift+A)"
-          >
-            <span>⚡</span><span className="hidden lg:inline">Admin</span>
-          </button>
+          {allowLocalAdmin && (
+            <button
+              onClick={() => setShowAdmin((s) => !s)}
+              className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-violet-200"
+              title="Offline Debug Admin (Ctrl+Shift+A)"
+            >
+              <span>⚡</span><span className="hidden lg:inline">Debug</span>
+            </button>
+          )}
           <button
             onClick={() => { const m = !muted; setMuted(m); audio.setMuted(m); if (!m) audio.startMusic(MAPS[currentMapId]?.biome || 'plains'); }}
-            className={`px-2 py-0.5 text-xs rounded border ${muted ? 'bg-gray-800/50 text-gray-500 border-gray-600' : 'bg-blue-900/50 text-blue-200 border-blue-600'}`}
+            className={`moria-button shrink-0 rounded-lg px-2 py-1 text-[10px] ${muted ? 'text-slate-600' : 'text-sky-200'}`}
             title={muted ? 'Unmute' : 'Mute audio'}
           >
             {muted ? '🔇' : '🔊'}
           </button>
           <button
             onClick={() => setShowConnect(true)}
-            className={`px-2 py-0.5 text-xs rounded border flex items-center gap-1 ${netMode === 'online' ? 'bg-green-900/50 text-green-200 border-green-600' : netMode === 'local' ? 'bg-yellow-900/50 text-yellow-200 border-yellow-600' : 'bg-gray-800/50 text-gray-400 border-gray-600'}`}
+            className={`moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] ${netMode === 'online' ? 'text-emerald-200' : netMode === 'local' ? 'text-amber-200' : 'text-slate-500'}`}
             title="Connect to Mor'ia server for real online play"
           >
             {netMode === 'online' ? '🟢' : netMode === 'local' ? '🟡' : '⚫'} <span className="hidden lg:inline">{onlineCount} online</span>
           </button>
           <button
             onClick={onLogout}
-            className="px-2 py-0.5 text-xs rounded bg-red-900/50 hover:bg-red-800/60 text-red-100 border border-red-700/50"
+            className="moria-button shrink-0 rounded-lg px-2 py-1 text-[10px] text-rose-200"
           >
             🚪 Logout
           </button>
@@ -2331,7 +2677,9 @@ export default function GameScreen({ account, onLogout }: Props) {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex items-center justify-center bg-black relative">
+        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#03060a]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(70,100,140,0.10),transparent_44%),linear-gradient(180deg,rgba(8,12,19,0.2),rgba(0,0,0,0.72))]" />
+          <div className="pointer-events-none absolute inset-x-[8%] top-0 h-px bg-gradient-to-r from-transparent via-amber-200/20 to-transparent" />
           <canvas
             ref={canvasRef}
             width={VIEW_W * TILE_SIZE}
@@ -2346,31 +2694,28 @@ export default function GameScreen({ account, onLogout }: Props) {
               transform: `scale(${zoom})`,
               transformOrigin: 'center center',
               transition: 'transform 0.2s ease-out',
+              borderRadius: '16px',
+              background: '#05080d',
+              boxShadow: '0 28px 90px rgba(0,0,0,0.58), 0 0 0 1px rgba(164,184,216,0.10), 0 0 55px rgba(110,168,255,0.05)',
             }}
           />
           {/* Zoom controls */}
-          <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-10">
-            <button onClick={() => { const nz = Math.min(2.5, zoomRef.current + 0.25); zoomRef.current = nz; setZoom(nz); }}
-                    className="w-9 h-9 rounded-lg border border-amber-700/50 bg-black/70 text-amber-200 text-lg font-bold hover:bg-amber-900/50">+</button>
-            <div className="text-center text-[9px] text-amber-200/60 bg-black/70 rounded py-0.5">{Math.round(zoom * 100)}%</div>
-            <button onClick={() => { const nz = Math.max(0.6, zoomRef.current - 0.25); zoomRef.current = nz; setZoom(nz); }}
-                    className="w-9 h-9 rounded-lg border border-amber-700/50 bg-black/70 text-amber-200 text-lg font-bold hover:bg-amber-900/50">−</button>
-            <button onClick={() => { zoomRef.current = 1; setZoom(1); }}
-                    className="w-9 h-9 rounded-lg border border-amber-700/50 bg-black/70 text-amber-200 text-xs hover:bg-amber-900/50" title="Reset zoom">⊙</button>
+          <div className="moria-panel absolute bottom-4 right-4 z-20 flex flex-col gap-1 rounded-xl p-1.5">
+            <button onClick={() => { const nz = Math.min(2.5, zoomRef.current + 0.25); zoomRef.current = nz; setZoom(nz); }} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-base font-black">+</button>
+            <div className="text-center font-mono text-[8px] text-slate-400">{Math.round(zoom * 100)}%</div>
+            <button onClick={() => { const nz = Math.max(0.6, zoomRef.current - 0.25); zoomRef.current = nz; setZoom(nz); }} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-base font-black">−</button>
+            <button onClick={() => { zoomRef.current = 1; setZoom(1); }} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-xs" title="Reset zoom">⊙</button>
           </div>
 
           {/* Target Frame */}
           {player.targetId && (() => {
-            const t = monstersRef.current.find((m) => m.id === player.targetId);
-            if (!t || t.dead) return null;
+            const t = serverSync.isActive()
+              ? serverMonstersRef.current.find((m: any) => m.id === player.targetId && m.hp > 0)
+              : monstersRef.current.find((m) => m.id === player.targetId && !m.dead);
+            if (!t) return null;
             return (
-              <div
-                className="absolute top-2 left-2 rounded border-2 p-2 backdrop-blur-sm min-w-[220px]"
-                style={{
-                  background: 'linear-gradient(180deg, rgba(60,20,20,0.9) 0%, rgba(30,10,10,0.95) 100%)',
-                  borderColor: t.type === 'boss' ? '#ffd700' : t.type === 'elite' ? '#c832ff' : '#8b2020',
-                }}
-              >
+              <div className="moria-panel absolute left-3 top-3 min-w-[230px] rounded-2xl border p-3" style={{ borderColor: t.type === 'boss' ? 'rgba(255,216,123,.62)' : t.type === 'elite' ? 'rgba(184,138,255,.56)' : 'rgba(255,100,116,.42)' }}>
+                <div className="moria-eyebrow mb-2" style={{ color: t.type === 'boss' ? '#ffd87b' : t.type === 'elite' ? '#b88aff' : '#ff818d' }}>{t.type === 'boss' ? 'BOSS TARGET' : t.type === 'elite' ? 'ELITE TARGET' : 'TARGET'}</div>
                 <div className="flex items-center gap-2">
                   <div className="text-2xl">{t.emoji}</div>
                   <div className="flex-1">
@@ -2379,7 +2724,7 @@ export default function GameScreen({ account, onLogout }: Props) {
                       <span className="text-amber-200/60 text-xs">Lv {t.level}</span>
                     </div>
                     <div className="h-2 bg-black/60 rounded overflow-hidden border border-red-900/50 mt-1">
-                      <div className="h-full bg-gradient-to-r from-red-600 to-red-400" style={{ width: `${(t.hp / t.maxHp) * 100}%` }} />
+                      <div className="h-full bg-gradient-to-r from-rose-700 to-rose-400" style={{ width: `${Math.max(0, Math.min(100, (t.hp / Math.max(1, t.maxHp)) * 100))}%` }} />
                     </div>
                     <div className="text-[10px] text-red-300 mt-0.5">{Math.max(0, t.hp)} / {t.maxHp}</div>
                   </div>
@@ -2388,24 +2733,40 @@ export default function GameScreen({ account, onLogout }: Props) {
             );
           })()}
 
+
+          {/* Active Hunt Tracker */}
+          {serverSync.isActive() && adventureState?.active && (
+            <div className="moria-panel absolute left-3 top-[132px] z-10 w-[245px] rounded-2xl border border-sky-300/25 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="moria-eyebrow text-[8px] text-sky-200/70">⚔ ACTIVE HUNT</div>
+                {adventureState.combo.count > 1 && <div className="text-[9px] font-black text-amber-300">⚡ {adventureState.combo.count}x · +{Math.round((adventureState.combo.multiplier - 1) * 100)}% XP</div>}
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="text-xl">{adventureState.active.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-black text-slate-100">{adventureState.active.title}</div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-black/50">
+                    <div className={`h-full ${adventureState.active.ready ? 'bg-amber-300' : 'bg-sky-400'}`} style={{ width: `${Math.min(100, (adventureState.active.progress / Math.max(1, adventureState.active.count)) * 100)}%` }} />
+                  </div>
+                  <div className="mt-1 flex justify-between text-[9px] text-slate-400"><span>{adventureState.active.targetLabel}</span><span>{adventureState.active.progress}/{adventureState.active.count}</span></div>
+                </div>
+              </div>
+              {adventureState.active.ready && <button onClick={() => setShowAdventure(true)} className="moria-button-primary mt-2 w-full rounded-lg py-1 text-[9px] font-black">🏆 REWARD READY</button>}
+            </div>
+          )}
+
           {/* Active Quest Tracker */}
           {player.activeQuests.length > 0 && (
-            <div
-              className="absolute top-2 right-2 rounded border-2 p-2 backdrop-blur-sm max-w-[260px]"
-              style={{
-                background: 'linear-gradient(180deg, rgba(40,30,10,0.9) 0%, rgba(20,15,5,0.95) 100%)',
-                borderColor: '#8b6914',
-              }}
-            >
-              <div className="text-[10px] text-amber-200/60 tracking-widest mb-1">📜 ACTIVE QUESTS</div>
+            <div className="moria-panel absolute right-3 top-3 max-w-[270px] rounded-2xl border border-amber-200/20 p-3">
+              <div className="moria-eyebrow mb-2 text-[9px] text-amber-200/80">📜 ACTIVE QUESTS</div>
               {player.activeQuests.slice(0, 3).map((aq) => {
-                const quest = QUESTS.find((q) => q.id === aq.questId);
+                const quest = questCatalog.find((q) => q.id === aq.questId);
                 if (!quest) return null;
                 return (
                   <div key={aq.questId} className="mb-1 last:mb-0">
-                    <div className="text-xs text-amber-200 font-semibold">{quest.name}</div>
+                    <div className="text-xs font-bold text-slate-100">{quest.name}</div>
                     {aq.objectives.map((o, i) => (
-                      <div key={i} className="text-[10px] text-amber-200/70">
+                      <div key={i} className="text-[10px] text-slate-400">
                         {o.current >= o.count ? '✅' : '○'} {o.targetName}: {o.current}/{o.count}
                       </div>
                     ))}
@@ -2421,9 +2782,15 @@ export default function GameScreen({ account, onLogout }: Props) {
               items={inventory}
               onClose={() => setShowInventory(false)}
               onUse={(item) => {
-                if (item.id === 'hp1') usePotion('hp');
-                else if (item.id === 'mp1') usePotion('mp');
-                else if (item.id === 'hpg') usePotion('hpg');
+                if (serverSync.isActive()) {
+                  if (item.name === 'Health Potion') usePotion('hp');
+                  else if (item.name === 'Mana Potion') usePotion('mp');
+                  else if (item.name === 'Greater Health Potion') usePotion('hpg');
+                } else {
+                  if (item.id === 'hp1') usePotion('hp');
+                  else if (item.id === 'mp1') usePotion('mp');
+                  else if (item.id === 'hpg') usePotion('hpg');
+                }
               }}
               onEquip={equipItem}
               shopItems={activeDialog?.shop}
@@ -2440,6 +2807,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           {showCharacter && (
             <CharacterPanel
               player={player}
+              official={serverSync.isActive() ? officialState : null}
               onClose={() => setShowCharacter(false)}
               onUnequip={unequipItem}
             />
@@ -2454,7 +2822,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           {showBestiary && (
             <Bestiary player={player} onClose={() => setShowBestiary(false)} />
           )}
-          {showDPS && (
+          {showDPS && !serverSync.isActive() && (
             <DPSMeter onClose={() => setShowDPS(false)} />
           )}
           {showDungeon && (
@@ -2470,10 +2838,22 @@ export default function GameScreen({ account, onLogout }: Props) {
             <BookLibrary player={player} onClose={() => setShowBooks(false)} />
           )}
           {showAuction && (
-            <AuctionHouse player={player} inventory={inventory} setInventory={setInventory} onClose={() => setShowAuction(false)} addMessage={addMessage} />
+            <AuctionHouse player={player} inventory={inventory} setInventory={setInventory} setPlayer={setPlayer} onClose={() => setShowAuction(false)} addMessage={addMessage} />
           )}
           {showCoinShop && (
-            <CoinShop player={player} onClose={() => setShowCoinShop(false)} addMessage={addMessage} />
+            <CoinShop
+              player={player}
+              onClose={() => setShowCoinShop(false)}
+              addMessage={addMessage}
+              onPurchase={(item) => {
+                if (item.effect !== 'allblessings') return false;
+                const p = playerRef.current;
+                grantAllBlessings(p);
+                setPlayer({ ...p });
+                addToast('loot', 'Blessings Granted', 'All five blessings and AOL are active.', item.icon, '#f4e04d');
+                return true;
+              }}
+            />
           )}
           {showWorldEvents && (
             <WorldEvents player={player} onClose={() => setShowWorldEvents(false)} onContribute={(gold: number, xp: number) => {
@@ -2481,16 +2861,15 @@ export default function GameScreen({ account, onLogout }: Props) {
               addMessage('System', `🌍 World event reward: +${gold}g, +${xp} XP`, '#ff6a00', 'system');
             }} />
           )}
-          {showWorldEventCreator && (
+          {allowLocalAdmin && showWorldEventCreator && (
             <WorldEventCreator onClose={() => setShowWorldEventCreator(false)} />
           )}
           {showConnect && (
-            <div className="absolute inset-0 flex items-center justify-center p-4 z-50"
-                 style={{ background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)' }}
+            <div className="moria-overlay absolute inset-0 z-50 flex items-center justify-center p-3 sm:p-5"
                  onClick={() => setShowConnect(false)}>
               <div onClick={(e) => e.stopPropagation()}
-                   className="rounded-xl border-2 p-6 max-w-md w-full"
-                   style={{ background: 'linear-gradient(180deg, rgba(20,30,20,0.98) 0%, rgba(10,15,10,0.98) 100%)', borderColor: netMode === 'online' ? '#2ecc71' : '#9bd4ff', boxShadow: `0 0 50px ${netMode === 'online' ? 'rgba(46,204,113,0.4)' : 'rgba(155,212,255,0.3)'}` }}>
+                   className="moria-panel w-full max-w-md rounded-3xl border p-5 sm:p-6"
+                   style={{ borderColor: netMode === 'online' ? 'rgba(46,204,113,.35)' : 'rgba(125,211,252,.25)', boxShadow: `0 30px 90px rgba(0,0,0,.6), 0 0 45px ${netMode === 'online' ? 'rgba(46,204,113,.10)' : 'rgba(56,189,248,.08)'}` }}>
                 <div className="text-center mb-4">
                   <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
                       style={{ backgroundImage: `linear-gradient(180deg, ${netMode === 'online' ? '#2ecc71' : '#9bd4ff'} 0%, #4a90e2 100%)` }}>🔌 CONNECT TO SERVER</h2>
@@ -2505,9 +2884,9 @@ export default function GameScreen({ account, onLogout }: Props) {
                 <label className="text-xs text-blue-200/70 block mb-1">Server URL (ws:// or wss://):</label>
                 <input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doConnectServer()}
                        placeholder={net.detectServerUrl() || 'ws://localhost:3000/ws'}
-                       className="w-full px-3 py-2 rounded bg-black/60 border border-blue-700/50 text-blue-100 text-sm mb-2 focus:outline-none focus:border-blue-500" />
+                       className="moria-input mb-2 w-full rounded-xl px-3 py-2 text-sm text-sky-100" />
                 <button onClick={doConnectServer}
-                        className="w-full py-2.5 rounded bg-gradient-to-b from-blue-500 to-blue-700 text-white font-bold text-sm mb-2">
+                        className="moria-button-primary mb-2 w-full rounded-xl py-2.5 text-sm font-bold">
                   🔌 Connect
                 </button>
                 {netStatus && <div className="text-center text-xs text-blue-200/70 mb-2">{netStatus}</div>}
@@ -2515,53 +2894,65 @@ export default function GameScreen({ account, onLogout }: Props) {
                   <b>To run your own server:</b> Open the <code className="text-blue-300">server/</code> folder, run <code className="text-blue-300">npm install && npm start</code>.<br/>
                   For internet play, tunnel with <code className="text-blue-300">npm run tunnel</code> and paste the URL here.
                 </div>
-                <button onClick={() => setShowConnect(false)} className="w-full mt-2 py-1.5 rounded bg-black/40 text-blue-200/60 text-xs border border-blue-900/50">Close</button>
+                <button onClick={() => setShowConnect(false)} className="moria-button mt-2 w-full rounded-lg py-1.5 text-xs text-sky-200">Close</button>
               </div>
             </div>
           )}
           {showMail && (
-            <MailBox player={player} inventory={inventory} setInventory={setInventory} onClose={() => setShowMail(false)} addMessage={addMessage} />
+            <MailBox
+              player={player}
+              inventory={inventory}
+              setInventory={setInventory}
+              onClose={() => setShowMail(false)}
+              addMessage={addMessage}
+              onClaimGold={(amount) => {
+                const p = playerRef.current;
+                p.gold += Math.max(0, Math.floor(amount));
+                p.stats.goldEarned += Math.max(0, Math.floor(amount));
+                setPlayer({ ...p });
+              }}
+            />
           )}
           {showUIEditor && (
-            <UILayoutEditor player={player} onClose={() => setShowUIEditor(false)} />
+            <UILayoutEditor player={player} layout={uiLayout} onLayoutChange={setUILayoutState} onClose={() => setShowUIEditor(false)} />
           )}
-          {showQuestCreator && (
+          {allowLocalAdmin && showQuestCreator && (
             <QuestCreator onClose={() => setShowQuestCreator(false)} />
           )}
           {showPetShop && (
             <PetShop player={player} onClose={() => setShowPetShop(false)} onBuyPet={(petId, price) => {
               const p = playerRef.current;
-              if (p.gold < price) { addMessage('System', 'Not enough gold.', '#ff9090', 'system'); return; }
-              p.gold -= price;
-              buyPet(p.name, petId);
               const pet = PETS.find((pd) => pd.id === petId);
-              addMessage('System', `🐾 Tamed ${pet?.icon} ${pet?.name}!`, pet?.color || '#ff9bcc', 'system');
-              addToast('info', 'New Companion!', `${pet?.name} joins you!`, pet?.icon || '🐾', pet?.color || '#ff9bcc');
+              if (!pet) { addMessage('System', 'Unknown companion.', '#ff9090', 'system'); return false; }
+              if (p.gold < price) { addMessage('System', 'Not enough gold.', '#ff9090', 'system'); return false; }
+              if (!buyPet(p.name, petId)) { addMessage('System', 'Companion already owned.', '#ff9090', 'system'); return false; }
+              p.gold -= price;
+              addMessage('System', `🐾 Tamed ${pet.icon} ${pet.name}!`, pet.color, 'system');
+              addToast('info', 'New Companion!', `${pet.name} joins you!`, pet.icon, pet.color);
               setPlayer({ ...p });
+              return true;
             }} />
           )}
 
           {/* Dungeon indicator */}
           {inDungeon && (
-            <div className="absolute top-14 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full border-2 z-10 pointer-events-none animate-pulse"
-                 style={{ background: 'linear-gradient(180deg, rgba(80,20,80,0.9) 0%, rgba(30,5,30,0.95) 100%)', borderColor: '#c832ff', boxShadow: '0 0 20px rgba(200,50,255,0.6)' }}>
+            <div className="moria-panel pointer-events-none absolute left-1/2 top-14 z-10 -translate-x-1/2 animate-pulse rounded-full border border-violet-300/40 px-4 py-1.5"
+                 style={{ boxShadow: '0 0 28px rgba(168,85,247,.18)' }}>
               <span className="text-purple-200 font-bold text-sm tracking-wider">🌀 DUNGEON · WAVE {dungeonWave}/{dungeonTotalWavesRef.current}</span>
             </div>
           )}
 
           {/* Food Shop */}
           {showFoodShop && (
-            <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
-                 style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+            <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
                  onClick={() => setShowFoodShop(false)}>
               <div onClick={(e) => e.stopPropagation()}
-                   className="rounded-lg border-2 p-4 max-w-lg w-full"
-                   style={{ background: 'linear-gradient(180deg, rgba(60,40,20,0.98) 0%, rgba(30,20,10,0.98) 100%)', borderColor: '#ff9bcc' }}>
+                   className="moria-panel w-full max-w-lg rounded-3xl border border-pink-300/20 p-4 sm:p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-lg font-bold tracking-widest text-amber-100">🍽 FOOD & DRINKS</h2>
                   <button onClick={() => setShowFoodShop(false)} className="text-amber-200/60 hover:text-amber-100 text-xl">✕</button>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {FOOD_ITEMS.map((food) => {
                     const canBuy = player.level >= food.levelRequired && player.gold >= food.cost;
                     return (
@@ -2597,9 +2988,9 @@ export default function GameScreen({ account, onLogout }: Props) {
             player={player}
             spells={spells}
             potions={{
-              hp: inventory.find((i) => i.id === 'hp1')?.quantity ?? 0,
-              mp: inventory.find((i) => i.id === 'mp1')?.quantity ?? 0,
-              hpg: inventory.find((i) => i.id === 'hpg')?.quantity ?? 0,
+              hp: inventory.find((i) => serverSync.isActive() ? i.name === 'Health Potion' : i.id === 'hp1')?.quantity ?? 0,
+              mp: inventory.find((i) => serverSync.isActive() ? i.name === 'Mana Potion' : i.id === 'mp1')?.quantity ?? 0,
+              hpg: inventory.find((i) => serverSync.isActive() ? i.name === 'Greater Health Potion' : i.id === 'hpg')?.quantity ?? 0,
             }}
             onCastSpell={castSpell}
             onUsePotion={usePotion}
@@ -2607,16 +2998,18 @@ export default function GameScreen({ account, onLogout }: Props) {
 
           {/* Skull / PvP indicator */}
           {(() => {
-            const skull = getSkullState(player.name);
-            const info = SKULLS[skull.type];
+            const onlinePvp = serverSync.isActive() ? officialState?.state?.pvp : null;
+            const skullType = (onlinePvp?.skull || getSkullState(player.name).type) as keyof typeof SKULLS;
+            const info = SKULLS[skullType] || SKULLS.none;
+            const enabled = onlinePvp ? Boolean(onlinePvp.enabled) : pvpEnabled;
             return (
               <div className="absolute top-14 right-2 flex flex-col items-end gap-1 z-10 pointer-events-auto">
                 <button
-                  onClick={() => { const en = togglePvp(player.name); setPvpEnabled(en); addMessage('System', `PvP ${en ? 'ENABLED ⚔' : 'disabled'}.`, en ? '#ff6060' : '#9bd4ff', 'system'); }}
-                  className={`px-2 py-1 rounded text-[10px] font-bold border ${pvpEnabled ? 'bg-red-900/50 text-red-300 border-red-600' : 'bg-black/50 text-gray-400 border-gray-700'}`}>
-                  ⚔ PvP {pvpEnabled ? 'ON' : 'OFF'}
+                  onClick={() => { if (serverSync.isActive()) serverSync.sendOfficial('pvp_toggle'); else { const en = togglePvp(player.name); setPvpEnabled(en); addMessage('System', `PvP ${en ? 'ENABLED ⚔' : 'disabled'}.`, en ? '#ff6060' : '#9bd4ff', 'system'); } }}
+                  className={`px-2 py-1 rounded text-[10px] font-bold border ${enabled ? 'bg-red-900/50 text-red-300 border-red-600' : 'bg-black/50 text-gray-400 border-gray-700'}`}>
+                  ⚔ PvP {enabled ? 'ON' : 'OFF'}
                 </button>
-                {skull.type !== 'none' && (
+                {skullType !== 'none' && (
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded border" style={{ background: info.color + '30', borderColor: info.color }}>
                     <span style={{ color: info.color }}>{info.icon}</span>
                     <span className="text-[10px] font-bold" style={{ color: info.color }}>{info.name}</span>
@@ -2628,12 +3021,37 @@ export default function GameScreen({ account, onLogout }: Props) {
 
           {/* Chat - WoW style bottom-left */}
           <Chat messages={messages} onSendMessage={(text) => { addMessage(player.name, text, '#ffffff', 'world'); broadcastChat(player.name, text, '#ffffff', 'world'); }} />
+
+          {showOfficialHub && serverSync.isActive() && officialState && (
+            <OfficialSystemsHub
+              player={player}
+              inventory={inventory}
+              official={officialState}
+              nearbyPlayers={serverPlayersRef.current}
+              initialTab={officialTab}
+              onAction={(action, payload) => serverSync.sendOfficial(action, payload)}
+              onClose={() => setShowOfficialHub(false)}
+            />
+          )}
+
+          {showAdventure && (
+            <AdventureBoard
+              state={adventureState}
+              connected={serverSync.isActive()}
+              onStart={(contractId) => serverSync.sendAdventureStart(contractId)}
+              onAbandon={() => serverSync.sendAdventureAbandon()}
+              onClaim={() => serverSync.sendAdventureClaim()}
+              onClose={() => setShowAdventure(false)}
+            />
+          )}
+
           {showQuestLog && (
             <QuestLog
-              activeQuests={serverSync.isActive() && serverQuestsRef.current ? serverQuestsRef.current.active : player.activeQuests}
+              activeQuests={player.activeQuests}
               completedQuests={serverSync.isActive() && serverQuestsRef.current ? serverQuestsRef.current.completed : player.quests}
               availableQuests={availableQuests}
-              achievements={player.achievements}
+              questCatalog={questCatalog}
+              achievements={serverSync.isActive() ? (officialState?.state?.achievements || []) : player.achievements}
               stats={player.stats}
               onClose={() => setShowQuestLog(false)}
               onAcceptQuest={serverSync.isActive() ? (id: string) => serverSync.sendQuestAccept(id) : undefined}
@@ -2646,6 +3064,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               onAction={(action: string, questId?: string) => handleNPCAction(action, activeDialog, questId)}
               onClose={() => setActiveDialog(null)}
               player={player}
+              questCatalog={questCatalog}
             />
           )}
           <Toaster toasts={toasts} onDismiss={(id: string) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
@@ -2692,14 +3111,14 @@ export default function GameScreen({ account, onLogout }: Props) {
             </div>
           )}
 
-          {showEditor && (
+          {allowLocalAdmin && showEditor && (
             <GameEditor
               player={player}
               setPlayer={(p) => setPlayer(p)}
               onClose={() => { setShowEditor(false); refreshCustomContent(); }}
             />
           )}
-          {showAdmin && (
+          {allowLocalAdmin && showAdmin && (
             <AdminPanel
               player={player}
               setPlayer={(p) => setPlayer(p)}
@@ -2724,7 +3143,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           )}
         </div>
 
-        <HUD player={player} tick={hudTick} spells={spells} onCastSpell={castSpell} monsters={monstersRef.current} />
+        <HUD player={player} tick={hudTick} spells={spells} onCastSpell={castSpell} monsters={monstersRef.current} official={serverSync.isActive() ? officialState : null} />
       </div>
 
     </div>
@@ -2732,21 +3151,24 @@ export default function GameScreen({ account, onLogout }: Props) {
 }
 
 // ============ UI LAYOUT EDITOR (editable backpacks/panels) ============
-function UILayoutEditor({ player, onClose }: { player: Player; onClose: () => void }) {
-  const { getUILayout, saveUILayout } = require('../game/content');
-  const [layout, setLayout] = useState(getUILayout(player.name));
-
+function UILayoutEditor({ player, layout, onLayoutChange, onClose }: { player: Player; layout: UILayout; onLayoutChange: (layout: UILayout) => void; onClose: () => void }) {
   const PANELS = [
-    { id: 'inv', label: 'Inventory', icon: '📦' },
-    { id: 'char', label: 'Character', icon: '👤' },
+    { id: 'adventure', label: 'Hunt Board', icon: '⚔' },
     { id: 'quests', label: 'Quest Log', icon: '📜' },
+    { id: 'char', label: 'Character', icon: '👤' },
     { id: 'talents', label: 'Talents', icon: '🌟' },
     { id: 'bestiary', label: 'Bestiary', icon: '📖' },
     { id: 'dps', label: 'DPS Meter', icon: '📊' },
-    { id: 'mail', label: 'Mail', icon: '📮' },
-    { id: 'books', label: 'Library', icon: '📚' },
-    { id: 'depot', label: 'Depot', icon: '🗄' },
+    { id: 'dungeon', label: 'Dungeon', icon: '🌀' },
+    { id: 'pet', label: 'Companions', icon: '🐾' },
     { id: 'mystery', label: 'Mystery', icon: '✦' },
+    { id: 'depot', label: 'Depot', icon: '🗄' },
+    { id: 'books', label: 'Library', icon: '📚' },
+    { id: 'auction', label: 'Auction House', icon: '🏛' },
+    { id: 'coins', label: 'Coin Shop', icon: '💎' },
+    { id: 'world', label: 'World Events', icon: '🌍' },
+    { id: 'mail', label: 'Mail', icon: '📮' },
+    { id: 'inv', label: 'Inventory', icon: '📦' },
   ];
 
   const move = (idx: number, dir: -1 | 1) => {
@@ -2754,22 +3176,19 @@ function UILayoutEditor({ player, onClose }: { player: Player; onClose: () => vo
     const target = idx + dir;
     if (target < 0 || target >= newOrder.length) return;
     [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
-    const newLayout = { ...layout, panelOrder: newOrder };
-    setLayout(newLayout);
-    saveUILayout(player.name, newLayout);
+    const newLayout = saveUILayout(player.name, { ...layout, panelOrder: newOrder });
+    onLayoutChange(newLayout);
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
-         style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
+    <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="rounded-xl border-2 p-5 max-w-md w-full"
-           style={{ background: 'linear-gradient(180deg, rgba(50,40,20,0.98) 0%, rgba(25,20,8,0.98) 100%)', borderColor: '#9bd4ff', boxShadow: '0 0 40px rgba(155,212,255,0.3)' }}>
+           className="moria-panel w-full max-w-md rounded-3xl border border-sky-300/20 p-4 sm:p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-black tracking-widest text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(180deg, #9bd4ff 0%, #4a90e2 100%)' }}>⚙ UI SETTINGS</h2>
           <button onClick={onClose} className="text-blue-200/60 hover:text-white text-2xl">✕</button>
         </div>
-        <div className="text-xs text-blue-200/60 mb-3">Customize which panels appear and their order. Reorder with the arrows.</div>
+        <div className="text-xs text-blue-200/60 mb-3">Reorder the quick-access buttons in the top bar. Changes apply immediately and persist for this character.</div>
         <div className="space-y-1 mb-4">
           {layout.panelOrder.map((panelId: string, idx: number) => {
             const panel = PANELS.find((p) => p.id === panelId);
@@ -2784,7 +3203,11 @@ function UILayoutEditor({ player, onClose }: { player: Player; onClose: () => vo
             );
           })}
         </div>
-        <div className="text-[10px] text-blue-200/40 text-center">Tip: Use + / − keys or the zoom buttons (bottom-right) to zoom the game map!</div>
+        <button onClick={() => {
+          const reset = saveUILayout(player.name, { ...layout, panelOrder: [...DEFAULT_UI_PANEL_ORDER] });
+          onLayoutChange(reset);
+        }} className="moria-button mb-3 w-full rounded-lg py-2 text-xs text-sky-200">↺ Reset default order</button>
+        <div className="text-[10px] text-blue-200/40 text-center">Operational controls such as UI, Mount, Admin, Audio, Network and Logout stay fixed for safety.</div>
       </div>
     </div>
   );
@@ -2794,12 +3217,12 @@ function TopButton({ icon, label, hotkey, onClick }: { icon: string; label: stri
   return (
     <button
       onClick={onClick}
-      className="px-2 py-0.5 text-xs rounded bg-amber-900/50 hover:bg-amber-800/60 text-amber-100 border border-amber-700/50 flex items-center gap-1"
+      className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-slate-300"
       title={`${label} (${hotkey})`}
     >
       <span>{icon}</span>
       <span className="hidden lg:inline">{label}</span>
-      <span className="text-[9px] text-amber-400/70">({hotkey})</span>
+      {hotkey && <span className="text-[8px] text-amber-200/45">{hotkey}</span>}
     </button>
   );
 }

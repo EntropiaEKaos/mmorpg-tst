@@ -8,18 +8,60 @@ interface Props {
   player: Player;
   inventory: Item[];
   setInventory: (items: Item[]) => void;
+  setPlayer: (player: Player) => void;
   onClose: () => void;
   addMessage: (sender: string, text: string, color: string, channel: 'world' | 'system' | 'battle' | 'loot' | 'quest') => void;
 }
 
 const RC: Record<string, string> = RARITY_COLORS as Record<string, string>;
 
-export default function AuctionHouse({ player, inventory, setInventory, onClose, addMessage }: Props) {
+export default function AuctionHouse({ player, inventory, setInventory, setPlayer, onClose, addMessage }: Props) {
   const [tab, setTab] = useState<'browse' | 'sell' | 'mine'>('browse');
   const [listings, setListings] = useState<AuctionListing[]>(() => { seedAuctionHouse(); return getAuctionListings(); });
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<'all' | 'legendary' | 'epic' | 'rare' | 'uncommon' | 'common'>('all');
   const refresh = () => setListings(getAuctionListings());
+
+  const addListingToInventory = (listing: AuctionListing) => {
+    if (listing.itemData) {
+      setInventory([...inventory, {
+        id: `ah_${Date.now()}_${Math.random()}`,
+        name: listing.itemName,
+        icon: listing.itemIcon,
+        type: 'equipment',
+        quantity: 1,
+        value: listing.buyoutPrice,
+        equipment: listing.itemData,
+      }]);
+      return;
+    }
+    const existing = inventory.find((item) => item.name === listing.itemName);
+    if (existing) {
+      setInventory(inventory.map((item) => item.id === existing.id ? { ...item, quantity: item.quantity + listing.quantity } : item));
+      return;
+    }
+    const potion = /potion/i.test(listing.itemName);
+    setInventory([...inventory, {
+      id: `ah_${Date.now()}_${Math.random()}`,
+      name: listing.itemName,
+      icon: listing.itemIcon,
+      type: potion ? 'potion' : 'misc',
+      quantity: listing.quantity,
+      value: listing.buyoutPrice,
+    }]);
+  };
+
+  const handleCancel = (listing: AuctionListing) => {
+    const returned = cancelListing(listing.id, player.name);
+    if (!returned) {
+      addMessage('System', 'Listing could not be cancelled.', '#ff9090', 'system');
+      refresh();
+      return;
+    }
+    addListingToInventory(returned);
+    refresh();
+    addMessage('System', `↩ ${returned.itemName} returned to your inventory.`, '#9bd4ff', 'system');
+  };
 
   const filtered = listings.filter((l) => {
     if (category !== 'all' && l.rarity !== category) return false;
@@ -34,24 +76,8 @@ export default function AuctionHouse({ player, inventory, setInventory, onClose,
     }
     const result = buyFromAuction(l.id, player.name);
     if (result.success) {
-      const p = player;
-      p.gold -= l.buyoutPrice;
-      // Add item to inventory
-      let newInv;
-      if (l.itemData) {
-        newInv = [...inventory, {
-          id: `ah_${Date.now()}_${Math.random()}`, name: l.itemName, icon: l.itemIcon,
-          type: 'equipment' as const, quantity: 1, value: l.buyoutPrice, equipment: l.itemData,
-        }];
-      } else {
-        const existing = inventory.find((i) => i.name === l.itemName);
-        if (existing) {
-          newInv = inventory.map((i) => i.name === l.itemName ? { ...i, quantity: i.quantity + l.quantity } : i);
-        } else {
-          newInv = [...inventory, { id: `ah_${Date.now()}_${Math.random()}`, name: l.itemName, icon: l.itemIcon, type: 'misc' as const, quantity: l.quantity, value: l.buyoutPrice }];
-        }
-      }
-      setInventory(newInv);
+      setPlayer({ ...player, gold: player.gold - l.buyoutPrice });
+      addListingToInventory(result.listing || l);
       addMessage('System', `🛒 Bought ${l.itemName} for ${l.buyoutPrice} gold!`, '#2ecc71', 'system');
       refresh();
     } else {
@@ -60,11 +86,10 @@ export default function AuctionHouse({ player, inventory, setInventory, onClose,
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
+    <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
          style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="rounded-xl border-2 p-5 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-           style={{ background: 'linear-gradient(180deg, rgba(40,35,15,0.98) 0%, rgba(20,18,8,0.98) 100%)', borderColor: '#f4e04d', boxShadow: '0 0 50px rgba(244,224,77,0.3)' }}>
+           className="moria-panel w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-3xl border border-amber-200/20 p-4 sm:p-6 flex flex-col">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
               style={{ backgroundImage: 'linear-gradient(180deg, #f4e04d 0%, #8b6914 100%)' }}>🏛 AUCTION HOUSE</h2>
@@ -99,7 +124,7 @@ export default function AuctionHouse({ player, inventory, setInventory, onClose,
               </select>
               <button onClick={refresh} className="px-3 py-1.5 rounded bg-black/40 text-amber-200 text-sm border border-amber-900/50">🔄</button>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-1.5">
+            <div className="moria-scrollbar flex-1 overflow-y-auto space-y-1.5 pr-1">
               {filtered.length === 0 ? (
                 <div className="text-center text-amber-200/40 py-12">No listings found.</div>
               ) : (
@@ -124,7 +149,7 @@ export default function AuctionHouse({ player, inventory, setInventory, onClose,
                       <div className="text-right">
                         <div className="text-amber-300 font-bold text-sm">{l.buyoutPrice.toLocaleString()} 🪙</div>
                         {isOwn ? (
-                          <button onClick={() => { cancelListing(l.id, player.name); refresh(); addMessage('System', 'Listing cancelled.', '#9bd4ff', 'system'); }}
+                          <button onClick={() => handleCancel(l)}
                                   className="text-red-400 text-[10px] hover:text-red-300">Cancel</button>
                         ) : (
                           <button onClick={() => handleBuy(l)} disabled={!canBuy}
@@ -146,7 +171,7 @@ export default function AuctionHouse({ player, inventory, setInventory, onClose,
         )}
 
         {tab === 'mine' && (
-          <div className="flex-1 overflow-y-auto space-y-1.5">
+          <div className="moria-scrollbar flex-1 overflow-y-auto space-y-1.5 pr-1">
             {listings.filter((l) => l.sellerName === player.name).length === 0 ? (
               <div className="text-center text-amber-200/40 py-12">You have no active listings. Use the Sell tab to list items.</div>
             ) : (
@@ -154,7 +179,7 @@ export default function AuctionHouse({ player, inventory, setInventory, onClose,
                 <div key={l.id} className="flex items-center gap-3 p-2 rounded-lg border bg-black/30" style={{ borderColor: '#8b6914' + '50' }}>
                   <div className="text-xl">{l.itemIcon}</div>
                   <div className="flex-1"><span className="font-bold text-sm text-amber-100">{l.itemName}</span><span className="text-amber-200/50 text-xs ml-2">{l.buyoutPrice.toLocaleString()} 🪙</span></div>
-                  <button onClick={() => { cancelListing(l.id, player.name); refresh(); addMessage('System', 'Listing cancelled.', '#9bd4ff', 'system'); }}
+                  <button onClick={() => handleCancel(l)}
                           className="px-3 py-1 rounded bg-red-900/50 text-red-200 text-[10px] border border-red-700/50">Cancel</button>
                 </div>
               ))
@@ -177,7 +202,7 @@ function SellTab({ player, inventory, setInventory, addMessage, refresh }: {
   const handleList = () => {
     if (!selected) return;
     if (price < 1) return;
-    listOnAuction({
+    const listed = listOnAuction({
       sellerName: player.name,
       itemName: selected.name,
       itemIcon: selected.icon,
@@ -186,7 +211,11 @@ function SellTab({ player, inventory, setInventory, addMessage, refresh }: {
       rarity: selected.equipment?.rarity,
       itemData: selected.equipment,
     });
-    // Remove from inventory
+    if (!listed) {
+      addMessage('System', 'Invalid auction listing.', '#ff9090', 'system');
+      return;
+    }
+    // Remove from inventory only after escrow accepted the listing.
     setInventory(inventory.filter((i) => i.id !== selected.id));
     addMessage('System', `📜 Listed ${selected.name} on Auction House for ${price} gold.`, '#f4e04d', 'system');
     setSelected(null);
@@ -194,8 +223,8 @@ function SellTab({ player, inventory, setInventory, addMessage, refresh }: {
   };
 
   return (
-    <div className="flex-1 flex gap-3 overflow-hidden">
-      <div className="w-1/2 overflow-y-auto">
+    <div className="flex-1 grid grid-cols-1 gap-3 overflow-y-auto md:grid-cols-2 md:overflow-hidden">
+      <div className="moria-scrollbar overflow-y-auto">
         <div className="text-[10px] text-amber-200/60 tracking-widest mb-2">SELECT ITEM TO SELL ({sellable.length})</div>
         <div className="grid grid-cols-5 gap-1.5">
           {sellable.map((item) => (
@@ -213,7 +242,7 @@ function SellTab({ player, inventory, setInventory, addMessage, refresh }: {
           ))}
         </div>
       </div>
-      <div className="w-1/2">
+      <div className="min-w-0">
         {selected ? (
           <div className="p-3 rounded border-2 border-amber-700/50 bg-black/40">
             <div className="text-xs text-amber-300 tracking-widest mb-2">LISTING DETAILS</div>

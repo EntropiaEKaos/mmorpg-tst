@@ -6,127 +6,78 @@ interface Props {
   onSendMessage?: (text: string) => void;
 }
 
+type Filter = 'all' | 'world' | 'battle' | 'system' | 'loot' | 'quest';
+
 function ChatInner({ messages, onSendMessage }: Props) {
-  const [filter, setFilter] = useState<'all' | 'world' | 'battle' | 'system' | 'loot' | 'quest'>('all');
+  const [filter, setFilter] = useState<Filter>('all');
   const [input, setInput] = useState('');
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, filter]);
 
   const filtered = filter === 'all' ? messages : messages.filter((m) => m.channel === filter);
+  const channelIcons: Record<string, string> = { world: '💬', battle: '⚔', system: '✦', loot: '💎', quest: '📜' };
+  const channelColors: Record<string, string> = { world: '#d9e0eb', battle: '#ff9aa5', system: '#e5c477', loot: '#ffb56b', quest: '#8fc8ff', all: '#e5c477' };
 
-  const channelIcons: Record<string, string> = {
-    world: '💬', battle: '⚔', system: '⚙', loot: '💎', quest: '📜',
-  };
-
-  const channelColors: Record<string, string> = {
-    world: '#ffffff', battle: '#ff9090', system: '#f4e04d', loot: '#ff8c00', quest: '#9bd4ff',
+  const send = () => {
+    const text = input.trim();
+    if (!text) return;
+    onSendMessage?.(text);
+    setInput('');
   };
 
   return (
-    <div
-      className={`absolute bottom-0 left-0 flex flex-col transition-all duration-300 ${expanded ? 'w-[500px] h-[350px]' : 'w-[420px] h-[160px]'}`}
-      style={{
-        background: 'linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(10,5,0,0.9) 100%)',
-        borderTop: '1px solid rgba(139,105,20,0.4)',
-        borderRight: '1px solid rgba(139,105,20,0.3)',
-        borderTopRightRadius: '8px',
-        zIndex: 15,
-      }}
-    >
-      {/* Tab bar - WoW style minimal */}
-      <div className="flex items-center border-b border-amber-900/30 px-1 py-0.5 shrink-0">
-        <div className="flex gap-0.5 flex-1">
-          {(['all', 'world', 'battle', 'loot', 'quest', 'system'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setFilter(t)}
-              className={`px-2 py-0.5 text-[10px] rounded-sm font-medium tracking-wider transition-all ${
-                filter === t
-                  ? 'text-amber-200 bg-amber-900/40'
-                  : 'text-amber-200/40 hover:text-amber-200/70'
-              }`}
-              style={filter === t ? { borderBottom: `2px solid ${channelColors[t] || '#8b6914'}` } : {}}
-            >
-              {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
+    <div className={`moria-panel absolute bottom-3 left-3 z-20 flex max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-2xl transition-[width,height] duration-300 ${expanded ? 'h-[360px] w-[520px]' : 'h-[154px] w-[410px]'}`}>
+      <div className="flex shrink-0 items-center gap-1 border-b border-white/[0.06] px-2 py-1.5">
+        <div className="moria-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
+          {(['all', 'world', 'battle', 'loot', 'quest', 'system'] as const).map((t) => {
+            const active = filter === t;
+            return (
+              <button key={t} onClick={() => setFilter(t)} className={`shrink-0 rounded-lg px-2 py-1 text-[9px] font-black tracking-wider transition-all ${active ? 'bg-white/[0.07] text-slate-100' : 'text-slate-500 hover:bg-white/[0.03] hover:text-slate-300'}`} style={active ? { boxShadow: `inset 0 -1px ${channelColors[t]}` } : undefined}>
+                {t === 'all' ? 'ALL' : t.toUpperCase()}
+              </button>
+            );
+          })}
         </div>
-        <button
-          onClick={() => setExpanded((s) => !s)}
-          className="text-amber-200/40 hover:text-amber-200 text-[10px] px-1"
-          title={expanded ? 'Collapse' : 'Expand'}
-        >
+        <button onClick={() => setExpanded((s) => !s)} className="moria-chip flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10px] text-slate-400 hover:text-slate-100" title={expanded ? 'Collapse chat' : 'Expand chat'}>
           {expanded ? '▼' : '▲'}
         </button>
       </div>
 
-      {/* Messages */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-2 py-1 space-y-px text-[11px] font-mono"
-        style={{ scrollbarWidth: 'thin', scrollbarColor: '#3a2a1a transparent' }}
-      >
-        {filtered.slice(-50).map((m) => {
+      <div ref={scrollRef} className="moria-scrollbar flex-1 space-y-0.5 overflow-y-auto px-3 py-2 font-mono text-[11px]">
+        {filtered.slice(-80).map((m) => {
           const time = new Date(m.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const systemSender = m.sender === 'System' || m.sender === 'Loot' || m.sender === 'Quest';
           return (
-            <div key={m.id} className="flex gap-1.5 leading-tight opacity-90 hover:opacity-100 transition-opacity">
-              <span className="text-amber-200/20 text-[9px] shrink-0 w-10">{time}</span>
-              <span className="text-[9px] shrink-0 w-3 text-center" title={m.channel}>
-                {channelIcons[m.channel] || '💬'}
-              </span>
-              {m.sender !== 'System' && m.sender !== 'Loot' && m.sender !== 'Quest' && (
-                <span className="text-amber-300 shrink-0 font-semibold">{m.sender}:</span>
-              )}
-              <span style={{ color: m.color }}>{m.text}</span>
+            <div key={m.id} className="group flex gap-1.5 rounded px-1 py-0.5 leading-[1.35] hover:bg-white/[0.025]">
+              <span className="w-9 shrink-0 text-[8px] text-slate-600">{time}</span>
+              <span className="w-3 shrink-0 text-center text-[9px]" title={m.channel}>{channelIcons[m.channel] || '💬'}</span>
+              {!systemSender && <span className="shrink-0 font-bold text-amber-200/85">{m.sender}:</span>}
+              <span className="min-w-0 break-words" style={{ color: m.color }}>{m.text}</span>
             </div>
           );
         })}
       </div>
 
-      {/* Input */}
-      <div className="border-t border-amber-900/30 px-1 py-0.5 flex gap-1 shrink-0">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && input.trim()) {
-              onSendMessage?.(input);
-              setInput('');
-            }
-          }}
-          placeholder="Type a message..."
-          className="flex-1 px-2 py-1 text-[11px] bg-transparent border-none text-amber-100 placeholder:text-amber-200/30 focus:outline-none"
-        />
-        <button
-          onClick={() => {
-            if (input.trim()) {
-              onSendMessage?.(input);
-              setInput('');
-            }
-          }}
-          className="text-amber-200/40 hover:text-amber-200 text-[10px] px-1"
-        >
-          ▶
-        </button>
+      <div className="flex shrink-0 items-center gap-1.5 border-t border-white/[0.06] bg-black/15 p-1.5">
+        <span className="pl-1 text-[10px] text-slate-500">›</span>
+        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Message the realm..." className="moria-input min-w-0 flex-1 rounded-lg border-0 px-2 py-1.5 text-[11px] focus:outline-none" maxLength={200} />
+        <button onClick={send} disabled={!input.trim()} className="moria-button flex h-7 items-center justify-center rounded-lg px-2 text-[9px] font-black tracking-wider disabled:opacity-30">SEND</button>
       </div>
     </div>
   );
 }
 
-// Memoize to prevent re-render on every game-frame tick (only re-render when messages change)
 function areEqual(prev: Props, next: Props) {
+  if (prev.messages === next.messages && prev.onSendMessage === next.onSendMessage) return true;
   if (prev.messages.length !== next.messages.length) return false;
   const lastPrev = prev.messages[prev.messages.length - 1];
   const lastNext = next.messages[next.messages.length - 1];
-  if (!lastPrev || !lastNext) return lastPrev === lastNext;
-  return lastPrev.id === lastNext.id;
+  if (!lastPrev || !lastNext) return lastPrev === lastNext && prev.onSendMessage === next.onSendMessage;
+  return lastPrev.id === lastNext.id && lastPrev.text === lastNext.text && lastPrev.channel === lastNext.channel && prev.onSendMessage === next.onSendMessage;
 }
 
 const Chat = memo(ChatInner, areEqual);

@@ -22,35 +22,19 @@ interface Props {
   onClose: () => void;
   onAcceptQuest?: (questId: string) => void;
   onCompleteQuest?: (questId: string) => void;
+  questCatalog?: Quest[];
 }
 
-export default function QuestLog({ activeQuests, completedQuests, availableQuests, achievements, stats, onClose, onAcceptQuest, onCompleteQuest }: Props) {
+export default function QuestLog({ activeQuests, completedQuests, availableQuests, achievements, stats, onClose, onAcceptQuest, onCompleteQuest, questCatalog = QUESTS }: Props) {
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center p-4 z-20"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="rounded-lg border-2 p-4 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-        style={{
-          background: 'linear-gradient(180deg, rgba(60,40,20,0.98) 0%, rgba(30,20,10,0.98) 100%)',
-          borderColor: '#8b6914',
-          boxShadow: '0 0 40px rgba(255,150,50,0.2)',
-        }}
-      >
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/65 p-4 backdrop-blur-md" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="moria-panel moria-fade-up flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-amber-200/20 p-4 sm:p-5">
         <div className="flex items-center justify-between mb-3">
-          <h2
-            className="text-xl font-bold tracking-widest text-transparent bg-clip-text"
-            style={{ backgroundImage: 'linear-gradient(180deg, #f4e04d 0%, #8b6914 100%)' }}
-          >
-            📜 QUEST LOG
-          </h2>
-          <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-xl">✕</button>
+          <div><div className="moria-eyebrow">Adventure journal</div><h2 className="moria-title mt-1 text-2xl font-black">📜 Quest Log</h2></div>
+          <button onClick={onClose} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400" aria-label="Close quest log">✕</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        <div className="moria-scrollbar flex-1 space-y-5 overflow-y-auto pr-2">
           {/* Active Quests */}
           <section>
             <h3 className="text-amber-300 font-bold text-sm mb-2 tracking-wider">🔥 ACTIVE ({activeQuests.length})</h3>
@@ -59,20 +43,21 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
             ) : (
               <div className="space-y-2">
                 {activeQuests.map((aq) => {
-                  const quest = QUESTS.find((q) => q.id === aq.questId);
-                  if (!quest) return null;
-                  const progress = aq.objectives.reduce((s, o) => s + o.current, 0) /
-                                   aq.objectives.reduce((s, o) => s + o.count, 0);
+                  const quest = questCatalog.find((q) => q.id === aq.questId);
+                  const objectiveTotal = aq.objectives.reduce((sum, objective) => sum + objective.count, 0);
+                  const progress = objectiveTotal > 0
+                    ? aq.objectives.reduce((sum, objective) => sum + objective.current, 0) / objectiveTotal
+                    : 0;
                   return (
                     <div key={aq.questId} className="p-3 rounded border border-amber-700/50 bg-amber-900/20">
                       <div className="flex justify-between items-start">
                         <div>
-                          <div className="text-amber-100 font-bold">{quest.name}</div>
-                          <div className="text-amber-200/70 text-xs italic mt-0.5">{quest.description}</div>
+                          <div className="text-amber-100 font-bold">{quest?.name || aq.questId}</div>
+                          <div className="text-amber-200/70 text-xs italic mt-0.5">{quest?.description || 'Authoritative server quest'}</div>
                         </div>
                         <div className="text-right text-[10px] text-amber-300">
-                          <div>+{quest.rewards.xp} XP</div>
-                          <div>+{quest.rewards.gold} 🪙</div>
+                          <div>+{quest?.rewards.xp ?? 0} XP</div>
+                          <div>+{quest?.rewards.gold ?? 0} 🪙</div>
                         </div>
                       </div>
                       <div className="mt-2 space-y-1">
@@ -108,7 +93,7 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
             {availableQuests.length === 0 ? (
               <div className="text-amber-200/40 text-xs italic p-2">No quests available right now.</div>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {availableQuests.map((q) => (
                   <div key={q.id} className="p-2 rounded border border-blue-700/40 bg-blue-900/10 text-xs">
                     <div className="flex items-center justify-between">
@@ -131,14 +116,14 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
           {/* Completed */}
           <section>
             <h3 className="text-green-300 font-bold text-sm mb-2 tracking-wider">✅ COMPLETED ({completedQuests.length})</h3>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
               {completedQuests.map((qid) => {
-                const q = QUESTS.find((qq) => qq.id === qid);
-                return q ? (
+                const q = questCatalog.find((qq) => qq.id === qid);
+                return (
                   <div key={qid} className="p-1.5 rounded border border-green-700/40 bg-green-900/10 text-xs text-green-300">
-                    ✅ {q.name}
+                    ✅ {q?.name || qid}
                   </div>
-                ) : null;
+                );
               })}
               {completedQuests.length === 0 && <div className="text-amber-200/40 text-xs italic">None yet</div>}
             </div>
@@ -173,7 +158,7 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
           {/* Stats */}
           <section>
             <h3 className="text-purple-300 font-bold text-sm mb-2 tracking-wider">📊 STATISTICS</h3>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
               {[
                 { label: 'Monsters Killed', value: stats.monstersKilled, icon: '🗡' },
                 { label: 'Bosses Killed', value: stats.bossesKilled, icon: '👑' },

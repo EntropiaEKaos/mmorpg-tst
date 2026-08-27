@@ -117,6 +117,7 @@ export interface CustomNPC {
   posX: number;
   posY: number;
   dialogueText: string;
+  mapId?: string;
   createdAt: number;
 }
 
@@ -124,7 +125,11 @@ const NPC_KEY = 'moria_custom_npcs';
 
 export function getCustomNPCs(): CustomNPC[] {
   try {
-    return JSON.parse(localStorage.getItem(NPC_KEY) || '[]');
+    const data = JSON.parse(localStorage.getItem(NPC_KEY) || '[]');
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter((npc): npc is CustomNPC => Boolean(npc && typeof npc === 'object' && typeof npc.id === 'string' && typeof npc.name === 'string'))
+      .map((npc) => ({ ...npc, mapId: typeof npc.mapId === 'string' && npc.mapId ? npc.mapId : 'eldoria' }));
   } catch { return []; }
 }
 
@@ -156,6 +161,7 @@ export interface CustomMonster {
   level: number;
   posX: number;
   posY: number;
+  mapId?: string;
   createdAt: number;
 }
 
@@ -163,7 +169,11 @@ const MONSTER_KEY = 'moria_custom_monsters';
 
 export function getCustomMonsters(): CustomMonster[] {
   try {
-    return JSON.parse(localStorage.getItem(MONSTER_KEY) || '[]');
+    const data = JSON.parse(localStorage.getItem(MONSTER_KEY) || '[]');
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter((monster): monster is CustomMonster => Boolean(monster && typeof monster === 'object' && typeof monster.id === 'string' && typeof monster.name === 'string'))
+      .map((monster) => ({ ...monster, mapId: typeof monster.mapId === 'string' && monster.mapId ? monster.mapId : 'eldoria' }));
   } catch { return []; }
 }
 
@@ -187,14 +197,38 @@ export interface UILayout {
 
 const UI_KEY = (playerName: string) => `moria_ui_layout_${playerName}`;
 
+export const DEFAULT_UI_PANEL_ORDER = [
+  'adventure', 'quests', 'char', 'talents', 'bestiary', 'dps', 'dungeon', 'pet', 'mystery',
+  'depot', 'books', 'auction', 'coins', 'world', 'mail', 'inv',
+] as const;
+
+function normalizeUILayout(layout?: Partial<UILayout> | null): UILayout {
+  const allowed = new Set<string>(DEFAULT_UI_PANEL_ORDER);
+  const seen = new Set<string>();
+  const supplied = Array.isArray(layout?.panelOrder) ? layout!.panelOrder : [];
+  const panelOrder = supplied.filter((id): id is string => {
+    if (typeof id !== 'string' || !allowed.has(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  for (const id of DEFAULT_UI_PANEL_ORDER) {
+    if (!seen.has(id)) panelOrder.push(id);
+  }
+  const rawScale = typeof layout?.scale === 'number' && Number.isFinite(layout.scale) ? layout.scale : 1;
+  return { panelOrder, scale: Math.max(0.75, Math.min(1.25, rawScale)) };
+}
+
 export function getUILayout(playerName: string): UILayout {
   try {
     const layout = JSON.parse(localStorage.getItem(UI_KEY(playerName)) || 'null');
-    if (layout) return layout;
-  } catch {}
-  return { panelOrder: ['inv', 'char', 'quests', 'talents', 'bestiary', 'dps', 'mail', 'books'], scale: 1 };
+    return normalizeUILayout(layout);
+  } catch {
+    return normalizeUILayout(null);
+  }
 }
 
-export function saveUILayout(playerName: string, layout: UILayout) {
-  localStorage.setItem(UI_KEY(playerName), JSON.stringify(layout));
+export function saveUILayout(playerName: string, layout: UILayout): UILayout {
+  const normalized = normalizeUILayout(layout);
+  localStorage.setItem(UI_KEY(playerName), JSON.stringify(normalized));
+  return normalized;
 }

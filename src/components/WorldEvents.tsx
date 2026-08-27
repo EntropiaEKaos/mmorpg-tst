@@ -14,11 +14,9 @@ export default function WorldEvents({ player, onClose, onContribute }: Props) {
 
   const handleContribute = (event: WorldEvent, amount: number) => {
     const result = contributeToWorldEvent(event.id, player.name, amount);
-    if (result.completed) {
-      onContribute(event.rewardGold, event.rewardXp);
-    } else if (result.contribution > 0) {
-      // partial contribution reward
-      onContribute(Math.floor(event.rewardGold * 0.1), Math.floor(event.rewardXp * 0.1));
+    if (result.accepted > 0 && result.required > 0) {
+      const share = result.accepted / result.required;
+      onContribute(Math.floor(event.rewardGold * share), Math.floor(event.rewardXp * share));
     }
     refresh();
   };
@@ -33,11 +31,11 @@ export default function WorldEvents({ player, onClose, onContribute }: Props) {
   const completedEvents = events.filter((e) => e.status === 'completed').slice(0, 5);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
+    <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
          style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="rounded-xl border-2 p-5 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-           style={{ background: 'linear-gradient(180deg, rgba(50,20,20,0.98) 0%, rgba(25,10,10,0.98) 100%)', borderColor: '#ff6a00', boxShadow: '0 0 50px rgba(255,106,0,0.3)' }}>
+           className="moria-panel w-full max-w-2xl max-h-[92vh] overflow-hidden rounded-3xl border border-orange-300/20 p-4 sm:p-6 flex flex-col"
+           style={{ boxShadow: '0 30px 90px rgba(0,0,0,.58), 0 0 55px rgba(249,115,22,.10)' }}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
               style={{ backgroundImage: 'linear-gradient(180deg, #ff6a00 0%, #8b3000 100%)' }}>🌍 WORLD EVENTS</h2>
@@ -48,7 +46,7 @@ export default function WorldEvents({ player, onClose, onContribute }: Props) {
         </div>
         <div className="text-xs text-orange-200/60 mb-3">Global missions shared by all adventurers. Contribute to earn rewards!</div>
 
-        <div className="flex-1 overflow-y-auto space-y-2">
+        <div className="moria-scrollbar flex-1 overflow-y-auto space-y-2 pr-1">
           {activeEvents.length === 0 && (
             <div className="text-center text-orange-200/40 py-8">
               <div className="text-5xl mb-3">🌍</div>
@@ -56,7 +54,7 @@ export default function WorldEvents({ player, onClose, onContribute }: Props) {
             </div>
           )}
           {activeEvents.map((event) => {
-            const pct = (event.progress.current / event.progress.required) * 100;
+            const pct = Math.max(0, Math.min(100, (event.progress.current / Math.max(1, event.progress.required)) * 100));
             const myContribution = event.contributors[player.name] || 0;
             const timeLeft = event.endTime - Date.now();
             return (

@@ -1,30 +1,38 @@
+import { useState } from 'react';
 import type { Player } from '../game/types';
 import { PETS, getOwnedPets, getActivePet, setActivePet } from '../game/dungeons';
 
 interface Props {
   player: Player;
   onClose: () => void;
-  onBuyPet?: (petId: string, price: number) => void;
+  onBuyPet?: (petId: string, price: number) => boolean;
 }
 
 export default function PetShop({ player, onClose, onBuyPet }: Props) {
-  const owned = getOwnedPets(player.name);
-  const active = getActivePet(player.name);
+  const [owned, setOwned] = useState<string[]>(() => getOwnedPets(player.name));
+  const [active, setActive] = useState<string | null>(() => getActivePet(player.name));
+
+  const summon = (petId: string) => {
+    if (setActivePet(player.name, petId)) setActive(petId);
+  };
+  const dismiss = () => {
+    if (setActivePet(player.name, null)) setActive(null);
+  };
+  const buy = (petId: string, price: number) => {
+    if (!onBuyPet?.(petId, price)) return;
+    setOwned(getOwnedPets(player.name));
+  };
 
   return (
     <div
-      className="absolute inset-0 flex items-center justify-center p-4 z-20"
+      className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
       style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="rounded-xl border-2 p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
-        style={{
-          background: 'linear-gradient(180deg, rgba(40,30,60,0.98) 0%, rgba(20,10,30,0.98) 100%)',
-          borderColor: '#ff9bcc',
-          boxShadow: '0 0 40px rgba(255,155,204,0.3)',
-        }}
+        className="moria-panel moria-scrollbar w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border border-fuchsia-300/20 p-4 sm:p-6"
+        style={{ boxShadow: '0 30px 90px rgba(0,0,0,.58), 0 0 55px rgba(244,114,182,.10)' }}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
@@ -39,7 +47,7 @@ export default function PetShop({ player, onClose, onBuyPet }: Props) {
           {active && <span className="text-green-400 ml-2">● Active: {PETS.find((p) => p.id === active)?.name}</span>}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {PETS.map((pet) => {
             const isOwned = owned.includes(pet.id);
             const isActive = active === pet.id;
@@ -72,18 +80,18 @@ export default function PetShop({ player, onClose, onBuyPet }: Props) {
 
                 {isOwned ? (
                   isActive ? (
-                    <button onClick={() => setActivePet(player.name, null)}
+                    <button onClick={dismiss}
                             className="w-full py-1.5 rounded bg-red-900/40 hover:bg-red-700/60 text-red-200 text-xs font-bold border border-red-700/50">
                       ● Active (dismiss)
                     </button>
                   ) : (
-                    <button onClick={() => setActivePet(player.name, pet.id)}
+                    <button onClick={() => summon(pet.id)}
                             className="w-full py-1.5 rounded bg-green-900/40 hover:bg-green-700/60 text-green-200 text-xs font-bold border border-green-700/50">
                       ✓ Summon
                     </button>
                   )
                 ) : (
-                  <button onClick={() => { if (canBuy && onBuyPet) onBuyPet(pet.id, pet.price); }} disabled={!canBuy}
+                  <button onClick={() => { if (canBuy) buy(pet.id, pet.price); }} disabled={!canBuy}
                           className={`w-full py-1.5 rounded text-xs font-bold border ${
                             canBuy ? 'bg-gradient-to-b from-amber-500 to-amber-700 text-black border-amber-400'
                                    : 'bg-black/40 text-gray-500 border-gray-700/40 cursor-not-allowed'

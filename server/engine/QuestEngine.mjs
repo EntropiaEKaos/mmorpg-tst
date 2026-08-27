@@ -5,93 +5,74 @@
 // ===================================================================
 
 import { contentDB } from './ContentDB.mjs';
+import { objectiveKey } from './ContentIntegrity.mjs';
 
 class QuestEngine {
   constructor() {
-    // Active quests: playerId -> { questId, progress: { target: count }, startedAt }
     this.activeQuests = new Map();
-    // Completed: playerId -> Set<questId>
     this.completedQuests = new Map();
   }
 
-  // ===== PLAYER QUEST STATE =====
   getPlayerQuests(playerId) {
     const active = this.activeQuests.get(playerId) || [];
     const completed = Array.from(this.completedQuests.get(playerId) || new Set());
     return { active, completed };
   }
 
-  // ===== ACCEPT QUEST =====
   acceptQuest(playerId, questId) {
     const quest = contentDB.get('quests').find(q => q.id === questId);
     if (!quest) return { success: false, reason: 'Quest not found' };
 
     const player = this.getPlayer(playerId);
     if (!player) return { success: false, reason: 'Player not found' };
-
-    // Check level requirement
     if (player.level < quest.levelRequired) {
       return { success: false, reason: `Requires level ${quest.levelRequired}` };
     }
 
-    // Check prerequisites
     const completed = this.completedQuests.get(playerId) || new Set();
     for (const reqId of quest.requires || []) {
-      if (!completed.has(reqId)) {
-        return { success: false, reason: 'Prerequisites not met' };
-      }
+      if (!completed.has(reqId)) return { success: false, reason: 'Prerequisites not met' };
     }
 
-    // Check not already active/completed
     const active = this.activeQuests.get(playerId) || [];
     if (active.some(q => q.questId === questId)) return { success: false, reason: 'Already active' };
     if (completed.has(questId)) return { success: false, reason: 'Already completed' };
 
-    // Start quest
-    if (!this.activeQuests.has(playerId)) this.activeQuests.set(playerId, []);
-    active.push({
-      questId,
-      progress: { [quest.target]: 0 },
-      startedAt: Date.now(),
-    });
+    active.push({ questId, progress: { [quest.target]: 0 }, startedAt: Date.now() });
     this.activeQuests.set(playerId, active);
-
     return { success: true, quest };
   }
 
-  // ===== PROGRESS QUEST (called when player kills monster/fish/gathers) =====
-  progressQuest(playerId, targetType, amount = 1) {
+  progressQuest(playerId, targetType, amount = 1, aliases = []) {
     const active = this.activeQuests.get(playerId) || [];
-    let progressed = [];
+    const progressed = [];
+    const targetKeys = new Set([targetType, ...(Array.isArray(aliases) ? aliases : [])].map(objectiveKey).filter(Boolean));
     for (const q of active) {
       const quest = contentDB.get('quests').find(qd => qd.id === q.questId);
       if (!quest) continue;
-      if (quest.target === targetType) {
-        q.progress[targetType] = (q.progress[targetType] || 0) + amount;
+      if (targetKeys.has(objectiveKey(quest.target))) {
+        const progressKey = quest.target;
+        q.progress[progressKey] = Math.max(0, (q.progress[progressKey] || 0) + amount);
         const needed = quest.count;
-        const current = q.progress[targetType];
+        const current = q.progress[progressKey];
         progressed.push({ questId: q.questId, name: quest.name, current, needed });
       }
     }
     return progressed;
   }
 
-  // ===== CHECK COMPLETION =====
   checkCompletion(playerId) {
     const active = this.activeQuests.get(playerId) || [];
-    const completed: any[] = [];
+    const completed = [];
     for (const q of active) {
       const quest = contentDB.get('quests').find(qd => qd.id === q.questId);
       if (!quest) continue;
       const current = q.progress[quest.target] || 0;
-      if (current >= quest.count) {
-        completed.push({ ...q, quest });
-      }
+      if (current >= quest.count) completed.push({ ...q, quest });
     }
     return completed;
   }
 
-  // ===== COMPLETE QUEST =====
   completeQuest(playerId, questId) {
     const active = this.activeQuests.get(playerId) || [];
     const qIndex = active.findIndex(q => q.questId === questId);
@@ -101,49 +82,103 @@ class QuestEngine {
     const quest = contentDB.get('quests').find(qd => qd.id === questId);
     if (!quest) return { success: false, reason: 'Quest not found' };
 
-    // Check if actually complete
     const current = q.progress[quest.target] || 0;
     if (current < quest.count) return { success: false, reason: 'Not complete yet' };
 
-    // Remove from active
     active.splice(qIndex, 1);
     this.activeQuests.set(playerId, active);
 
-    // Add to completed
     if (!this.completedQuests.has(playerId)) this.completedQuests.set(playerId, new Set());
     this.completedQuests.get(playerId).add(questId);
 
-    // Return rewards
     return {
       success: true,
       quest,
       rewards: {
-        gold: quest.rewardGold,
-        xp: quest.rewardXp,
+        gold: Number(quest.rewardGold) || 0,
+        xp: Number(quest.rewardXp) || 0,
         item: quest.rewardItem,
       },
     };
   }
 
-  // ===== HELPERS =====
   getPlayer(playerId) {
-    // This will be set by the GameEngine
     return globalThis.__players?.get(playerId) || null;
   }
 
-  // Register the player map so we can look up players
   registerPlayers(playerMap) {
     globalThis.__players = playerMap;
   }
 
-  // Called by GameEngine on monster kill
-  onMonsterKill(playerId, monsterName) {
-    const progressed = this.progressQuest(playerId, monsterName);
+  onMonsterKill(playerId, monster) {
+    const monsterName = monster && typeof monster === 'object' ? monster.name : monster;
+    const aliases = monster && typeof monster === 'object'
+      ? [monster.contentSourceId, monster.templateId].filter(value => typeof value === 'string' && value)
+      : [];
+    const progressed = this.progressQuest(playerId, monsterName, 1, aliases);
     const completed = this.checkCompletion(playerId);
     return { progressed, completed };
   }
 
-  // Serialize for client sync
+  // Compact persistence shape. Content metadata is intentionally not copied into
+  // the player database; it is resolved from the authoritative content DB on load.
+  exportState(playerId) {
+    const active = this.activeQuests.get(playerId) || [];
+    const completed = Array.from(this.completedQuests.get(playerId) || new Set());
+    return {
+      active: active.map(q => ({
+        questId: q.questId,
+        progress: { ...(q.progress || {}) },
+        startedAt: Number.isFinite(q.startedAt) ? q.startedAt : Date.now(),
+      })),
+      completed,
+    };
+  }
+
+  restorePlayer(playerId, saved) {
+    const allQuests = contentDB.get('quests');
+    const known = new Map(allQuests.map(q => [q.id, q]));
+    const completed = new Set();
+
+    if (Array.isArray(saved?.completed)) {
+      for (const questId of saved.completed) {
+        if (typeof questId === 'string' && known.has(questId)) completed.add(questId);
+      }
+    }
+
+    const active = [];
+    const seen = new Set();
+    if (Array.isArray(saved?.active)) {
+      for (const raw of saved.active) {
+        if (!raw || typeof raw !== 'object' || typeof raw.questId !== 'string') continue;
+        if (seen.has(raw.questId) || completed.has(raw.questId)) continue;
+        const quest = known.get(raw.questId);
+        if (!quest) continue;
+        const rawValue = Number(raw.progress?.[quest.target]);
+        const current = Number.isFinite(rawValue)
+          ? Math.max(0, Math.min(Number(quest.count) || 0, Math.floor(rawValue)))
+          : 0;
+        active.push({
+          questId: raw.questId,
+          progress: { [quest.target]: current },
+          startedAt: Number.isFinite(raw.startedAt) && raw.startedAt > 0 ? raw.startedAt : Date.now(),
+        });
+        seen.add(raw.questId);
+      }
+    }
+
+    if (active.length > 0) this.activeQuests.set(playerId, active);
+    else this.activeQuests.delete(playerId);
+    if (completed.size > 0) this.completedQuests.set(playerId, completed);
+    else this.completedQuests.delete(playerId);
+  }
+
+  clearPlayer(playerId) {
+    this.activeQuests.delete(playerId);
+    this.completedQuests.delete(playerId);
+  }
+
+  // Snapshot/UI shape with authoritative content metadata resolved at read time.
   serialize(playerId) {
     const active = this.activeQuests.get(playerId) || [];
     const completed = Array.from(this.completedQuests.get(playerId) || new Set());

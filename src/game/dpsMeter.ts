@@ -35,15 +35,27 @@ class DPSMeter {
   }
 
   record(source: string, target: string, amount: number, type: DamageRecord['type'], critical: boolean) {
-    if (!this.running) return;
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!this.running) {
+      // Start lazily on the first real combat event so callers cannot silently
+      // forget to initialize the meter before recording.
+      this.startTime = Date.now();
+      this.running = true;
+    }
     this.records.push({
       source, target, amount, type, critical,
       timestamp: Date.now(),
     });
+    // The UI only needs a combat-session window. Bound memory in very long sessions.
+    if (this.records.length > 5000) this.records.splice(0, this.records.length - 5000);
   }
 
   getStats(): DPSStats {
-    const duration = (Date.now() - this.startTime) / 1000;
+    if (this.records.length === 0 || this.startTime <= 0) {
+      return { totalDamage: 0, totalHealing: 0, dps: 0, hps: 0, critRate: 0, hits: 0, crits: 0, maxHit: 0, duration: 0 };
+    }
+
+    const duration = Math.max(0.001, (Date.now() - this.startTime) / 1000);
     const damageRecords = this.records.filter((r) => r.type !== 'heal');
     const healRecords = this.records.filter((r) => r.type === 'heal');
     const totalDamage = damageRecords.reduce((s, r) => s + r.amount, 0);
@@ -55,8 +67,8 @@ class DPSMeter {
     return {
       totalDamage,
       totalHealing,
-      dps: duration > 0 ? Math.round(totalDamage / duration) : 0,
-      hps: duration > 0 ? Math.round(totalHealing / duration) : 0,
+      dps: Math.round(totalDamage / duration),
+      hps: Math.round(totalHealing / duration),
       critRate: hits > 0 ? Math.round((crits / hits) * 100) : 0,
       hits,
       crits,
@@ -66,12 +78,13 @@ class DPSMeter {
   }
 
   getRecent(n = 10): DamageRecord[] {
-    return this.records.slice(-n);
+    return this.records.slice(-Math.max(0, n));
   }
 
   clear() {
     this.records = [];
-    this.startTime = Date.now();
+    this.startTime = 0;
+    this.running = false;
   }
 }
 

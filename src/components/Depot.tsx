@@ -24,6 +24,7 @@ function saveDepot(playerName: string, items: Item[]) {
 
 export default function Depot({ player, inventory, setInventory, onClose }: Props) {
   const [depot, setDepot] = useState<Item[]>(getDepot(player.name));
+  const [notice, setNotice] = useState('');
 
   const updateDepot = (items: Item[]) => {
     setDepot(items);
@@ -34,44 +35,28 @@ export default function Depot({ player, inventory, setInventory, onClose }: Prop
     // For stackables, move all; otherwise move one
     const isStack = item.type === 'misc' || item.type === 'potion' || item.type === 'material';
     const qty = isStack ? item.quantity : 1;
-    const newDepot = [...depot];
-    if (isStack) {
-      const existing = newDepot.find((i) => i.name === item.name);
-      if (existing) {
-        existing.quantity += qty;
-      } else {
-        newDepot.push({ ...item, quantity: qty });
-      }
-    } else {
-      newDepot.push({ ...item, quantity: 1 });
+    const existing = isStack ? depot.find((i) => i.name === item.name) : undefined;
+    if (!existing && depot.length >= DEPOT_SLOTS) {
+      setNotice(`Depot is full (${DEPOT_SLOTS}/${DEPOT_SLOTS}). Withdraw something first.`);
+      return;
     }
+    const newDepot = existing
+      ? depot.map((i) => i.id === existing.id ? { ...i, quantity: i.quantity + qty } : i)
+      : [...depot, { ...item, quantity: isStack ? qty : 1 }];
     updateDepot(newDepot);
-
-    // Remove from inventory
-    let newInv;
-    if (isStack) {
-      newInv = inventory.filter((i) => i.id !== item.id);
-    } else {
-      newInv = inventory.filter((i) => i.id !== item.id);
-    }
-    setInventory(newInv);
+    setInventory(inventory.filter((i) => i.id !== item.id));
+    setNotice('');
   };
 
   const moveToInventory = (item: Item) => {
     const isStack = item.type === 'misc' || item.type === 'potion' || item.type === 'material';
     const qty = isStack ? item.quantity : 1;
-    const newInv = [...inventory];
-    if (isStack) {
-      const existing = newInv.find((i) => i.name === item.name);
-      if (existing) {
-        existing.quantity += qty;
-      } else {
-        newInv.push({ ...item, quantity: qty });
-      }
-    } else {
-      newInv.push({ ...item, quantity: 1 });
-    }
+    const existing = isStack ? inventory.find((i) => i.name === item.name) : undefined;
+    const newInv = existing
+      ? inventory.map((i) => i.id === existing.id ? { ...i, quantity: i.quantity + qty } : i)
+      : [...inventory, { ...item, quantity: isStack ? qty : 1 }];
     setInventory(newInv);
+    setNotice('');
 
     // Remove from depot
     const newDepot = depot.filter((i) => i.id !== item.id);
@@ -79,12 +64,11 @@ export default function Depot({ player, inventory, setInventory, onClose }: Prop
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-4 z-20"
+    <div className="moria-overlay absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-5"
          style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
          onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="rounded-xl border-2 p-4 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-           style={{ background: 'linear-gradient(180deg, rgba(60,45,20,0.98) 0%, rgba(30,22,8,0.98) 100%)', borderColor: '#f4e04d', boxShadow: '0 0 50px rgba(244,224,77,0.3)' }}>
+           className="moria-panel w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-3xl border border-amber-200/20 p-4 sm:p-5 flex flex-col">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-black tracking-widest text-transparent bg-clip-text"
               style={{ backgroundImage: 'linear-gradient(180deg, #f4e04d 0%, #8b6914 100%)' }}>
@@ -96,13 +80,14 @@ export default function Depot({ player, inventory, setInventory, onClose }: Prop
           Safe storage for your items. Items here are <span className="text-green-400">never lost on death</span>. Gold in bank: <span className="text-amber-300 font-bold">{player.bankGold.toLocaleString()} 🪙</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 flex-1 overflow-hidden">
+        {notice && <div className="mb-3 rounded-lg border border-rose-400/30 bg-rose-950/35 px-3 py-2 text-xs text-rose-200">⚠ {notice}</div>}
+        <div className="grid grid-cols-1 gap-4 flex-1 overflow-y-auto md:grid-cols-2 md:overflow-hidden">
           {/* Depot side */}
           <div className="flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs text-amber-300 tracking-widest font-bold">🗄 DEPOT ({depot.length}/{DEPOT_SLOTS})</div>
             </div>
-            <div className="grid grid-cols-6 gap-1.5 overflow-y-auto p-1 rounded border border-amber-900/40 bg-black/30" style={{ maxHeight: '50vh' }}>
+            <div className="moria-scrollbar grid grid-cols-5 gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-2 sm:grid-cols-6" style={{ maxHeight: '50vh' }}>
               {depot.map((item) => (
                 <Tooltip key={item.id} position="right" content={<ItemTooltip item={item} />}>
                   <button onClick={() => moveToInventory(item)}
@@ -130,7 +115,7 @@ export default function Depot({ player, inventory, setInventory, onClose }: Prop
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs text-amber-300 tracking-widest font-bold">🎒 BACKPACK ({inventory.length})</div>
             </div>
-            <div className="grid grid-cols-6 gap-1.5 overflow-y-auto p-1 rounded border border-amber-900/40 bg-black/30" style={{ maxHeight: '50vh' }}>
+            <div className="moria-scrollbar grid grid-cols-5 gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-2 sm:grid-cols-6" style={{ maxHeight: '50vh' }}>
               {inventory.map((item) => (
                 <Tooltip key={item.id} position="left" content={<ItemTooltip item={item} />}>
                   <button onClick={() => moveToDepot(item)}

@@ -1,1 +1,279 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --moria-bg: #05070c;
+  --moria-bg-soft: #0a0f18;
+  --moria-panel: rgba(9, 14, 23, 0.88);
+  --moria-panel-strong: rgba(7, 10, 17, 0.96);
+  --moria-line: rgba(142, 164, 198, 0.18);
+  --moria-line-strong: rgba(211, 177, 97, 0.42);
+  --moria-gold: #e5c477;
+  --moria-gold-bright: #ffe4a1;
+  --moria-steel: #9cb0cf;
+  --moria-blue: #6ea8ff;
+  --moria-violet: #a98bff;
+  --moria-text: #f5efe4;
+  --moria-muted: #91a0b7;
+  --moria-danger: #ff6474;
+  --moria-success: #58d6a8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  background: var(--moria-bg);
+}
+
+body {
+  overflow: hidden;
+  color: var(--moria-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(229, 196, 119, 0.9);
+  outline-offset: 2px;
+}
+
+::selection {
+  color: #080a0f;
+  background: var(--moria-gold-bright);
+}
+
+.moria-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(229, 196, 119, 0.3) rgba(0, 0, 0, 0.12);
+}
+
+.moria-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.moria-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(229, 196, 119, 0.48), rgba(110, 168, 255, 0.28));
+}
+
+.moria-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.moria-panel {
+  position: relative;
+  border: 1px solid var(--moria-line);
+  background:
+    linear-gradient(180deg, rgba(16, 23, 36, 0.92), rgba(6, 10, 17, 0.96)),
+    radial-gradient(circle at top right, rgba(110, 168, 255, 0.11), transparent 42%);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.48),
+    inset 0 1px rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(18px) saturate(125%);
+}
+
+.moria-panel::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.045), transparent 24%, transparent 78%, rgba(229, 196, 119, 0.045));
+}
+
+.moria-card {
+  border: 1px solid rgba(144, 164, 194, 0.15);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.moria-gold-line {
+  border-color: rgba(229, 196, 119, 0.34);
+}
+
+.moria-eyebrow {
+  color: var(--moria-gold);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.moria-title {
+  color: var(--moria-text);
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7);
+}
+
+.moria-button {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(229, 196, 119, 0.34);
+  background: linear-gradient(180deg, rgba(36, 47, 66, 0.96), rgba(13, 18, 29, 0.98));
+  color: #eee6d7;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.07), 0 8px 20px rgba(0, 0, 0, 0.24);
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.moria-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 225, 153, 0.64);
+  background: linear-gradient(180deg, rgba(48, 62, 86, 0.98), rgba(18, 25, 39, 0.98));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.09), 0 10px 28px rgba(0, 0, 0, 0.34), 0 0 20px rgba(229, 196, 119, 0.08);
+}
+
+.moria-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+}
+
+.moria-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+  filter: saturate(0.6);
+}
+
+.moria-button-primary {
+  border: 1px solid rgba(255, 226, 154, 0.72);
+  background: linear-gradient(180deg, #f1d68e 0%, #d2ad58 48%, #8f682a 100%);
+  color: #100d08;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.55), 0 12px 32px rgba(143, 104, 42, 0.28);
+  transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+}
+
+.moria-button-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.64), 0 15px 38px rgba(178, 133, 52, 0.35);
+}
+
+.moria-input {
+  border: 1px solid rgba(147, 170, 205, 0.22);
+  background: rgba(2, 5, 10, 0.58);
+  color: var(--moria-text);
+  box-shadow: inset 0 1px 10px rgba(0, 0, 0, 0.3);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.moria-input:hover {
+  border-color: rgba(147, 170, 205, 0.36);
+}
+
+.moria-input:focus {
+  border-color: rgba(229, 196, 119, 0.72);
+  background: rgba(3, 6, 12, 0.8);
+  box-shadow: 0 0 0 3px rgba(229, 196, 119, 0.08), inset 0 1px 10px rgba(0, 0, 0, 0.36);
+}
+
+.moria-chip {
+  border: 1px solid rgba(144, 164, 194, 0.18);
+  background: rgba(7, 11, 18, 0.66);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+}
+
+.moria-slot {
+  position: relative;
+  border: 1px solid rgba(150, 170, 202, 0.22);
+  background:
+    radial-gradient(circle at 50% 25%, rgba(255, 255, 255, 0.07), transparent 42%),
+    linear-gradient(180deg, rgba(24, 32, 47, 0.92), rgba(7, 11, 18, 0.96));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.28);
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, filter 150ms ease;
+}
+
+.moria-slot:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.025);
+  border-color: rgba(229, 196, 119, 0.58);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 12px 28px rgba(0, 0, 0, 0.38), 0 0 18px rgba(229, 196, 119, 0.08);
+}
+
+.moria-slot::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.025);
+}
+
+.moria-glow-gold {
+  box-shadow: 0 0 28px rgba(229, 196, 119, 0.16), inset 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.moria-glow-blue {
+  box-shadow: 0 0 30px rgba(110, 168, 255, 0.12), inset 0 1px rgba(255, 255, 255, 0.05);
+}
+
+@keyframes moria-fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes moria-soft-pulse {
+  0%, 100% { opacity: 0.62; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.035); }
+}
+
+@keyframes moria-shimmer {
+  0% { transform: translateX(-130%) skewX(-18deg); }
+  100% { transform: translateX(230%) skewX(-18deg); }
+}
+
+@keyframes moria-toast-in {
+  from { opacity: 0; transform: translateX(22px) scale(0.97); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes moria-raid-in {
+  0% { opacity: 0; transform: scale(0.86); filter: blur(7px); }
+  55% { opacity: 1; transform: scale(1.04); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+
+.moria-fade-up {
+  animation: moria-fade-up 420ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.moria-soft-pulse {
+  animation: moria-soft-pulse 2.6s ease-in-out infinite;
+}
+
+.moria-toast-in {
+  animation: moria-toast-in 320ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.moria-raid-in {
+  animation: moria-raid-in 430ms cubic-bezier(.16,.9,.24,1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
