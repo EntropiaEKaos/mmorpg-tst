@@ -21,8 +21,11 @@ jobs:
         run: npm ci
       - name: Build client
         run: npm run build
-      - name: Install browser driver
+      - name: Install isolated browser driver
         run: |
+          mkdir -p /tmp/moria-pw
+          cd /tmp/moria-pw
+          npm init -y >/dev/null 2>&1
           npm install --no-save --package-lock=false playwright@1.52.0
           npx playwright install --with-deps chromium
       - name: Start production preview
@@ -37,6 +40,7 @@ jobs:
       - name: Capture real gameplay and City Designer
         run: |
           mkdir -p /tmp/moria-9-6
+          cd /tmp/moria-pw
           node --input-type=module <<'NODE'
           import { chromium } from 'playwright';
           const browser = await chromium.launch({ headless: true });
@@ -47,9 +51,13 @@ jobs:
           await page.screenshot({ path: '/tmp/moria-9-6/moria-9-6-eldoria-gameplay.png', fullPage: true });
 
           await page.keyboard.press('Control+Shift+A');
-          await page.getByText('ADMIN PANEL').waitFor({ state: 'visible', timeout: 5000 });
+          const adminHeading = page.getByText('ADMIN PANEL');
+          await adminHeading.waitFor({ state: 'visible', timeout: 5000 });
           await page.getByRole('button', { name: /Game Editor \(Items\/Spells\/Maps\/NPCs\/Monsters\/Books\)/i }).click();
-          await page.getByRole('button', { name: /City Designer · Live/i }).click();
+          await adminHeading.waitFor({ state: 'hidden', timeout: 5000 });
+          const cityDesignerTab = page.getByRole('button', { name: /City Designer · Live/i });
+          await cityDesignerTab.waitFor({ state: 'visible', timeout: 5000 });
+          await cityDesignerTab.click();
           await page.getByText(/CITY DESIGNER · LIVE OFFLINE PREVIEW/i).waitFor({ state: 'visible', timeout: 5000 });
           await page.waitForTimeout(700);
           await page.screenshot({ path: '/tmp/moria-9-6/moria-9-6-city-designer-eldoria.png', fullPage: true });
