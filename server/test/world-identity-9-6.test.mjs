@@ -88,6 +88,7 @@ test('9.6 presentation remains modular and GameScreen stays inside architecture 
   assert.match(screen, /drawCityTileOverlay/);
   assert.match(screen, /drawCityDecor/);
   assert.match(screen, /mapId=\{currentMapId\}/);
+  assert.match(screen, /onOpenEditor=\{\(\) => \{ setShowAdmin\(false\); setShowEditor\(true\);/);
   assert.match(city, /export function getCityBuildings/);
   assert.match(city, /export function drawCityDecor/);
   const bytes = Buffer.byteLength(screen, 'utf8');

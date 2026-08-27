@@ -3005,7 +3005,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               damageMultiplier={damageMultiplier} setDamageMultiplier={setDamageMultiplier}
               setDayTime={setDayTimeOverride}
               weather={weather} setWeather={setWeather}
-              onOpenEditor={() => { setShowEditor(true); refreshCustomContent(); }}
+              onOpenEditor={() => { setShowAdmin(false); setShowEditor(true); refreshCustomContent(); }}
               onOpenQuestCreator={() => setShowQuestCreator(true)}
               onSetSkull={(skull: string) => { adminSetSkull(player.name, skull as any); addToast('info', 'Skull Set', `Your skull is now: ${skull}`, SKULLS[skull as keyof typeof SKULLS].icon, SKULLS[skull as keyof typeof SKULLS].color); }}
               onOpenWorldEventCreator={() => setShowWorldEventCreator(true)}
