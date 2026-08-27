@@ -3,7 +3,7 @@
 // Consolidates features that were previously browser/localStorage-only.
 // ===================================================================
 
-import { executeOfficialAction, getOfficialActionService, hasOfficialAction } from './OfficialActionRegistry.mjs';
+import { officialActionGateway } from './OfficialActionGateway.mjs';
 import { officialCommerceDomain } from './OfficialCommerceDomain.mjs';
 import { officialProgressionDomain } from './OfficialProgressionDomain.mjs';
 import { officialPvpDomain } from './OfficialPvpDomain.mjs';
@@ -24,9 +24,6 @@ export {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
 } from './OfficialCatalogs.mjs';
-
-const cleanText = (value, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-
 
 
 export class OfficialSystems {
@@ -91,18 +88,7 @@ export class OfficialSystems {
   }
 
   serviceProximity(player, action, npcs = []) {
-    const rule = getOfficialActionService(action);
-    if (!rule) return { ok: true, npc: null };
-    const npc = Array.isArray(npcs) ? npcs.find(entry => entry?.id === rule.npcId) : null;
-    if (!npc) return { ok: false, error: `${rule.label} is unavailable.` };
-    const mapId = cleanText(npc.mapId, 50);
-    const x = Number(npc.posX);
-    const y = Number(npc.posY);
-    const near = mapId === player.mapId && Number.isFinite(x) && Number.isFinite(y)
-      && Math.abs(player.x - x) <= 2 && Math.abs(player.y - y) <= 2;
-    return near
-      ? { ok: true, npc }
-      : { ok: false, error: `Move near ${cleanText(npc.name, 80) || rule.label} to use this service.` };
+    return officialActionGateway.serviceProximity(player, action, npcs);
   }
 
   applyDerivedBonuses(player, stats) {
@@ -277,16 +263,7 @@ export class OfficialSystems {
   }
 
   handle(player, payload, ctx = {}) {
-    const action = cleanText(payload?.action, 80);
-    if (!hasOfficialAction(action)) return { ok: false, error: 'Unknown official action.' };
-    const proximity = this.serviceProximity(player, action, ctx.contentNpcs || []);
-    if (!proximity.ok) return { ok: false, error: proximity.error || 'Move near the required NPC.' };
-
-    const result = executeOfficialAction(this, player, action, payload, ctx);
-    const ok = Boolean(result?.ok);
-    const detail = result?.detail ?? null;
-    if (ok) this.refreshAchievements(player);
-    return { ok, detail, action, error: ok ? null : 'Action rejected by authoritative server.' };
+    return officialActionGateway.handle(this, player, payload, ctx);
   }
 }
 
