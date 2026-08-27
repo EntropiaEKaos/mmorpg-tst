@@ -22,6 +22,8 @@ jobs:
           node-version: 22
       - name: Apply inventory economy domain extraction
         run: python3 tools/apply-foundation-7-10-inventory-economy.py
+      - name: Harden monetary invariants
+        run: python3 tools/harden-foundation-7-10-inventory-economy.py
       - name: Validate inventory economy boundaries
         run: |
           test -f server/engine/OfficialInventoryEconomyDomain.mjs
@@ -31,7 +33,8 @@ jobs:
           grep -q "return officialInventoryEconomyDomain.buyShop" server/engine/OfficialSystems.mjs
           grep -q "return officialInventoryEconomyDomain.buyCoinItem" server/engine/OfficialSystems.mjs
           ! grep -q "buildEquipmentLootPool" server/engine/OfficialSystems.mjs
-          grep -q "coin sinks are atomic" server/test/official-inventory-economy-domain.test.mjs
+          grep -q "Number.isSafeInteger(amount)" server/engine/OfficialInventoryEconomyDomain.mjs
+          grep -q "coin sinks are atomic on rejection" server/test/official-inventory-economy-domain.test.mjs
       - name: Validate all gates
         run: |
           npm ci
