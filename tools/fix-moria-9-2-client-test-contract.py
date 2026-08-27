@@ -11,10 +11,17 @@ test = test_path.read_text(encoding='utf-8')
 network = network_path.read_text(encoding='utf-8')
 
 # The 9.2 client applicator writes this JS test from a Python raw string.
-# That historically left regex literals double-escaped (for example
-# /sendTask\\(/), which makes the generated JavaScript regex invalid or
-# semantically wrong. Collapse those Python-level escapes before the suite runs.
+# Collapse Python-level escapes before the JavaScript suite runs.
 test = test.replace('\\\\', '\\')
+
+# The original architecture guard was overly broad: it rejected any local
+# variable named ownedOutfits/ownedMounts, even when no authoritative player
+# snapshot was being mutated. Keep the intent of the test and forbid actual
+# mutation of server-owned appearance/mount projections instead.
+broad_guard = "assert.doesNotMatch(screen,/ownedOutfits\\s*=|ownedMounts\\s*=/);"
+narrow_guard = "assert.doesNotMatch(screen,/(?:p|playerRef\\.current)\\.(?:appearance|mounts)(?:\\.[A-Za-z0-9_]+)*\\s*=/);"
+if broad_guard in test:
+    test = test.replace(broad_guard, narrow_guard, 1)
 
 for method in ('sendAppearance', 'sendTask', 'sendHousing'):
     if f'{method}(action: string' not in sync:
