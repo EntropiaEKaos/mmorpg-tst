@@ -39,7 +39,7 @@ export default function GameEditor({ player, setPlayer: _setPlayer, onClose, onM
          style={{ background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)' }}
          onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-           className="rounded-lg border-2 p-4 max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+           className="rounded-lg border-2 p-4 max-w-7xl w-full max-h-[90vh] overflow-hidden flex flex-col"
            style={{ background: 'linear-gradient(180deg, rgba(80,0,80,0.95) 0%, rgba(30,0,30,0.98) 100%)', borderColor: '#ff00ff', boxShadow: '0 0 60px rgba(255,0,255,0.5)' }}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-black tracking-widest text-transparent bg-clip-text"
