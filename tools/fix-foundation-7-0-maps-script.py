@@ -3,9 +3,6 @@ from pathlib import Path
 path = Path('tools/apply-foundation-7-0-maps.py')
 text = path.read_text(encoding='utf-8')
 
-# Remove the two old contiguous sync-block replacements. POST and DELETE have
-# different indentation in server.js, so Foundation 7.0 anchors each route
-# independently instead of assuming byte-identical blocks.
 needle = "replace_once('server/server.js', sync_block, sync_new)"
 if text.count(needle) != 2:
     raise SystemExit(f'expected two legacy sync migration calls, found {text.count(needle)}')
@@ -13,18 +10,19 @@ text = text.replace(needle, '', 2)
 
 anchor = "replace_once('server/server.js',\n\"    const blockers = findBlockingContentReferences(contentDB, type, id);\","
 insert = '''text_server = read('server/server.js')
-post_item_sync = "      if (type === 'items') engine.syncContentItems(contentDB.get('items'));"
-delete_item_sync = "    if (type === 'items') engine.syncContentItems(contentDB.get('items'));"
-post_map_sync = "      if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }"
-delete_map_sync = "    if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }"
+post_item_sync = "\\n      if (type === 'items') engine.syncContentItems(contentDB.get('items'));"
+delete_item_sync = "\\n    if (type === 'items') engine.syncContentItems(contentDB.get('items'));"
+post_map_sync = "\\n      if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }"
+delete_map_sync = "\\n    if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }"
 if text_server.count(post_item_sync) != 1:
     raise SystemExit(f'server/server.js: expected one POST item sync anchor, found {text_server.count(post_item_sync)}')
 if text_server.count(delete_item_sync) != 1:
     raise SystemExit(f'server/server.js: expected one DELETE item sync anchor, found {text_server.count(delete_item_sync)}')
-text_server = text_server.replace(post_item_sync, post_map_sync + "\\n" + post_item_sync, 1)
-text_server = text_server.replace(delete_item_sync, delete_map_sync + "\\n" + delete_item_sync, 1)
-if text_server.count("if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }") != 2:
-    raise SystemExit('server/server.js: both POST and DELETE must reconcile maps')
+text_server = text_server.replace(post_item_sync, post_map_sync + post_item_sync, 1)
+text_server = text_server.replace(delete_item_sync, delete_map_sync + delete_item_sync, 1)
+map_core = "if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }"
+if text_server.count(map_core) != 2:
+    raise SystemExit(f'server/server.js: expected two final map sync paths, found {text_server.count(map_core)}')
 write('server/server.js', text_server)
 
 replace_once('server/server.js',
