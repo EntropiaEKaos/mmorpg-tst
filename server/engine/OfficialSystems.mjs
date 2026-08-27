@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { buildEquipmentLootPool } from './Items.mjs';
 import { executeOfficialAction, getOfficialActionService, hasOfficialAction } from './OfficialActionRegistry.mjs';
 import { officialCommerceDomain } from './OfficialCommerceDomain.mjs';
+import { officialProgressionDomain } from './OfficialProgressionDomain.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS, MYSTERIES, DUNGEON_WAVES, DEFAULT_EVENTS,
@@ -30,7 +31,6 @@ const clamp = (value, min, max, fallback = min) => {
 const int = (value, min, max, fallback = min) => Math.floor(clamp(value, min, max, fallback));
 const slug = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 const cleanText = (value, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-const dayKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 const playerKey = (name) => String(name || '').trim().toLocaleLowerCase('en-US');
 
 
@@ -245,32 +245,19 @@ export class OfficialSystems {
   }
 
   getXpMultiplier(player) {
-    const s = this.ensurePlayer(player);
-    let mult = s.stamina > 2400 ? 1.2 : s.stamina < 840 ? 0.5 : 1;
-    if (Date.now() < s.blessingsUntil) mult *= 1.05;
-    const food = Array.isArray(player.buffs) ? player.buffs.find(b => b.type === 'official_xp' && Number(b.expiresAt) > Date.now()) : null;
-    if (food) mult *= 1 + clamp(food.value, 0, 50, 0) / 100;
-    return mult;
+    return officialProgressionDomain.getXpMultiplier(this, player);
   }
 
   getDeathLossMultiplier(player) {
-    return Date.now() < this.ensurePlayer(player).blessingsUntil ? 0.5 : 1;
+    return officialProgressionDomain.getDeathLossMultiplier(this, player);
   }
 
   getReputationDiscount(player) {
-    const town = int(player.reputation?.town, -100_000, 100_000, 0);
-    if (town >= 42000) return 0.25;
-    if (town >= 21000) return 0.15;
-    if (town >= 9000) return 0.10;
-    if (town >= 3000) return 0.05;
-    return 0;
+    return officialProgressionDomain.getReputationDiscount(player);
   }
 
   awardReputation(player, amount) {
-    if (!player.reputation || typeof player.reputation !== 'object' || Array.isArray(player.reputation)) player.reputation = { town: 0 };
-    const delta = int(amount, -10_000, 10_000, 0);
-    player.reputation.town = int(player.reputation.town, -100_000, 100_000, 0) + delta;
-    return player.reputation.town;
+    return officialProgressionDomain.awardReputation(player, amount);
   }
 
   serviceProximity(player, action, npcs = []) {
@@ -351,21 +338,11 @@ export class OfficialSystems {
   }
 
   getMasteryBonus(player) {
-    const weapon = player.equipment?.weapon;
-    if (!weapon?.id) return 0;
-    const mastery = this.ensurePlayer(player).mastery[weapon.id];
-    return mastery ? Math.min(0.25, int(mastery.level, 1, 20, 1) * 0.01) : 0;
+    return officialProgressionDomain.getMasteryBonus(this, player);
   }
 
   recordWeaponHit(player) {
-    const weapon = player.equipment?.weapon;
-    if (!weapon?.id) return;
-    const s = this.ensurePlayer(player);
-    const entry = s.mastery[weapon.id] || { level: 1, xp: 0 };
-    entry.xp = int(entry.xp, 0, 1_000_000, 0) + 1;
-    const needed = entry.level * 25;
-    if (entry.xp >= needed && entry.level < 20) { entry.xp -= needed; entry.level++; }
-    s.mastery[weapon.id] = entry;
+    return officialProgressionDomain.recordWeaponHit(this, player);
   }
 
   maybeGemDrop(player, monster) {
@@ -382,15 +359,7 @@ export class OfficialSystems {
   }
 
   refreshAchievements(player) {
-    const s = this.ensurePlayer(player);
-    const unlocked = [];
-    for (const achievement of ACHIEVEMENTS) {
-      if (s.achievements.includes(achievement.id) || !achievement.test(player)) continue;
-      s.achievements.push(achievement.id);
-      s.coins += achievement.coins;
-      unlocked.push({ id: achievement.id, name: achievement.name, icon: achievement.icon, coins: achievement.coins });
-    }
-    return unlocked;
+    return officialProgressionDomain.refreshAchievements(this, player);
   }
 
   ensureWorldEvent(now = Date.now()) {
@@ -495,11 +464,7 @@ export class OfficialSystems {
 
   tickPlayer(player, now = Date.now()) {
     const s = this.ensurePlayer(player);
-    if (now - s.lastStaminaTick >= 60_000) {
-      const spent = Math.min(10, Math.floor((now - s.lastStaminaTick) / 60_000));
-      s.stamina = Math.max(0, s.stamina - spent);
-      s.lastStaminaTick += spent * 60_000;
-    }
+    officialProgressionDomain.tickStamina(this, player, now);
     if (s.pvp.aggression > 0 && now - s.pvp.lastAggression > 5 * 60_000) {
       s.pvp.aggression = Math.max(0, s.pvp.aggression - 1);
       s.pvp.lastAggression = now;
@@ -551,19 +516,11 @@ export class OfficialSystems {
   }
 
   rest(player) {
-    if (player.gold < 50) return false;
-    player.gold -= 50;
-    player.hp = player.maxHp;
-    player.mana = player.maxMana;
-    const s = this.ensurePlayer(player);
-    s.stamina = Math.min(2520, s.stamina + 120);
-    return true;
+    return officialProgressionDomain.rest(this, player);
   }
 
   train(player) {
-    const s = this.ensurePlayer(player);
-    if (player.gold < 200 || s.training >= 20) return false;
-    player.gold -= 200; s.training++; return true;
+    return officialProgressionDomain.train(this, player);
   }
 
   buyFood(player, foodId) {
@@ -621,18 +578,7 @@ export class OfficialSystems {
   }
 
   claimDaily(player, now = Date.now()) {
-    const s = this.ensurePlayer(player);
-    const today = dayKey(now);
-    if (s.daily.lastDay === today) return false;
-    const previous = s.daily.lastDay ? new Date(`${s.daily.lastDay}T00:00:00Z`).getTime() : 0;
-    const consecutive = previous && Math.floor((new Date(`${today}T00:00:00Z`).getTime() - previous) / 86_400_000) === 1;
-    s.daily.streak = consecutive ? Math.min(7, s.daily.streak + 1) : 1;
-    s.daily.lastDay = today;
-    const day = s.daily.streak;
-    const reward = { gold: 50 * day, xp: 30 * day, coins: 2 * day };
-    player.gold += reward.gold; player.xp += reward.xp; s.coins += reward.coins;
-    player.stats.goldEarned = (player.stats.goldEarned || 0) + reward.gold;
-    return reward;
+    return officialProgressionDomain.claimDaily(this, player, now);
   }
 
   gather(player, world) {
