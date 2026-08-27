@@ -6,6 +6,7 @@ on:
     paths:
       - tools/apply-moria-8-6-content-studio.py
       - tools/fix-moria-8-6-content-studio-compat.py
+      - tools/fix-moria-8-6-panel-template.py
       - tools/run-moria-8-6-content-studio.py
       - .github/workflows/apply-moria-8-6-content-studio.yml
 
@@ -35,6 +36,7 @@ jobs:
         run: |
           python3 tools/run-moria-8-6-content-studio.py
           python3 tools/fix-moria-8-6-content-studio-compat.py
+          python3 tools/fix-moria-8-6-panel-template.py
 
       - name: Install client dependencies
         run: npm ci
