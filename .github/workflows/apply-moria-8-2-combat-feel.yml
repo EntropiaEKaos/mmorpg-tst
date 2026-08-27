@@ -1,0 +1,68 @@
+name: Apply Mor'ia 8.2 Combat Feel
+
+on:
+  push:
+    branches: [moria-8.2-combat-feel]
+    paths:
+      - tools/apply-moria-8-2-combat-feel.py
+      - .github/workflows/apply-moria-8-2-combat-feel.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-8.2-combat-feel
+          fetch-depth: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Apply 8.2 combat feel
+        run: python3 tools/apply-moria-8-2-combat-feel.py
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Audit client dependencies
+        run: npm audit
+
+      - name: Typecheck client
+        run: npm run typecheck
+
+      - name: Build client
+        run: npm run build
+
+      - name: Install server dependencies
+        run: npm ci --prefix server --no-fund
+
+      - name: Audit server dependencies
+        run: npm audit --prefix server
+
+      - name: Check server syntax
+        run: npm run check --prefix server
+
+      - name: Run full server suite
+        run: npm test --prefix server
+
+      - name: Commit validated 8.2 combat feel
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/ActionBar.tsx src/components/CombatTargetFrame.tsx src/components/GameScreen.tsx src/game/ServerSync.ts src/index.css server/test/combat-presentation.test.mjs docs/MORIA_8_2_COMBAT_FEEL.md
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(8.2): upgrade combat readability and impact"
+          git fetch origin moria-8.2-combat-feel
+          git rebase origin/moria-8.2-combat-feel
+          git push origin HEAD:moria-8.2-combat-feel
