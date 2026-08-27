@@ -1,4 +1,4 @@
-name: Apply Foundation 7.2 Persistence
+name: Apply Foundation 7.2 Persistence Hardening
 
 on:
   push:
@@ -20,16 +20,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply persistence durability patch
-        run: python3 tools/apply-foundation-7-2-persistence.py
-      - name: Validate persistence invariants
+      - name: Apply live-load and shutdown hardening
+        run: python3 tools/harden-foundation-7-2-persistence.py
+      - name: Validate hardening invariants
         run: |
-          grep -q "AUTOSAVE_INTERVAL_MS" server/server.js
-          grep -q "persistOnlinePlayers('autosave')" server/server.js
-          grep -q "shouldFlushCriticalIntent" server/server.js
-          grep -q "gracefulShutdown" server/server.js
-          grep -q "autosave persists authoritative live movement" server/test/persistence-durability.test.mjs
-          grep -q "direct trade is durably flushed" server/test/persistence-durability.test.mjs
+          grep -q "in-memory engine is canonical" server/server.js
+          grep -q "load_request returns current authoritative memory" server/test/persistence-durability.test.mjs
+          grep -q "SIGTERM flushes current online player state" server/test/persistence-durability.test.mjs
       - name: Validate all gates
         run: |
           npm ci
@@ -40,7 +37,7 @@ jobs:
           npm audit --prefix server
           npm run check --prefix server
           npm test --prefix server
-      - name: Commit validated Foundation 7.2 persistence
+      - name: Commit validated Foundation 7.2 hardening
         run: |
           if git diff --quiet -- server src docs; then
             echo "No source changes"
@@ -49,7 +46,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add server src docs
-          git commit -m "feat(persistence): autosave online players and flush critical transactions"
+          git commit -m "test(persistence): serve live saves and verify graceful shutdown flush"
           git restore tools || true
           git fetch origin mvp-foundation-7.0
           git rebase origin/mvp-foundation-7.0
