@@ -1,0 +1,88 @@
+name: Publish Mor'ia 9.6 README
+
+on:
+  push:
+    branches: [moria-9.6-world-identity-city-editor]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish 9.6 README section
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('README.md')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = {
+              "<p><b>Versão atual: Mor'ia 9.5 — Movable HUD & Classic World Polish</b></p>": "<p><b>Versão atual: Mor'ia 9.6 — World Identity & City Designer</b></p>",
+              "ferramentas ingame para criação de itens, feitiços, monstros, NPCs e missões em tempo real!": "ferramentas ingame para criação de itens, feitiços, monstros, NPCs, missões e identidade urbana em tempo real.",
+              "A 9.5 é a linha atual do `master`.": "A 9.5 é a base visual imediatamente anterior à 9.6.",
+              "### Gameplay atual — 9.5": "### Gameplay — 9.5",
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'README anchor mismatch: {old!r} count={text.count(old)}')
+              text = text.replace(old, new, 1)
+
+          marker = "## 🎨 Mor'ia 9.5 — Movable HUD & Classic World Polish"
+          if text.count(marker) != 1:
+              raise SystemExit('9.5 section marker mismatch')
+
+          section = r'''## 🏙️ Mor'ia 9.6 — World Identity & City Designer
+
+A 9.6 transforma cidades e regiões em espaços reconhecíveis pela própria composição do mundo. Os **11 mapas** passam a ter identidade urbana data-driven própria — incluindo **Royal Capital, Harbor City, Alpine Fortress, Forge Citadel, Void Necropolis e Astral Sanctum** — com paletas, distritos, landmarks, ruas e props específicos.
+
+O minimapa deixou de representar uma Eldoria fixa: agora usa o `mapId` atual, terreno/bioma reais, distritos, landmarks, portais, monstros, elites, bosses e a posição do jogador. A malha do terreno é memoizada por mapa para evitar regeneração 80×80 a cada atualização da HUD.
+
+### Gameplay real — Eldoria 9.6
+
+![Mor'ia 9.6 Eldoria gameplay](docs/screenshots/moria-9-6-eldoria-gameplay.png)
+
+### City Designer — Eldoria / Royal Capital
+
+![Mor'ia 9.6 City Designer Eldoria](docs/screenshots/moria-9-6-city-designer-eldoria.png)
+
+### City Designer — Frostpeak / Alpine Fortress
+
+![Mor'ia 9.6 City Designer Frostpeak](docs/screenshots/moria-9-6-city-designer-frostpeak.png)
+
+### 🛠️ Ferramenta de edição urbana
+
+No **Quick Play**, abra `Ctrl + Shift + A` → **Game Editor** → **City Designer · Live**. A ferramenta permite selecionar qualquer mapa, aplicar presets de identidade urbana, editar cores de paredes/telhados/vias/accent, ajustar centro e raio urbano, clicar no preview para escolher coordenadas e criar/remover **landmarks**, **distritos** e **props**. No modo offline a alteração pode ser aplicada imediatamente ao mundo e o draft é persistido localmente.
+
+No servidor conectado, os mesmos campos (`cityStyle`, `cityAccent`, `roofColor`, `wallColor`, `roadColor`, `districts`, `landmarks` e `props`) fazem parte do **Content Studio autoritativo**, com limites e validação antes da publicação. A camada visual não transfere autoridade de movimento, colisão, teleporte ou acesso ao cliente.
+
+Mais detalhes técnicos: **[Mor'ia 9.6 — World Identity & City Designer](docs/MORIA_9_6_WORLD_IDENTITY_CITY_EDITOR.md)**.
+
+---
+
+'''
+          text = text.replace(marker, section + marker, 1)
+
+          docs_anchor = "- 🎨 **[Mor'ia 9.5 — HUD World Polish](docs/MORIA_9_5_HUD_WORLD_POLISH.md)** — Reforma visual, janelas móveis, viewport e screenshots reais."
+          if text.count(docs_anchor) != 1:
+              raise SystemExit('documentation anchor mismatch')
+          docs_96 = "- 🏙️ **[Mor'ia 9.6 — World Identity & City Designer](docs/MORIA_9_6_WORLD_IDENTITY_CITY_EDITOR.md)** — Identidades urbanas data-driven, minimapa real, editor visual e screenshots validados.\n"
+          text = text.replace(docs_anchor, docs_96 + docs_anchor, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+          test -f docs/screenshots/moria-9-6-eldoria-gameplay.png
+          test -f docs/screenshots/moria-9-6-city-designer-eldoria.png
+          test -f docs/screenshots/moria-9-6-city-designer-frostpeak.png
+          grep -q "Versão atual: Mor'ia 9.6" README.md
+          grep -q "City Designer — Frostpeak" README.md
+      - name: Commit README and self-remove
+        run: |
+          rm .github/workflows/publish-moria-9-6-readme.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md .github/workflows/publish-moria-9-6-readme.yml
+          git commit -m "docs(9.6): document City Designer and screenshots"
+          git push
