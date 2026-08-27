@@ -23,6 +23,8 @@ jobs:
             server/package-lock.json
       - name: Apply guarded 9.6 integration
         run: python tools/apply-moria-9-6-world-identity.py
+      - name: Normalize extracted HUD contract
+        run: python tools/fix-moria-9-6-unused-tick.py
       - name: Install client dependencies
         run: npm ci
       - name: Audit client dependencies
