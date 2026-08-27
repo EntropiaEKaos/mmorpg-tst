@@ -15,6 +15,10 @@ import { socialSystems } from './SocialSystems.mjs';
 import { contentDB } from './ContentDB.mjs';
 import { accountStore } from './AuthService.mjs';
 import { canAccessMap, explainMapAccess } from './ContentAccess.mjs';
+import { tibiaTaskEngine } from './TibiaTaskEngine.mjs';
+import { appearanceSystem } from './AppearanceSystem.mjs';
+import { mountSystem } from './MountSystem.mjs';
+import { housingSystem } from './HousingSystem.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -99,13 +103,17 @@ class GameEngine {
       equipment: {},
       buffs: [], skills: freshSkills(),
       lastAttack: 0, lastMove: 0, lastRegen: 0, cooldowns: {},
-      mounted: false, professions: {}, reputation: { town: 0 }, talents: {},
+      mounted: false, mountId: undefined, mountState: null, appearanceState: null, taskState: null, professions: {}, reputation: { town: 0 }, talents: {},
       adventure: createAdventureState(),
       official: null,
       stats: { monstersKilled: 0, bossesKilled: 0, damageDealt: 0, damageTaken: 0, healingDone: 0, goldEarned: 0, distanceWalked: 0, deaths: 0, levelUps: 0, spellsCast: 0, adventuresCompleted: 0 },
       sessionStartedAt: Date.now(), sessionDamageBase: 0,
       ws, lastActivity: Date.now(),
     };
+    appearanceSystem.initializePlayer(player, contentDB);
+    mountSystem.initializePlayer(player, contentDB);
+    tibiaTaskEngine.initializePlayer(player, contentDB);
+    housingSystem.maintainPlayer(player, contentDB);
     this.players.set(id, player);
     return player;
   }
@@ -116,6 +124,15 @@ class GameEngine {
     const result = [];
     for (const p of this.players.values()) if (p.mapId === mapId) result.push(p);
     return result;
+  }
+
+  isNearContentNpc(player, idOrRole, range = 2) {
+    const wanted = typeof idOrRole === 'string' ? idOrRole.trim() : '';
+    if (!wanted) return false;
+    return contentDB.get('npcs').some(npc => npc && npc.mapId === player.mapId
+      && (npc.id === wanted || npc.role === wanted)
+      && Number.isFinite(Number(npc.posX)) && Number.isFinite(Number(npc.posY))
+      && Math.abs(Number(npc.posX) - player.x) + Math.abs(Number(npc.posY) - player.y) <= range);
   }
 
   enforcePlayerMapAccess(player) {
@@ -337,7 +354,10 @@ class GameEngine {
       case 'unequip': return this.handleUnequip(player, payload);
       case 'drop': return this.handleDrop(player, payload);
       case 'pickup': return this.handlePickup(player, payload);
-      case 'mount': return this.handleMount(player);
+      case 'mount': return this.handleMount(player, payload);
+      case 'appearance': return this.handleAppearance(player, payload);
+      case 'task': return this.handleTask(player, payload);
+      case 'housing': return this.handleHousing(player, payload);
       case 'talent': return this.handleTalent(player, payload);
       case 'talent_reset': return this.handleTalentReset(player);
       case 'adventure_start': return this.handleAdventureStart(player, payload);
@@ -359,14 +379,15 @@ class GameEngine {
 
     const now = Date.now();
     const movementStats = this.computeDerivedStats(player);
-    const moveBonus = boundedNumber(movementStats.moveSpeed, 0, 50, 0);
-    const moveCooldown = Math.max(50, Math.floor(100 * (1 - moveBonus / 100)));
+    const moveBonus = boundedNumber(movementStats.moveSpeed + mountSystem.speedBonus(player, contentDB), 0, 70, 0);
+    const moveCooldown = Math.max(35, Math.floor(100 * (1 - moveBonus / 100)));
     if (now - player.lastMove < moveCooldown) return false;
 
     const nx = player.x + dx, ny = player.y + dy;
     const map = WORLD.getMap(player.mapId);
     if (!map || nx < 0 || nx >= map.width || ny < 0 || ny >= map.height) return false;
     if (!map.tiles?.[ny]?.[nx]?.walkable) return false;
+    if (!housingSystem.canStep(player, player.mapId, nx, ny, contentDB)) return false;
 
     const monsters = this.monstersByMap.get(player.mapId) || [];
     if (monsters.some(m => !m.dead && m.x === nx && m.y === ny)) return false;
@@ -511,6 +532,10 @@ class GameEngine {
 
     const derived = this.computeDerivedStats(player);
     const adventureKill = adventureEngine.onMonsterKill(player, monster);
+    const taskUpdates = tibiaTaskEngine.onMonsterKill(player, monster, contentDB);
+    for (const update of taskUpdates) {
+      this.emitEvent(player.mapId, { kind:update.ready ? 'task_ready' : 'task_progress', targetId:player.id, text:`${update.name}: ${update.current}/${update.needed}${update.ready ? ' · return to task master' : ''}`, color:update.ready ? '#f4e04d' : '#9bd4ff' });
+    }
     const officialKill = officialSystems.onMonsterKill(player, monster);
     const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100) * adventureKill.xpMultiplier * officialKill.xpMultiplier);
     player.xp += xpGain;
@@ -725,9 +750,56 @@ class GameEngine {
     return true;
   }
 
-  handleMount(player) {
-    if (!player.mounted && player.level < 5) return false;
-    player.mounted = !player.mounted;
+  handleMount(player, payload = {}) {
+    const action = typeof payload.action === 'string' ? payload.action : 'toggle';
+    if (action === 'buy' && !this.isNearContentNpc(player, 'stablemaster')) {
+      this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:'Visit a stablemaster to buy mounts.', color:'#d9bd7a' });
+      return false;
+    }
+    const result = mountSystem.handle(player, { ...payload, action }, contentDB);
+    if (!result.ok) {
+      this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:result.error || 'Mount action rejected.', color:'#ff9090' });
+      return false;
+    }
+    this.emitEvent(player.mapId, { kind:'mount_update', targetId:player.id, text: result.mounted === false ? 'Dismounted.' : result.mount ? `${result.mount.name} ready.` : 'Mount updated.', color:result.mount?.color || '#d9bd7a' });
+    return true;
+  }
+
+  handleAppearance(player, payload) {
+    const action = typeof payload.action === 'string' ? payload.action : '';
+    if ((action === 'buy' || action === 'buy_addon') && !this.isNearContentNpc(player, 'outfitter')) {
+      this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:'Visit an outfitter to unlock outfits and addons.', color:'#d49bc8' });
+      return false;
+    }
+    const result = appearanceSystem.handle(player, payload, contentDB);
+    if (!result.ok) { this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:result.error || 'Appearance action rejected.', color:'#ff9090' }); return false; }
+    this.emitEvent(player.mapId, { kind:'appearance_update', targetId:player.id, text:'Outfit updated.', color:'#d49bc8' });
+    return true;
+  }
+
+  handleTask(player, payload) {
+    const result = tibiaTaskEngine.handle(player, payload, contentDB, npcId => this.isNearContentNpc(player, npcId));
+    if (!result.ok) { this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:result.error || 'Task action rejected.', color:'#ff9090' }); return false; }
+    if (result.reward) {
+      player.gold += result.reward.gold;
+      player.xp += result.reward.xp;
+      const voc = VOCATIONS[player.vocation];
+      while (player.xp >= player.xpNext && voc) {
+        player.xp -= player.xpNext; player.level++; player.xpNext = Math.floor(player.xpNext * 1.4);
+        player.maxHp += voc.hpPerLevel; player.hp = player.maxHp; player.maxMana += voc.manaPerLevel; player.mana = player.maxMana;
+        player.attack += voc.atkPerLevel; player.defense += voc.defPerLevel; player.magic += voc.magPerLevel; player.stats.levelUps++;
+        this.emitEvent(player.mapId, { kind:'levelup', targetId:player.id, text:`LEVEL ${player.level}!`, color:'#f4e04d', pos:{x:player.x,y:player.y} });
+      }
+    }
+    const text = result.action === 'claim' ? `${result.task.name} complete · +${result.reward.points} task points` : result.action === 'accept' ? `Task accepted: ${result.task.name}` : 'Task abandoned.';
+    this.emitEvent(player.mapId, { kind:'task_update', targetId:player.id, text, color:'#d9bd7a' });
+    return true;
+  }
+
+  handleHousing(player, payload) {
+    const result = housingSystem.handle(player, payload, contentDB);
+    if (!result.ok) { this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:result.error || 'Housing action rejected.', color:'#ff9090' }); return false; }
+    this.emitEvent(player.mapId, { kind:'housing_update', targetId:player.id, text:'Housing updated.', color:'#d9bd7a' });
     return true;
   }
 
@@ -1182,6 +1254,10 @@ class GameEngine {
       moveSpeed: derived.moveSpeed,
       quests: questEngine.serialize(playerId),
       adventure: adventureEngine.serialize(player),
+      tasks: tibiaTaskEngine.snapshot(player, contentDB),
+      appearance: appearanceSystem.snapshot(player, contentDB),
+      mounts: mountSystem.snapshot(player, contentDB),
+      housing: housingSystem.snapshot(player, contentDB),
       sessionStartedAt: undefined,
       sessionDamageBase: undefined,
     };
@@ -1191,7 +1267,7 @@ class GameEngine {
       if (p.id !== playerId && p.mapId === player.mapId && Math.abs(p.x - player.x) + Math.abs(p.y - player.y) < 25) {
         const voc = VOCATIONS[p.vocation];
         const pDerived = this.computeDerivedStats(p);
-        nearbyPlayers.push({ id: p.id, name: p.name, vocation: p.vocation, level: p.level, x: p.x, y: p.y, direction: p.direction, hp: p.hp, maxHp: pDerived.totalMaxHp, mounted: p.mounted, icon: voc?.icon, color: voc?.color, ...officialSystems.publicPvp(p) });
+        nearbyPlayers.push({ id: p.id, name: p.name, vocation: p.vocation, level: p.level, x: p.x, y: p.y, direction: p.direction, hp: p.hp, maxHp: pDerived.totalMaxHp, mounted: p.mounted, mountId: p.mountId, mount: mountSystem.publicMount(p, contentDB), appearance: appearanceSystem.publicAppearance(p, contentDB), icon: voc?.icon, color: voc?.color, ...officialSystems.publicPvp(p) });
       }
     }
 
@@ -1202,7 +1278,7 @@ class GameEngine {
     const allGround = this.groundItemsByMap.get(player.mapId) || [];
     const groundItems = allGround.filter(g => Math.abs(g.x - player.x) < 15 && Math.abs(g.y - player.y) < 15).map(g => ({ id: g.id, x: g.x, y: g.y, items: g.items }));
 
-    const privateKinds = new Set(['system', 'quest_progress', 'quest_complete', 'death', 'heal', 'xp', 'levelup', 'adventure_combo', 'adventure_progress', 'adventure_ready', 'adventure_claimed']);
+    const privateKinds = new Set(['system', 'quest_progress', 'quest_complete', 'death', 'heal', 'xp', 'levelup', 'adventure_combo', 'adventure_progress', 'adventure_ready', 'adventure_claimed', 'task_update', 'task_progress', 'task_ready', 'housing_update', 'appearance_update', 'mount_update']);
     const events = (this.pendingEvents.get(player.mapId) || []).filter(event =>
       !privateKinds.has(event.kind) || event.targetId === playerId
     );

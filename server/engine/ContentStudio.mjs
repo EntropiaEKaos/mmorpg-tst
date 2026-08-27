@@ -14,7 +14,7 @@ const ITEM_SLOTS = Object.freeze(['weapon', 'armor', 'helmet', 'legs', 'boots', 
 const MAP_ACCESS = Object.freeze(['public', 'gm']);
 const EVENT_TYPES = Object.freeze(['invasion', 'boss', 'hunt', 'defense']);
 const MONSTER_TYPES = Object.freeze(['normal', 'elite', 'boss']);
-const NPC_ROLES = Object.freeze(['merchant', 'banker', 'innkeeper', 'trainer', 'guard', 'healer', 'quest']);
+const NPC_ROLES = Object.freeze(['merchant', 'banker', 'innkeeper', 'trainer', 'guard', 'healer', 'quest', 'taskmaster', 'stablemaster', 'outfitter', 'realtor']);
 const SPELL_TYPES = Object.freeze(['attack', 'heal', 'aoe', 'buff']);
 const BUFF_TYPES = Object.freeze(['shield', 'haste', 'invisible', 'frenzy']);
 
@@ -80,6 +80,28 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
   ]),
   gmRoster: Object.freeze([
     field('id', 'ID'), field('name', 'Character name'), field('note', 'GM note', 'textarea'),
+  ]),
+  taskQuests: Object.freeze([
+    field('id','ID'), field('name','Name'), field('npcId','Task master','select',{optionKey:'npcs'}), field('mapId','Map','select',{optionKey:'maps'}),
+    field('description','Description','textarea'), field('target','Monster target'), field('targetName','Target label'), field('count','Kills','number'),
+    field('minLevel','Min level','number'), field('maxLevel','Max level','number'), field('repeatLimit','Repeat limit','number'), field('taskPoints','Task points','number'),
+    field('rewardGold','Reward gold','number'), field('rewardXp','Reward XP','number'), field('bossUnlock','Boss unlock ID'),
+  ]),
+  houses: Object.freeze([
+    field('id','ID'), field('name','Name'), field('mapId','Map','select',{optionKey:'maps'}), field('style','Style'),
+    field('x','Interior X','number'), field('y','Interior Y','number'), field('width','Width','number'), field('height','Height','number'),
+    field('entranceX','Door X','number'), field('entranceY','Door Y','number'), field('price','Purchase price','number'), field('weeklyRent','Weekly rent','number'), field('levelRequired','Required level','number'),
+  ]),
+  housingDecor: Object.freeze([
+    field('id','ID'), field('name','Name'), field('icon','Icon'), field('kind','Kind'), field('color','Color'), field('price','Price','number'),
+  ]),
+  outfits: Object.freeze([
+    field('id','ID'), field('name','Name'), field('icon','Icon'), field('style','Renderer style'), field('price','Price','number'), field('levelRequired','Required level','number'),
+    field('defaultUnlocked','Default unlocked','boolean'), field('addon1Name','Addon 1'), field('addon2Name','Addon 2'), field('addonPrice','Addon price','number'),
+  ]),
+  mounts: Object.freeze([
+    field('id','ID'), field('name','Name'), field('icon','Icon'), field('color','Color'), field('description','Description','textarea'),
+    field('speedBonus','Speed bonus %','number'), field('price','Price','number'), field('levelRequired','Required level','number'),
   ]),
 });
 
@@ -170,6 +192,35 @@ export function validateStudioRecord(type, record) {
     return null;
   }
 
+  if (type === 'taskQuests') {
+    if (!String(record.target || '').trim()) return 'target is required';
+    for (const [key,min,max] of [['count',1,1000000],['minLevel',1,100000],['maxLevel',1,100000],['repeatLimit',1,1000],['taskPoints',0,100000],['rewardGold',0,100000000],['rewardXp',0,100000000]]) {
+      const error=numberIn(record,key,min,max,{required:true,integer:true}); if(error)return error;
+    }
+    if (Number(record.maxLevel) < Number(record.minLevel)) return 'maxLevel cannot be lower than minLevel';
+    return null;
+  }
+
+  if (type === 'houses') {
+    for (const key of ['x','y','entranceX','entranceY']) { const error=playableCoord(record,key); if(error)return error; }
+    for (const [key,min,max] of [['width',2,12],['height',2,12],['price',0,100000000],['weeklyRent',0,10000000],['levelRequired',1,100000]]) { const error=numberIn(record,key,min,max,{required:true,integer:true}); if(error)return error; }
+    if (Number(record.x)+Number(record.width)>MAP_WIDTH-1 || Number(record.y)+Number(record.height)>MAP_HEIGHT-1) return 'house interior exceeds map bounds';
+    return null;
+  }
+
+  if (type === 'housingDecor') { const e=numberIn(record,'price',0,100000000,{required:true,integer:true}); return e||optionalColor(record); }
+  if (type === 'outfits') {
+    let e=numberIn(record,'price',0,100000000,{required:true,integer:true}); if(e)return e;
+    e=numberIn(record,'levelRequired',1,100000,{required:true,integer:true}); if(e)return e;
+    return numberIn(record,'addonPrice',0,100000000,{required:true,integer:true});
+  }
+  if (type === 'mounts') {
+    let e=numberIn(record,'speedBonus',0,50,{required:true}); if(e)return e;
+    e=numberIn(record,'price',0,100000000,{required:true,integer:true}); if(e)return e;
+    e=numberIn(record,'levelRequired',1,100000,{required:true,integer:true}); if(e)return e;
+    return optionalColor(record);
+  }
+
   if (type === 'maps') {
     const biome = String(record.biome || '').toLowerCase();
     if (!BIOMES.has(biome)) return 'biome is not supported';
@@ -252,6 +303,11 @@ export function getContentStudioSchema(type, contentDB) {
     shops: 'Content shops extend the authoritative alpha merchant catalog and can be edited without a client rebuild.',
     lootTables: 'Loot tables are rolled server-side by monsters that reference them.',
     gmRoster: 'Characters listed here may enter maps whose access is set to gm. This is server-enforced.',
+    taskQuests: 'Tibia-style tasks are persistent, repeatable, award task points/rank and progress only from authoritative monster kills.',
+    houses: 'House geometry, price and rent are admin content; ownership, guests and decoration are global server state.',
+    housingDecor: 'Decor can be purchased and placed only inside an accessible owned house.',
+    outfits: 'Outfits and addons are unlockable appearance content rendered for nearby players.',
+    mounts: 'Mount ownership, selection and speed are server authoritative; this catalog controls stable inventory.',
   };
   return { schema, fields: schema.map(entry => entry.id), options, runtimeNote: runtimeNotes[type] || '' };
 }

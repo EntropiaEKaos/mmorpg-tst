@@ -16,6 +16,10 @@ import { VOCATIONS } from './engine/Vocations.mjs';
 import { WORLD } from './engine/World.mjs';
 import { questEngine } from './engine/QuestEngine.mjs';
 import { adventureEngine } from './engine/AdventureEngine.mjs';
+import { tibiaTaskEngine } from './engine/TibiaTaskEngine.mjs';
+import { appearanceSystem } from './engine/AppearanceSystem.mjs';
+import { mountSystem } from './engine/MountSystem.mjs';
+import { housingSystem } from './engine/HousingSystem.mjs';
 import { officialSystems } from './engine/OfficialSystems.mjs';
 import { socialSystems } from './engine/SocialSystems.mjs';
 import { validateContentReferences, findBlockingContentReferences, auditContentReferences } from './engine/ContentIntegrity.mjs';
@@ -31,7 +35,7 @@ const DIST_DIR = path.resolve(__dirname, '..', 'dist');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const MAX_HTTP_BODY = 256 * 1024;
 const MAX_WS_PAYLOAD = 64 * 1024;
-const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events', 'shops', 'lootTables', 'gmRoster']);
+const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events', 'shops', 'lootTables', 'gmRoster', 'taskQuests', 'houses', 'housingDecor', 'outfits', 'mounts']);
 const READ_ONLY_ADMIN_TYPES = new Set();
 const ACTIVE_NAMES = new Map();
 const AUTH_RATE_LIMITS = new BoundedWindowRateLimiter({
@@ -213,6 +217,9 @@ function buildAuthoritativeSave(p) {
     stats: p.stats || {},
     quests: questEngine.exportState(p.id),
     adventure: adventureEngine.exportState(p),
+    tasks: tibiaTaskEngine.exportState(p, contentDB),
+    appearance: appearanceSystem.exportState(p, contentDB),
+    mounts: mountSystem.exportState(p, contentDB),
     official: officialSystems.exportPlayer(p),
     mapId: p.mapId,
     x: p.x,
@@ -239,6 +246,10 @@ function restorePlayer(p, saved, expectedVocation) {
   if (saved.reputation && typeof saved.reputation === 'object' && !Array.isArray(saved.reputation)) p.reputation = saved.reputation;
   if (saved.stats && typeof saved.stats === 'object' && !Array.isArray(saved.stats)) p.stats = { ...p.stats, ...saved.stats };
   adventureEngine.restorePlayer(p, saved.adventure);
+  tibiaTaskEngine.restorePlayer(p, saved.tasks, contentDB);
+  appearanceSystem.restorePlayer(p, saved.appearance, contentDB);
+  mountSystem.restorePlayer(p, saved.mounts, contentDB);
+  housingSystem.maintainPlayer(p, contentDB);
 
   const mapData = typeof saved.mapId === 'string' ? WORLD.getMap(saved.mapId) : null;
   if (mapData) {
