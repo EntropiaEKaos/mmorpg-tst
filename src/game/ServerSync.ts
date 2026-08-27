@@ -16,6 +16,7 @@ export interface RenderState {
   groundItems: any[];
   events: any[];
   official: any;
+  social: any;
 }
 
 class ServerSyncManager {
@@ -166,6 +167,11 @@ class ServerSyncManager {
     sendIntent({ type: 'official', payload: { action, ...payload } });
   }
 
+  sendSocial(action: string, payload: Record<string, unknown> = {}) {
+    if (!this.isActive() || !action) return;
+    sendIntent({ type: 'social', payload: { action, ...payload } });
+  }
+
   updateSnapshot(snap: ServerSnapshot) {
     this.authed = true;
     setSnapshot(snap);
@@ -182,12 +188,14 @@ class ServerSyncManager {
       groundItems: snap.groundItems,
       events: snap.events || [],
       official: snap.official || null,
+      social: snap.social || null,
     };
   }
 
   processEvents(
     addFloatingText: (text: string, pos: { x: number; y: number }, color: string, big?: boolean) => void,
     addMessage: (sender: string, text: string, color: string, channel: any) => void,
+    onFeedback?: (event: any) => void,
   ): string[] {
     const state = this.getRenderState();
     if (!state) return [];
@@ -200,6 +208,7 @@ class ServerSyncManager {
     const consumedIds: string[] = [];
     for (let index = 0; index < state.events.length; index++) {
       const event = state.events[index];
+      try { onFeedback?.(event); } catch { /* presentation must never break snapshot consumption */ }
       const id = `${event.kind}_${event.targetId || ''}_${event.amount || ''}_${index}`;
       consumedIds.push(id);
       switch (event.kind) {

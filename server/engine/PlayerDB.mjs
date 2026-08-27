@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DB_FILE = path.join(__dirname, '..', 'moria-players.json');
+const DB_FILE = process.env.MORIA_PLAYER_DB || path.join(__dirname, '..', 'moria-players.json');
 
 class PlayerDB {
   constructor() {

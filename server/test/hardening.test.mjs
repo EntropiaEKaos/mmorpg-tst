@@ -36,7 +36,7 @@ test('travel requires a real portal, ignores client coordinates and enforces lev
   try {
     assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'frostpeak', spawnX: 1, spawnY: 1 } }), false);
     assert.equal(player.mapId, 'eldoria');
-    player.x = 10; player.y = 40;
+    player.x = 10; player.y = 40; player.level = 8;
     assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'frostpeak', spawnX: 1, spawnY: 1 } }), true);
     assert.equal(player.mapId, 'frostpeak');
     assert.deepEqual({ x: player.x, y: player.y }, { x: 70, y: 40 });

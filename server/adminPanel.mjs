@@ -55,6 +55,7 @@ export function adminPanelHTML() {
 <div class="container">
   <div class="sidebar">
     <button class="active" onclick="showTab('dashboard', this)">📊 Dashboard</button>
+    <button onclick="showTab('integrity', this)">🩺 Content Health</button>
     <button onclick="showTab('items', this)">⚔ Items</button>
     <button onclick="showTab('monsters', this)">👹 Monsters</button>
     <button onclick="showTab('npcs', this)">🧙 NPCs</button>
@@ -117,11 +118,31 @@ export function adminPanelHTML() {
     del(item.id);
   }
 
+  async function downloadContentExport() {
+    try {
+      const payload = await api('GET', '/export');
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'moria-content-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    } catch (error) { alert(error instanceof Error ? error.message : 'Export failed'); }
+  }
+
   async function render() {
     const el = document.getElementById('content');
     try {
       const data = await api('GET', '/' + currentTab);
     
+    if (currentTab === 'integrity') {
+      const issues = Array.isArray(data.issues) ? data.issues : [];
+      const statusColor = data.healthy ? '#2ecc71' : '#e74c3c';
+      const rows = issues.length ? issues.map(issue => '<tr><td>' + escapeHtml(issue.severity) + '</td><td>' + escapeHtml(issue.type) + '</td><td>' + escapeHtml(issue.id) + '</td><td>' + escapeHtml(issue.message) + '</td></tr>').join('') : '<tr><td colspan="4" style="color:#2ecc71">No integrity issues detected.</td></tr>';
+      el.innerHTML = '<div class="stats"><div class="stat"><div class="num" style="color:' + statusColor + '">' + (data.healthy ? 'HEALTHY' : 'BLOCKED') + '</div><div class="lbl">Publish State</div></div><div class="stat"><div class="num">' + Number(data.errors || 0) + '</div><div class="lbl">Errors</div></div><div class="stat"><div class="num" style="color:#f4b942">' + Number(data.warnings || 0) + '</div><div class="lbl">Warnings</div></div><div class="stat"><div class="num">' + Number(data.runtimeMaps || 0) + '</div><div class="lbl">Runtime Maps</div></div></div><div class="card"><h2>🩺 Content Integrity</h2><p class="catalog-note">This audit re-runs the same reference rules used by authoritative writes across every content record. Errors should be zero before a production publish.</p><button class="btn btn-green" onclick="render()">↻ Re-run Audit</button> <button class="btn btn-blue" onclick="downloadContentExport()">⬇ Export Content Backup</button><table style="margin-top:1rem"><thead><tr><th>Severity</th><th>Type</th><th>ID</th><th>Finding</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      return;
+    }
+
     if (currentTab === 'dashboard') {
       el.innerHTML = \`
         <div class="stats">
@@ -143,35 +164,48 @@ export function adminPanelHTML() {
 
     const items = Array.isArray(data.items) ? data.items : [];
     const fields = Array.isArray(data.fields) ? data.fields : [];
+    const schema = Array.isArray(data.schema) ? data.schema : [];
+    const schemaByField = new Map(schema.map(entry => [entry.id, entry]));
+    const options = data.options && typeof data.options === 'object' ? data.options : {};
     const readOnly = data.readOnly === true;
     renderedItems = items;
     if (readOnly) editing = null;
     
     let html = '<div class="card"><h2>' + currentTab.toUpperCase() + ' (' + items.length + ')</h2>';
-    if (readOnly) {
-      html += '<div class="catalog-note"><strong>READ-ONLY CATALOG</strong><br>' + escapeHtml(data.runtimeNote || 'This catalog is not connected to the authoritative runtime yet.') + '</div>';
+    if (data.runtimeNote) {
+      html += '<div class="catalog-note"><strong>' + (readOnly ? 'READ-ONLY CATALOG' : 'AUTHORITATIVE RUNTIME') + '</strong><br>' + escapeHtml(data.runtimeNote) + '</div>';
     }
     
     // Edit/Create form
     if (!readOnly && editing !== null) {
       const item = editing === 'new'
-        ? (currentTab === 'monsters'
-          ? { mapId: 'eldoria', count: 1, speed: 1200 }
-          : currentTab === 'spells'
-            ? { type: 'attack', vocation: 'knight', levelRequired: 1, mana: 10, cooldown: 1500, damage: 10, range: 1 }
-            : {})
+        ? (currentTab === 'maps'
+          ? { biome: 'plains', levelRequired: 1, seed: Date.now() % 2147483646, spawnX: 40, spawnY: 40, townX: 40, townY: 40, townRange: 8, portals: [] }
+          : currentTab === 'monsters'
+            ? { mapId: 'eldoria', count: 1, speed: 1200 }
+            : currentTab === 'spells'
+              ? { type: 'attack', vocation: 'knight', levelRequired: 1, mana: 10, cooldown: 1500, damage: 10, range: 1 }
+              : {})
         : items.find(i => i.id === editing) || {};
       html += '<h3>' + (editing === 'new' ? '➕ Create' : '✏ Edit') + '</h3>';
       html += '<div class="form-row">';
       for (const f of fields) {
-        html += '<div><label>' + escapeHtml(f) + '</label>';
-        if (f === 'type' || f === 'buffType' || f === 'rarity' || f === 'slot' || f === 'role' || f === 'biome' || f === 'vocation' || f === 'mapId') {
-          html += '<input value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '" list="' + f + '_list">';
-          html += '<datalist id="' + f + '_list">' + (f==='type' && currentTab==='spells'?'<option>attack<option>heal<option>aoe<option>buff':'') + (f==='buffType'?'<option>shield<option>haste<option>invisible<option>frenzy':'') + (f==='rarity'?'<option>common<option>uncommon<option>rare<option>epic<option>legendary':'') + (f==='slot'?'<option>weapon<option>armor<option>helmet<option>legs<option>boots<option>shield<option>ring<option>amulet':'') + (f==='mapId'?'<option>eldoria<option>frostpeak<option>shadowfen<option>emberhold<option>voidlands':'') + '</datalist>';
-        } else if (f === 'description' || f === 'dialogue') {
+        const meta = schemaByField.get(f) || { id: f, label: f, kind: 'text' };
+        html += '<div><label>' + escapeHtml(meta.label || f) + '</label>';
+        if (meta.kind === 'select') {
+          const values = Array.isArray(options[meta.optionKey]) ? options[meta.optionKey] : [];
+          html += '<select id="fld_' + f + '">';
+          if (meta.allowEmpty) html += '<option value=""></option>';
+          const current = String(item[f] ?? '');
+          if (current && !values.includes(current)) html += '<option selected value="' + escapeHtml(current) + '">' + escapeHtml(current) + '</option>';
+          for (const value of values) html += '<option ' + (String(value) === current ? 'selected ' : '') + 'value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>';
+          html += '</select>';
+        } else if (meta.kind === 'json') {
+          html += '<textarea id="fld_' + f + '" rows="5">' + escapeHtml(JSON.stringify(item[f] ?? [], null, 2)) + '</textarea>';
+        } else if (meta.kind === 'textarea') {
           html += '<textarea id="fld_' + f + '" rows="2">' + escapeHtml(item[f] ?? '') + '</textarea>';
         } else {
-          html += '<input type="' + (typeof item[f] === 'number' ? 'number' : 'text') + '" value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '">';
+          html += '<input type="' + (meta.kind === 'number' ? 'number' : 'text') + '" value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '">';
         }
         html += '</div>';
       }
@@ -214,7 +248,13 @@ export function adminPanelHTML() {
       const el = document.getElementById('fld_' + f);
       if (el) {
         let v = el.value;
-        if (typeof data.items[0]?.[f] === 'number' && f !== 'id') v = parseFloat(v) || 0;
+        const numericFields = new Set(['hp','attack','defense','armor','mana','magic','critChance','lifesteal','thorns','moveSpeed','xpBonus','goldBonus','damageReduction','level','value','xp','size','goldMin','goldMax','count','posX','posY','speed','cooldown','damage','range','levelRequired','buffDuration','buffValue','scalingCoeff','rewardGold','rewardXp','rewardCoins','durationMs','seed','spawnX','spawnY','townX','townY','townRange']);
+        if (f === 'portals' || f === 'requires') {
+          try { body[f] = JSON.parse(v || '[]'); } catch { alert(f + ' must be valid JSON.'); return; }
+          if (!Array.isArray(body[f])) { alert(f + ' must be a JSON array.'); return; }
+          continue;
+        }
+        if (numericFields.has(f)) v = parseFloat(v) || 0;
         body[f] = v;
       }
     }

@@ -15,6 +15,14 @@ O jogo foi arquitetado de forma **Data-Driven** com um servidor autoritativo em 
 
 ---
 
+## ✅ Mor'ia 9.0 — Linha Validada
+
+A linha 9.0 consolida o servidor autoritativo e as evoluções 8.x: combate com feedback visual sem transferir autoridade ao cliente, regiões vivas, itemização procedural server-side, social persistente com ignore autoritativo e um Content Studio com diagnóstico de integridade e validação semântica antes da publicação.
+
+O gate oficial de qualidade executa `npm audit`, TypeScript, build de produção, syntax check do servidor e a suíte server-side completa em Node.js 22. O painel `/admin` exige autenticação administrativa quando exposto fora de localhost; configure `ADMIN_TOKEN` em produção.
+
+---
+
 ## ✨ Principais Funcionalidades
 
 ### ⚔️ 14 Classes (Vocações) Únicas

@@ -1,5 +1,5 @@
 import { VOCATIONS } from './Vocations.mjs';
-import { MAP_CONFIG } from './World.mjs';
+import { MAP_CONFIG, MAP_WIDTH, MAP_HEIGHT, BIOMES } from './World.mjs';
 
 export function objectiveKey(value) {
   return String(value ?? '').trim().toLowerCase()
@@ -7,8 +7,15 @@ export function objectiveKey(value) {
     .replace(/^_+|_+$/g, '');
 }
 
-function hasMap(mapId) {
-  return typeof mapId === 'string' && Object.hasOwn(MAP_CONFIG, mapId.trim());
+function hasMap(contentDB, mapId, extraMapId = '') {
+  if (typeof mapId !== 'string' || !mapId.trim()) return false;
+  const id = mapId.trim();
+  return id === extraMapId || Object.hasOwn(MAP_CONFIG, id) || contentDB.get('maps').some(map => map.id === id);
+}
+
+function validCoordinate(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= MAP_WIDTH - 2;
 }
 
 export function validateContentReferences(contentDB, type, record) {
@@ -16,10 +23,7 @@ export function validateContentReferences(contentDB, type, record) {
 
   if (type === 'quests') {
     const npcId = typeof record.npcId === 'string' ? record.npcId.trim() : '';
-    if (npcId && !contentDB.get('npcs').some(npc => npc.id === npcId)) {
-      return `Quest references unknown NPC: ${npcId}`;
-    }
-
+    if (npcId && !contentDB.get('npcs').some(npc => npc.id === npcId)) return `Quest references unknown NPC: ${npcId}`;
     if (record.requires !== undefined) {
       if (!Array.isArray(record.requires)) return 'Quest prerequisites must be an array of quest IDs';
       const questId = typeof record.id === 'string' ? record.id : '';
@@ -30,9 +34,7 @@ export function validateContentReferences(contentDB, type, record) {
         if (requiredId === questId) return 'Quest cannot require itself';
         if (seen.has(requiredId)) return `Duplicate quest prerequisite: ${requiredId}`;
         seen.add(requiredId);
-        if (!contentDB.get('quests').some(quest => quest.id === requiredId)) {
-          return `Quest prerequisite does not exist: ${requiredId}`;
-        }
+        if (!contentDB.get('quests').some(quest => quest.id === requiredId)) return `Quest prerequisite does not exist: ${requiredId}`;
       }
     }
   }
@@ -42,14 +44,49 @@ export function validateContentReferences(contentDB, type, record) {
     if (!vocation || !VOCATIONS[vocation]) return `Spell references unknown vocation: ${vocation || '(empty)'}`;
   }
 
+  if (type === 'maps') {
+    const id = typeof record.id === 'string' ? record.id.trim() : '';
+    if (!/^[A-Za-z0-9_-]{2,50}$/.test(id)) return 'Map id must be 2-50 letters, numbers, dash or underscore';
+    const biome = typeof record.biome === 'string' ? record.biome.trim().toLowerCase() : '';
+    if (!BIOMES.has(biome)) return `Map has unsupported biome: ${biome || '(empty)'}`;
+    for (const field of ['spawnX', 'spawnY', 'townX', 'townY']) {
+      if (record[field] !== undefined && record[field] !== '' && !validCoordinate(Number(record[field]))) return `Map ${field} must be an integer from 1 to ${MAP_WIDTH - 2}`;
+    }
+    if (record.townRange !== undefined && record.townRange !== '') {
+      const range = Number(record.townRange);
+      if (!Number.isInteger(range) || range < 0 || range > 20) return 'Map townRange must be an integer from 0 to 20';
+    }
+    if (record.levelRequired !== undefined && record.levelRequired !== '') {
+      const level = Number(record.levelRequired);
+      if (!Number.isInteger(level) || level < 1 || level > 100000) return 'Map levelRequired must be a positive integer';
+    }
+    if (record.portals !== undefined) {
+      if (!Array.isArray(record.portals)) return 'Map portals must be a JSON array';
+      if (record.portals.length > 20) return 'Map cannot contain more than 20 portals';
+      for (const portal of record.portals) {
+        if (!portal || typeof portal !== 'object' || Array.isArray(portal)) return 'Map portal entries must be objects';
+        const x = portal.x ?? portal.pos?.x; const y = portal.y ?? portal.pos?.y;
+        const tx = portal.targetX ?? portal.targetSpawn?.x; const ty = portal.targetY ?? portal.targetSpawn?.y;
+        if (![x, y, tx, ty].every(value => validCoordinate(Number(value)))) return 'Map portal coordinates must be inside the playable area';
+        const targetMap = typeof portal.targetMap === 'string' ? portal.targetMap.trim() : '';
+        if (!hasMap(contentDB, targetMap, id)) return `Map portal references unknown map: ${targetMap || '(empty)'}`;
+      }
+    }
+  }
+
   if (type === 'npcs') {
     const mapId = typeof record.mapId === 'string' ? record.mapId.trim() : '';
-    if (!hasMap(mapId)) return `NPC references unknown map: ${mapId || '(empty)'}`;
+    if (!hasMap(contentDB, mapId)) return `NPC references unknown map: ${mapId || '(empty)'}`;
   }
 
   if (type === 'monsters' && record.mapId !== undefined && record.mapId !== null && String(record.mapId).trim()) {
     const mapId = String(record.mapId).trim();
-    if (!hasMap(mapId)) return `Monster references unknown map: ${mapId}`;
+    if (!hasMap(contentDB, mapId)) return `Monster references unknown map: ${mapId}`;
+  }
+
+  if (type === 'events' && record.mapId !== undefined && record.mapId !== null && String(record.mapId).trim()) {
+    const mapId = String(record.mapId).trim();
+    if (!hasMap(contentDB, mapId)) return `World event references unknown map: ${mapId}`;
   }
 
   return null;
@@ -61,31 +98,69 @@ export function findBlockingContentReferences(contentDB, type, id) {
   const blockers = [];
 
   if (type === 'npcs') {
-    for (const quest of contentDB.get('quests')) {
-      if (quest.npcId === canonicalId) blockers.push({ type: 'quest', id: quest.id, field: 'npcId' });
-    }
+    for (const quest of contentDB.get('quests')) if (quest.npcId === canonicalId) blockers.push({ type: 'quest', id: quest.id, field: 'npcId' });
   }
 
   if (type === 'quests') {
     for (const quest of contentDB.get('quests')) {
-      if (quest.id !== canonicalId && Array.isArray(quest.requires) && quest.requires.includes(canonicalId)) {
-        blockers.push({ type: 'quest', id: quest.id, field: 'requires' });
-      }
+      if (quest.id !== canonicalId && Array.isArray(quest.requires) && quest.requires.includes(canonicalId)) blockers.push({ type: 'quest', id: quest.id, field: 'requires' });
     }
   }
 
   if (type === 'monsters') {
     const monster = contentDB.get('monsters').find(entry => entry.id === canonicalId);
-    // Baseline catalog templates without mapId do not own the static WORLD spawn,
-    // so deleting one does not make its baseline monster disappear. Live Admin
-    // overlays do own their runtime spawn and must not be removed under a quest.
     if (monster?.mapId) {
       const targetKeys = new Set([objectiveKey(monster.id), objectiveKey(monster.name)].filter(Boolean));
-      for (const quest of contentDB.get('quests')) {
-        if (targetKeys.has(objectiveKey(quest.target))) blockers.push({ type: 'quest', id: quest.id, field: 'target' });
-      }
+      for (const quest of contentDB.get('quests')) if (targetKeys.has(objectiveKey(quest.target))) blockers.push({ type: 'quest', id: quest.id, field: 'target' });
+    }
+  }
+
+  if (type === 'maps') {
+    if (Object.hasOwn(MAP_CONFIG, canonicalId)) blockers.push({ type: 'runtime', id: canonicalId, field: 'builtin-map' });
+    for (const npc of contentDB.get('npcs')) if (npc.mapId === canonicalId) blockers.push({ type: 'npc', id: npc.id, field: 'mapId' });
+    for (const monster of contentDB.get('monsters')) if (monster.mapId === canonicalId) blockers.push({ type: 'monster', id: monster.id, field: 'mapId' });
+    for (const event of contentDB.get('events')) if (event.mapId === canonicalId) blockers.push({ type: 'event', id: event.id, field: 'mapId' });
+    for (const map of contentDB.get('maps')) {
+      if (map.id === canonicalId || !Array.isArray(map.portals)) continue;
+      for (const portal of map.portals) if (portal?.targetMap === canonicalId) blockers.push({ type: 'map', id: map.id, field: 'portals.targetMap' });
     }
   }
 
   return blockers;
+}
+
+
+const AUDIT_TYPES = Object.freeze(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
+
+export function auditContentReferences(contentDB) {
+  const issues = [];
+  const counts = {};
+  for (const type of AUDIT_TYPES) {
+    const records = contentDB.get(type);
+    counts[type] = Array.isArray(records) ? records.length : 0;
+    const seen = new Set();
+    for (const record of Array.isArray(records) ? records : []) {
+      const id = typeof record?.id === 'string' ? record.id.trim() : '';
+      if (!id) {
+        issues.push({ severity: 'error', type, id: '(missing)', message: 'Content record has no valid id.' });
+        continue;
+      }
+      if (seen.has(id)) issues.push({ severity: 'error', type, id, message: `Duplicate ${type} id: ${id}` });
+      seen.add(id);
+      const error = validateContentReferences(contentDB, type, record);
+      if (error) issues.push({ severity: 'error', type, id, message: error });
+    }
+  }
+
+  // Cross-catalog warnings that are legal but commonly indicate unpublished content.
+  for (const monster of contentDB.get('monsters')) {
+    if (!monster?.mapId) issues.push({ severity: 'warning', type: 'monsters', id: monster?.id || '(missing)', message: 'Monster is catalog-only because mapId is empty.' });
+  }
+  for (const event of contentDB.get('events')) {
+    if (!event?.mapId) issues.push({ severity: 'warning', type: 'events', id: event?.id || '(missing)', message: 'World event has no mapId and cannot target a regional runtime.' });
+  }
+
+  const errors = issues.filter(issue => issue.severity === 'error').length;
+  const warnings = issues.filter(issue => issue.severity === 'warning').length;
+  return { healthy: errors === 0, errors, warnings, issues, counts };
 }

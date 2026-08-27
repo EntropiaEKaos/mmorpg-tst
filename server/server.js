@@ -1,5 +1,5 @@
 // ===================================================================
-//  ⚔  MOR'IA MMO — AUTHORITATIVE SERVER v3.2 AUTH HARDENED
+//  ⚔  MOR'IA MMO — AUTHORITATIVE SERVER v9.0 RELEASE
 //  Everything is controlled, saved, and governed HERE.
 // ===================================================================
 
@@ -17,7 +17,9 @@ import { WORLD } from './engine/World.mjs';
 import { questEngine } from './engine/QuestEngine.mjs';
 import { adventureEngine } from './engine/AdventureEngine.mjs';
 import { officialSystems } from './engine/OfficialSystems.mjs';
-import { validateContentReferences, findBlockingContentReferences } from './engine/ContentIntegrity.mjs';
+import { socialSystems } from './engine/SocialSystems.mjs';
+import { validateContentReferences, findBlockingContentReferences, auditContentReferences } from './engine/ContentIntegrity.mjs';
+import { getContentStudioSchema, validateStudioRecord, collectContentDiagnostics } from './engine/ContentStudio.mjs';
 import { accountStore, sessionManager } from './engine/AuthService.mjs';
 import { BoundedWindowRateLimiter } from './engine/RateLimiter.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
@@ -30,16 +32,21 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const MAX_HTTP_BODY = 256 * 1024;
 const MAX_WS_PAYLOAD = 64 * 1024;
 const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
-const READ_ONLY_ADMIN_TYPES = new Set(['maps']);
+const READ_ONLY_ADMIN_TYPES = new Set();
 const ACTIVE_NAMES = new Map();
 const AUTH_RATE_LIMITS = new BoundedWindowRateLimiter({
   maxEntries: Number(process.env.AUTH_RATE_LIMIT_MAX_ENTRIES) || 10_000,
 });
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
+const AUTOSAVE_INTERVAL_MS = Math.max(1000, Math.min(300_000, Math.floor(Number(process.env.MORIA_AUTOSAVE_MS) || 15_000)));
+const CRITICAL_SOCIAL_ACTIONS = new Set(['trade_confirm', 'guild_create']);
+const PERSISTENCE_STATE = { lastAutosaveAt: 0, lastCriticalFlushAt: 0, lastSavedPlayers: 0 };
 
 // ContentDB is persistent; reconcile server-owned catalogs into the already-
-// initialized authoritative runtime at server boot.
+// initialized authoritative runtime at server boot. Maps go first because
+// monsters, NPC references, portals and travel all depend on the world graph.
+engine.syncContentMaps(contentDB.get('maps'));
 engine.syncContentItems(contentDB.get('items'));
 engine.syncContentSpells(contentDB.get('spells'));
 engine.syncContentMonsters(contentDB.get('monsters'));
@@ -390,7 +397,8 @@ const server = http.createServer((req, res) => {
       players: engine.getOnlineCount(),
       tick: engine.getTickCount(),
       auth: 'accounts-v1',
-      content: { items: contentDB.get('items').length, monsters: contentDB.get('monsters').length },
+      content: { items: contentDB.get('items').length, monsters: contentDB.get('monsters').length, maps: WORLD.getMapIds().length },
+      persistence: { autosaveMs: AUTOSAVE_INTERVAL_MS, ...PERSISTENCE_STATE },
     });
   }
 
@@ -468,25 +476,31 @@ function handleAdminAPI(req, res, route) {
     if (type === 'players') {
       const players = [];
       for (const [, p] of engine.players) players.push({ id: p.name, name: p.name, level: p.level, vocation: p.vocation, mapId: p.mapId, gold: p.gold, hp: p.hp });
-      return json(res, 200, { items: players, fields: ['name','level','vocation','mapId','gold','hp'] });
+      return json(res, 200, { items: players, fields: ['name','level','vocation','mapId','gold','hp'], readOnly: true, runtimeNote: 'Live player state is authoritative. This view is intentionally read-only; player mutation must use explicit audited admin actions.' });
+    }
+    if (type === 'integrity') {
+      const referenceAudit = auditContentReferences(contentDB);
+      const semanticAudit = collectContentDiagnostics(contentDB);
+      const warnings = referenceAudit.issues.filter(issue => issue.severity === 'warning');
+      return json(res, 200, {
+        healthy: referenceAudit.healthy && semanticAudit.ok,
+        errors: semanticAudit.issues.length,
+        warnings: warnings.length,
+        issues: [...semanticAudit.issues, ...warnings],
+        counts: referenceAudit.counts,
+        onlinePlayers: engine.getOnlineCount(), runtimeMaps: WORLD.getMapIds().length, contentVersion: contentDB.data.version,
+      });
+    }
+    if (type === 'export') {
+      return json(res, 200, { exportedAt: new Date().toISOString(), content: contentDB.getAllContent() });
     }
     if (type === 'broadcast') return json(res, 200, { ok: true });
     if (!ALLOWED_ADMIN_TYPES.has(type)) return json(res, 404, { error: 'Unknown content type' });
 
-    const fieldsMap = {
-      items: ['id','name','icon','slot','attack','defense','armor','hp','mana','magic','rarity','level','value','description'],
-      monsters: ['id','name','emoji','hp','attack','defense','xp','level','type','color','size','goldMin','goldMax','mapId','count','posX','posY','speed'],
-      npcs: ['id','name','emoji','color','role','posX','posY','mapId','dialogue'],
-      spells: ['id','name','icon','mana','cooldown','damage','range','color','type','vocation','levelRequired','buffType','buffDuration','buffValue','scalingCoeff'],
-      quests: ['id','name','npcId','description','target','count','rewardGold','rewardXp','levelRequired'],
-      maps: ['id','name','biome','description','levelRequired'],
-      events: ['id','name','icon','description','target','count','rewardGold','rewardXp','rewardCoins','mapId','durationMs'],
-    };
     const readOnly = READ_ONLY_ADMIN_TYPES.has(type);
-    const runtimeNote = type === 'maps'
-      ? 'Reference catalog only: authoritative terrain, portals and map lifecycle are still defined by World.mjs.'
-      : '';
-    return json(res, 200, { items: contentDB.get(type), fields: fieldsMap[type] || [], readOnly, runtimeNote });
+    const studio = getContentStudioSchema(type, contentDB);
+    const items = type === 'maps' ? WORLD.getDefinitions() : contentDB.get(type);
+    return json(res, 200, { items, ...studio, readOnly });
   }
 
   if (req.method === 'POST') {
@@ -507,10 +521,13 @@ function handleAdminAPI(req, res, route) {
 
       const existing = contentDB.get(type).find(i => i.id === data.id);
       const candidate = existing ? { ...existing, ...data, id: data.id } : { ...data, id: data.id };
+      const semanticError = validateStudioRecord(type, candidate);
+      if (semanticError) return json(res, 400, { error: semanticError });
       const referenceError = validateContentReferences(contentDB, type, candidate);
       if (referenceError) return json(res, 409, { error: referenceError });
       const changed = existing ? contentDB.update(type, data.id, data) : contentDB.add(type, data);
       if (!changed) return json(res, 409, { error: 'Content write was rejected' });
+      if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }
       if (type === 'items') engine.syncContentItems(contentDB.get('items'));
       if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
       if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
@@ -525,11 +542,15 @@ function handleAdminAPI(req, res, route) {
     if (READ_ONLY_ADMIN_TYPES.has(type)) {
       return json(res, 409, { error: `${type} catalog is read-only until its authoritative runtime is connected` });
     }
+    if (type === 'maps' && Array.from(engine.players.values()).some(player => player.mapId === id)) {
+      return json(res, 409, { error: 'Map has online players and cannot be deleted' });
+    }
     const blockers = findBlockingContentReferences(contentDB, type, id);
     if (blockers.length > 0) {
       return json(res, 409, { error: 'Content is still referenced and cannot be deleted', references: blockers });
     }
     if (!contentDB.remove(type, id)) return json(res, 404, { error: 'Content not found' });
+    if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }
     if (type === 'items') engine.syncContentItems(contentDB.get('items'));
     if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
     if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
@@ -547,6 +568,39 @@ function handleAdminAPI(req, res, route) {
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: MAX_WS_PAYLOAD });
 const wsClients = new Map();
 
+function persistOnlinePlayers(reason = 'autosave') {
+  let savedPlayers = 0;
+  for (const [clientId, entry] of wsClients) {
+    if (!entry?.name) continue;
+    const player = engine.getPlayer(clientId);
+    if (!player) continue;
+    playerDB.set(entry.name, buildAuthoritativeSave(player));
+    savedPlayers++;
+  }
+  if (savedPlayers > 0) playerDB.save();
+  PERSISTENCE_STATE.lastSavedPlayers = savedPlayers;
+  if (reason === 'critical') PERSISTENCE_STATE.lastCriticalFlushAt = Date.now();
+  else PERSISTENCE_STATE.lastAutosaveAt = Date.now();
+  return savedPlayers;
+}
+
+function shouldFlushCriticalIntent(intent) {
+  if (!intent || typeof intent !== 'object') return false;
+  if (intent.type === 'official') return true;
+  if (intent.type !== 'social') return false;
+  const action = intent.payload && typeof intent.payload === 'object' && !Array.isArray(intent.payload) ? intent.payload.action : '';
+  return CRITICAL_SOCIAL_ACTIONS.has(action);
+}
+
+function persistCriticalState() {
+  const count = persistOnlinePlayers('critical');
+  // Official and social stores already use atomic temp-file renames. Re-saving
+  // here closes the crash window after a successful cross-system mutation.
+  officialSystems.save();
+  socialSystems.save();
+  return count;
+}
+
 wss.on('connection', ws => {
   const clientId = `srv_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
   let authenticatedPlayer = null;
@@ -555,6 +609,10 @@ wss.on('connection', ws => {
   let authenticatedSessionKey = null;
   let messagesInWindow = 0;
   let messageWindowStart = Date.now();
+  let chatMessagesInWindow = 0;
+  let chatWindowStart = Date.now();
+  let socialActionsInWindow = 0;
+  let socialWindowStart = Date.now();
   wsClients.set(clientId, { ws, name: null, accountId: null, sessionKey: null });
 
   ws.on('message', raw => {
@@ -623,7 +681,12 @@ wss.on('connection', ws => {
     if (msg.kind === 'intent') {
       const intent = msg.payload;
       if (!intent || typeof intent !== 'object' || Array.isArray(intent) || typeof intent.type !== 'string') return;
-      engine.processIntent(clientId, intent);
+      if (intent.type === 'social') {
+        if (now - socialWindowStart >= 10_000) { socialWindowStart = now; socialActionsInWindow = 0; }
+        if (++socialActionsInWindow > 30) return;
+      }
+      const handled = engine.processIntent(clientId, intent);
+      if (handled && shouldFlushCriticalIntent(intent)) persistCriticalState();
       return;
     }
 
@@ -637,21 +700,32 @@ wss.on('connection', ws => {
     }
 
     if (msg.kind === 'load_request') {
-      const saved = playerDB.get(authenticatedPlayer);
+      // While a character is online the in-memory engine is canonical; returning
+      // PlayerDB here could expose an autosave-old snapshot to the same client.
+      const livePlayer = engine.getPlayer(clientId);
+      const saved = livePlayer ? buildAuthoritativeSave(livePlayer) : playerDB.get(authenticatedPlayer);
       ws.send(JSON.stringify({ kind: 'load_response', payload: saved, time: Date.now() }));
       return;
     }
 
     if (msg.kind === 'chat') {
       const payload = msg.payload && typeof msg.payload === 'object' && !Array.isArray(msg.payload) ? msg.payload : {};
+      if (now - chatWindowStart >= 5000) { chatWindowStart = now; chatMessagesInWindow = 0; }
+      if (++chatMessagesInWindow > 15) return;
       const text = typeof payload.text === 'string' ? payload.text.trim().slice(0, 200) : '';
       if (!text) return;
-      const allowedChannels = new Set(['world', 'say', 'party', 'guild', 'trade', 'system']);
+      const allowedChannels = new Set(['world', 'say', 'party', 'guild', 'trade']);
       const channel = allowedChannels.has(payload.channel) ? payload.channel : 'world';
-      const color = typeof payload.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(payload.color) ? payload.color : '#fff';
+      const senderPlayer = engine.getPlayer(clientId);
+      if (!senderPlayer) return;
+      const color = VOCATIONS[senderPlayer.vocation]?.color || '#d9e0eb';
       const chatMsg = { id: `chat_${Date.now()}_${clientId}`, sender: authenticatedPlayer, text, color, time: Date.now(), channel };
       const data = JSON.stringify({ kind: 'chat', payload: chatMsg });
-      for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(data);
+      const recipients = new Set(socialSystems.chatRecipients(senderPlayer, channel, engine.players));
+      for (const recipientId of recipients) {
+        const entry = wsClients.get(recipientId);
+        if (entry?.ws.readyState === WebSocket.OPEN) entry.ws.send(data);
+      }
       return;
     }
 
@@ -680,6 +754,8 @@ wss.on('connection', ws => {
 // ===================================================================
 setInterval(() => engine.tick(), engine.TICK_RATE);
 setInterval(() => sessionManager.prune(), 10 * 60 * 1000);
+setInterval(() => socialSystems.prune(), 60 * 1000);
+setInterval(() => persistOnlinePlayers('autosave'), AUTOSAVE_INTERVAL_MS);
 
 setInterval(() => {
   const mapsDelivered = new Set();
@@ -706,8 +782,15 @@ function broadcastContentUpdate() {
   console.log('📡 Content update broadcast to all clients');
 }
 
-process.on('SIGTERM', () => { playerDB.save(); contentDB.save(); officialSystems.save(); process.exit(0); });
-process.on('SIGINT', () => { playerDB.save(); contentDB.save(); officialSystems.save(); process.exit(0); });
+function gracefulShutdown() {
+  persistOnlinePlayers('shutdown');
+  contentDB.save();
+  officialSystems.save();
+  socialSystems.save();
+  process.exit(0);
+}
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 server.listen(PORT, () => {
   console.log('');

@@ -7,9 +7,11 @@
 import { WORLD } from './World.mjs';
 import { VOCATIONS } from './Vocations.mjs';
 import { rollLoot, getStarterInventory, buildEquipmentLootPool } from './Items.mjs';
+import { sumAffixStats } from './Itemization.mjs';
 import { questEngine } from './QuestEngine.mjs';
 import { adventureEngine, createAdventureState } from './AdventureEngine.mjs';
 import { officialSystems } from './OfficialSystems.mjs';
+import { socialSystems } from './SocialSystems.mjs';
 import { contentDB } from './ContentDB.mjs';
 import { accountStore } from './AuthService.mjs';
 
@@ -71,7 +73,7 @@ class GameEngine {
   }
 
   init() {
-    WORLD.init();
+    WORLD.syncContentMaps(contentDB.get('maps'));
     for (const mapId of WORLD.getMapIds()) {
       this.monstersByMap.set(mapId, WORLD.spawnMonsters(mapId));
       this.groundItemsByMap.set(mapId, []);
@@ -107,12 +109,47 @@ class GameEngine {
     return player;
   }
 
-  playerDisconnect(id) { questEngine.clearPlayer(id); this.players.delete(id); }
+  playerDisconnect(id) { const player = this.players.get(id); if (player) socialSystems.onDisconnect(player); questEngine.clearPlayer(id); this.players.delete(id); }
   getPlayer(id) { return this.players.get(id); }
   getPlayersOnMap(mapId) {
     const result = [];
     for (const p of this.players.values()) if (p.mapId === mapId) result.push(p);
     return result;
+  }
+
+  syncContentMaps(mapContent = []) {
+    const previousIds = new Set(WORLD.getMapIds());
+    WORLD.syncContentMaps(mapContent);
+    const nextIds = new Set(WORLD.getMapIds());
+
+    for (const mapId of nextIds) {
+      if (!this.monstersByMap.has(mapId)) this.monstersByMap.set(mapId, WORLD.spawnMonsters(mapId));
+      if (!this.groundItemsByMap.has(mapId)) this.groundItemsByMap.set(mapId, []);
+      if (!this.pendingEvents.has(mapId)) this.pendingEvents.set(mapId, []);
+      const map = WORLD.getMap(mapId);
+      const monsters = this.monstersByMap.get(mapId) || [];
+      for (const monster of monsters) {
+        if (!map?.tiles?.[monster.y]?.[monster.x]?.walkable) {
+          const pos = WORLD.findWalkableSpawn(map, map?.spawnPoint);
+          monster.x = pos.x; monster.y = pos.y; monster.spawnX = pos.x; monster.spawnY = pos.y;
+        }
+      }
+    }
+
+    for (const player of this.players.values()) {
+      let map = WORLD.getMap(player.mapId);
+      if (!map) { player.mapId = 'eldoria'; map = WORLD.getMap('eldoria'); player.targetId = null; }
+      if (!map?.tiles?.[player.y]?.[player.x]?.walkable) {
+        const pos = WORLD.findWalkableSpawn(map, map?.spawnPoint);
+        player.x = pos.x; player.y = pos.y; player.targetId = null;
+      }
+    }
+
+    for (const mapId of previousIds) {
+      if (nextIds.has(mapId)) continue;
+      this.monstersByMap.delete(mapId); this.groundItemsByMap.delete(mapId); this.pendingEvents.delete(mapId);
+    }
+    return WORLD.getMapIds();
   }
 
   progressSkill(player, skillId, amount = 1) {
@@ -290,6 +327,7 @@ class GameEngine {
       case 'adventure_abandon': return this.handleAdventureAbandon(player);
       case 'adventure_claim': return this.handleAdventureClaim(player);
       case 'official': return this.handleOfficial(player, payload);
+      case 'social': return this.handleSocial(player, payload);
       case 'quest_accept': return this.handleQuestAccept(player, payload);
       case 'quest_complete': return this.handleQuestComplete(player, payload);
       case 'travel': return this.handleTravel(player, payload);
@@ -364,6 +402,19 @@ class GameEngine {
       stats.goldBonus += Number(eq.goldBonus) || 0;
       stats.damageReduction += Number(eq.damageReduction) || 0;
       stats.moveSpeed += Number(eq.moveSpeed) || 0;
+      const affix = sumAffixStats(eq);
+      stats.totalAttack += Number(affix.attack) || 0;
+      stats.totalDefense += Number(affix.defense) || 0;
+      stats.totalDefense += Number(affix.armor) || 0;
+      stats.totalArmor += Number(affix.armor) || 0;
+      stats.totalMagic += Number(affix.magic) || 0;
+      stats.totalMaxHp += Number(affix.hp) || 0;
+      stats.totalMaxMana += Number(affix.mana) || 0;
+      stats.critChance += Number(affix.critChance) || 0;
+      stats.lifesteal += Number(affix.lifesteal) || 0;
+      stats.moveSpeed += Number(affix.moveSpeed) || 0;
+      stats.xpBonus += Number(affix.xpBonus) || 0;
+      stats.goldBonus += Number(affix.goldBonus) || 0;
     }
 
     // Attribute-changing talents are applied to base stats at purchase time;
@@ -485,7 +536,7 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🏆 Dungeon cleared: +${reward.gold}g +${reward.xp}XP +${reward.coins} coins`, color: '#ffd87b', pos: { x: player.x, y: player.y } });
     }
 
-    const loot = [...rollLoot(monster, derived.goldBonus, this.contentItems), ...(officialKill.bonusLoot || [])];
+    const loot = [...rollLoot(monster, derived.goldBonus, this.contentItems, player.mapId), ...(officialKill.bonusLoot || [])];
     if (loot.length > 0) {
       const groundItems = this.groundItemsByMap.get(player.mapId) || [];
       groundItems.push({ id: `ground_${Date.now()}_${Math.random()}`, x: monster.x, y: monster.y, items: loot, expireAt: Date.now() + 120000 });
@@ -916,6 +967,22 @@ class GameEngine {
     return true;
   }
 
+  handleSocial(player, payload) {
+    const result = socialSystems.handle(player, payload, { players: this.players });
+    if (!result.ok) {
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `❌ ${result.error || 'Social action rejected.'}`, color: '#ff6060', pos: { x: player.x, y: player.y } });
+      return false;
+    }
+    for (const notice of result.notices || []) {
+      const target = this.players.get(notice.playerId);
+      if (target) this.emitEvent(target.mapId, { kind: 'system', targetId: target.id, text: notice.text, color: '#7dd3fc', pos: { x: target.x, y: target.y } });
+    }
+    if (result.message && !(result.notices || []).some(notice => notice.playerId === player.id && notice.text === result.message)) {
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: result.message, color: '#7dd3fc', pos: { x: player.x, y: player.y } });
+    }
+    return true;
+  }
+
   getQuestNpcRequirement(questId) {
     const quest = contentDB.get('quests').find(entry => entry?.id === questId);
     if (!quest || typeof quest.npcId !== 'string' || !quest.npcId.trim()) return null;
@@ -1121,7 +1188,8 @@ class GameEngine {
     const sessionSeconds = Math.max(1, (Date.now() - (Number(player.sessionStartedAt) || Date.now())) / 1000);
     const sessionDamage = Math.max(0, (Number(player.stats?.damageDealt) || 0) - (Number(player.sessionDamageBase) || 0));
     official.state.combat = { sessionDamage, sessionSeconds: Math.floor(sessionSeconds), dps: Math.round((sessionDamage / sessionSeconds) * 10) / 10 };
-    return { player: playerData, nearbyPlayers, monsters, groundItems, events, official };
+    const social = socialSystems.snapshot(player, this.players);
+    return { player: playerData, nearbyPlayers, monsters, groundItems, events, official, social };
   }
 
   consumeEvents(mapId) { this.pendingEvents.set(mapId, []); }

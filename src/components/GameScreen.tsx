@@ -29,7 +29,7 @@ import PetShop from './PetShop';
 import { DUNGEON_WAVES, spawnDungeonWave, getDungeonReward, PETS, getActivePet, buyPet, type ActivePetState } from '../game/dungeons';
 import { randomGemDrop, GEMS } from '../game/itemSets';
 import { RECIPES, canCraft } from '../game/crafting';
-import { generateMap, MAPS, MAP_WIDTH, MAP_HEIGHT } from '../game/maps';
+import { generateMap, MAPS, MAP_WIDTH, MAP_HEIGHT, syncServerMaps } from '../game/maps';
 import { createCorpse, createLootBag, rollLoot, CORPSE_LIFETIME, type GroundItem, type LootItem } from '../game/loot';
 import QuestCreator from './QuestCreator';
 import MysteryQuestBook from './MysteryQuestBook';
@@ -49,9 +49,12 @@ import { net, broadcastPlayer, broadcastChat, type NetPlayer, type NetMessage } 
 import { serverSync } from '../game/ServerSync';
 import { loadLocal, saveLocal, applySave, persistSubSystems } from '../game/SaveManager';
 import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, getUILayout, saveUILayout, DEFAULT_UI_PANEL_ORDER, type UILayout, type CustomNPC, type CustomMonster } from '../game/content';
+import { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeServerSpells, serverNpcToClient, serverQuestToClient, spellContentSlug } from '../game/serverContentAdapters';
 import { getTownBuildings } from '../game/world';
 import { drawBuilding, type Building } from '../game/render';
 import Weather from './Weather';
+import RegionBanner from './RegionBanner';
+import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import CastBar from './CastBar';
 import RaidWarning from './RaidWarning';
 import { triggerCast } from './CastBar';
@@ -61,6 +64,9 @@ import Bestiary from './Bestiary';
 import DPSMeter from './DPSMeter';
 import AdventureBoard, { type AdventureSnapshot } from './AdventureBoard';
 import OfficialSystemsHub, { type OfficialTab } from './OfficialSystemsHub';
+import SocialHub from './SocialHub';
+import CombatTargetFrame from './CombatTargetFrame';
+import { applyAuthoritativeCombatFeedback, resolveCombatTarget } from '../game/combatPresentation';
 import { dpsMeter } from '../game/dpsMeter';
 import { recordKill } from '../game/bestiary';
 import {
@@ -80,153 +86,6 @@ interface Props {
 const VIEW_W = 19;
 const VIEW_H = 13;
 
-function customNpcToRuntime(npc: CustomNPC): NPC {
-  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper'];
-  const role: NPC['role'] = validRoles.includes(npc.role as NPC['role']) ? npc.role as NPC['role'] : 'guard';
-  const options: NPC['dialogues'][number]['options'] = [{ text: 'Farewell.', action: 'bye' }];
-  if (role === 'banker') options.unshift({ text: 'Bank & depot', action: 'bank' });
-  if (role === 'trainer') options.unshift({ text: 'Train me', action: 'train' });
-  if (role === 'innkeeper') {
-    options.unshift({ text: 'Food & drinks', action: 'food' });
-    options.unshift({ text: 'Rest (50 gold)', action: 'heal' });
-  }
-  return {
-    id: npc.id, name: npc.name, pos: { x: npc.posX, y: npc.posY },
-    emoji: npc.emoji, color: npc.color, role,
-    dialogues: [{ text: npc.dialogueText || 'Greetings, traveler!', options }],
-  };
-}
-
-function customMonsterToRuntime(monster: CustomMonster): Monster {
-  const pos = { x: monster.posX, y: monster.posY };
-  return {
-    id: monster.id, name: monster.name, pos: { ...pos }, hp: monster.hp, maxHp: monster.hp,
-    attack: monster.attack, defense: monster.defense, speed: monster.speed, xp: monster.xp,
-    color: monster.color, emoji: monster.emoji, lastMove: 0, lastAttack: 0,
-    respawnPos: { ...pos }, dead: false, respawnAt: 0, size: monster.size,
-    level: monster.level, type: monster.type,
-  };
-}
-
-const customContentOnMap = <T extends { mapId?: string }>(content: T[], mapId: string) =>
-  content.filter((entry) => (entry.mapId || 'eldoria') === mapId);
-
-function serverNpcToClient(raw: any, quests: Quest[]): { mapId: string; npc: NPC } | null {
-  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim()) return null;
-  const x = Math.floor(Number(raw.posX));
-  const y = Math.floor(Number(raw.posY));
-  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) return null;
-  const mapId = typeof raw.mapId === 'string' && MAPS[raw.mapId] ? raw.mapId : 'eldoria';
-  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper'];
-  const role: NPC['role'] = validRoles.includes(raw.role as NPC['role']) ? raw.role as NPC['role'] : 'guard';
-  const options: NPC['dialogues'][number]['options'] = quests
-    .filter((quest) => quest.npcId === raw.id)
-    .map((quest) => ({ text: `📜 ${quest.name}`, action: 'quest' as const, questId: quest.id }));
-  options.push({ text: 'Farewell.', action: 'bye' });
-  return {
-    mapId,
-    npc: {
-      id: raw.id.trim(),
-      name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : raw.id.trim(),
-      pos: { x, y },
-      emoji: typeof raw.emoji === 'string' && raw.emoji ? raw.emoji.slice(0, 8) : '🧙',
-      color: typeof raw.color === 'string' && raw.color ? raw.color : '#9bd4ff',
-      role,
-      dialogues: [{
-        text: typeof raw.dialogue === 'string' && raw.dialogue.trim() ? raw.dialogue.trim() : 'Greetings, traveler!',
-        options,
-      }],
-    },
-  };
-}
-
-const SERVER_SPELL_TYPES: Spell['type'][] = ['attack', 'heal', 'aoe', 'buff'];
-const SERVER_BUFF_TYPES: NonNullable<Spell['buffType']>[] = ['shield', 'haste', 'invisible', 'frenzy'];
-
-function spellContentSlug(value: unknown): string {
-  return String(value || '').trim().toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-}
-
-function finiteSpellNumber(value: unknown, min: number, max: number, fallback: number): number {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
-}
-
-function mergeServerSpells(vocationId: string, baseSpells: Spell[], content: unknown): Spell[] {
-  const merged = baseSpells.map((spell) => ({ ...spell }));
-  if (!Array.isArray(content)) return merged;
-
-  for (const raw of content) {
-    if (!raw || typeof raw !== 'object') continue;
-    const record = raw as Record<string, unknown>;
-    const rawVocation = typeof record.vocation === 'string' ? record.vocation.trim().toLowerCase() : '';
-    if (rawVocation !== vocationId) continue;
-    if (typeof record.id !== 'string' || !record.id.trim()) continue;
-    if (typeof record.name !== 'string' || !record.name.trim()) continue;
-    const type = typeof record.type === 'string' && SERVER_SPELL_TYPES.includes(record.type as Spell['type'])
-      ? record.type as Spell['type']
-      : null;
-    if (!type) continue;
-
-    const contentId = record.id.trim().slice(0, 100);
-    const name = record.name.trim().slice(0, 100);
-    const matchIndex = merged.findIndex((spell) =>
-      spellContentSlug(spell.name) === spellContentSlug(contentId) || spellContentSlug(spell.name) === spellContentSlug(name)
-    );
-    const previous = matchIndex >= 0 ? merged[matchIndex] : undefined;
-    const rawColor = typeof record.color === 'string' ? record.color : '';
-    const next: Spell = {
-      ...(previous || {} as Spell),
-      id: previous?.id || `server_${contentId}`,
-      name,
-      icon: typeof record.icon === 'string' && record.icon ? record.icon.slice(0, 8) : (previous?.icon || '✨'),
-      mana: Math.floor(finiteSpellNumber(record.mana, 0, 100_000, previous?.mana ?? 10)),
-      cooldown: Math.floor(finiteSpellNumber(record.cooldown, 250, 600_000, previous?.cooldown ?? 1500)),
-      damage: Math.floor(finiteSpellNumber(record.damage, 0, 10_000_000, previous?.damage ?? 0)),
-      range: finiteSpellNumber(record.range, 0, 20, previous?.range ?? 1),
-      lastCast: previous?.lastCast ?? 0,
-      color: /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : (previous?.color || '#9bd4ff'),
-      type,
-      levelRequired: Math.floor(finiteSpellNumber(record.levelRequired, 1, 100_000, previous?.levelRequired ?? 1)),
-    };
-    if (Number.isFinite(Number(record.scalingCoeff))) next.scalingCoeff = finiteSpellNumber(record.scalingCoeff, 0, 20, 1);
-    if (type === 'buff') {
-      const requestedBuffType = typeof record.buffType === 'string'
-        ? record.buffType.trim().toLowerCase() as NonNullable<Spell['buffType']>
-        : undefined;
-      next.buffType = requestedBuffType && SERVER_BUFF_TYPES.includes(requestedBuffType)
-        ? requestedBuffType
-        : (previous?.buffType && SERVER_BUFF_TYPES.includes(previous.buffType) ? previous.buffType : 'shield');
-      next.buffDuration = Math.floor(finiteSpellNumber(record.buffDuration, 1000, 60_000, previous?.buffDuration ?? 8000));
-      const defaultBuffValue = next.buffType === 'haste' ? 35 : next.buffType === 'invisible' ? 1 : 25;
-      next.buffValue = finiteSpellNumber(record.buffValue, 0, 100, previous?.buffValue ?? defaultBuffValue);
-    }
-    if (matchIndex >= 0) merged[matchIndex] = next;
-    else if (merged.length < 8) merged.push(next);
-  }
-  return merged;
-}
-
-function serverQuestToClient(raw: any): Quest | null {
-  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim()) return null;
-  const target = typeof raw.target === 'string' && raw.target.trim() ? raw.target.trim() : 'objective';
-  const count = Math.max(1, Math.floor(Number(raw.count) || 1));
-  return {
-    id: raw.id.trim(),
-    name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : raw.id.trim(),
-    description: typeof raw.description === 'string' ? raw.description : '',
-    npcId: typeof raw.npcId === 'string' ? raw.npcId : '',
-    objectives: [{ type: 'kill', target, targetName: target, count, current: 0 }],
-    rewards: {
-      xp: Math.max(0, Math.floor(Number(raw.rewardXp) || 0)),
-      gold: Math.max(0, Math.floor(Number(raw.rewardGold) || 0)),
-    },
-    requires: Array.isArray(raw.requires) ? raw.requires.filter((id: unknown): id is string => typeof id === 'string') : [],
-    levelRequired: Math.max(1, Math.floor(Number(raw.levelRequired) || 1)),
-  };
-}
-
 export default function GameScreen({ account, onLogout }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onlineAccount = Boolean(account.sessionToken && !account.offline);
@@ -243,6 +102,9 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [officialTab, setOfficialTab] = useState<OfficialTab>('progress');
   const [officialState, setOfficialState] = useState<any>(null);
   const lastOfficialSignatureRef = useRef('');
+  const [showSocialHub, setShowSocialHub] = useState(false);
+  const [socialState, setSocialState] = useState<any>(null);
+  const lastSocialSignatureRef = useRef('');
   const openOfficial = useCallback((tab: OfficialTab) => { setOfficialTab(tab); setShowOfficialHub(true); }, []);
   const serverQuestsRef = useRef<{ active: any[]; completed: string[] } | null>(null);
   const [serverQuestCatalog, setServerQuestCatalog] = useState<Quest[]>([]);
@@ -354,7 +216,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [comboDisplay, setComboDisplay] = useState<{ count: number; mult: number } | null>(null);
 
   // Weather
-  const [weather, setWeather] = useState<'clear' | 'rain' | 'snow' | 'storm'>('clear');
+  const [weather, setWeather] = useState<WorldWeather>('clear');
 
   // Load or create player (using Unified Save System)
   const [player, setPlayer] = useState<Player>(() => {
@@ -543,6 +405,19 @@ export default function GameScreen({ account, onLogout }: Props) {
     audio.startMusic(MAPS[currentMapId]?.biome || 'plains');
   }, [currentMapId]);
 
+
+  // Cosmetic realm weather is deterministic per map/time window so players in
+  // the same region see the same atmosphere without affecting server authority.
+  useEffect(() => {
+    const refreshWeather = () => {
+      const map = MAPS[currentMapId] || MAPS.eldoria;
+      setWeather(weatherForMap(map.id, map.biome));
+    };
+    refreshWeather();
+    const timer = window.setInterval(refreshWeather, 45_000);
+    return () => window.clearInterval(timer);
+  }, [currentMapId]);
+
   // ===== NETWORK: connect to BroadcastChannel on mount (local multiplayer) =====
   useEffect(() => {
     // Always enable local multiplayer (cross-tab on same machine)
@@ -638,6 +513,11 @@ export default function GameScreen({ account, onLogout }: Props) {
           try {
             const content = msg.payload;
             localStorage.setItem('moria_server_content', JSON.stringify(content));
+            syncServerMaps(content.maps);
+            if (MAPS[currentMapIdRef.current]) {
+              worldRef.current = generateMap(currentMapIdRef.current);
+              buildingsRef.current = getTownBuildings(MAPS[currentMapIdRef.current].biome);
+            }
             const quests = Array.isArray(content.quests)
               ? content.quests.map(serverQuestToClient).filter((q: Quest | null): q is Quest => Boolean(q))
               : [];
@@ -953,6 +833,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         pos: { ...p.pos }, color: spell.color, startTime: now, duration: 500, type: 'aoe',
       });
       spawnParticles(p.pos, spell.color, 20);
+      if (hits > 0) screenShakeRef.current = Math.max(screenShakeRef.current, Math.min(9, 4 + hits));
     } else {
       const target = p.targetId
         ? monstersRef.current.find((m) => m.id === p.targetId && !m.dead)
@@ -976,7 +857,8 @@ export default function GameScreen({ account, onLogout }: Props) {
         playerRef.current.stats.damageDealt += finalDmg;
         dpsMeter.record(playerRef.current.name, target.name, finalDmg, 'magical', crit);
         addFloatingText(`${crit ? '💥 ' : ''}${finalDmg}`, target.pos, crit ? '#ff4444' : spell.color, crit);
-        spawnParticles(target.pos, spell.damageType === 'ice' ? '#9bd4ff' : spell.damageType === 'fire' ? '#ff6a00' : spell.color, 8);
+        spawnParticles(target.pos, spell.damageType === 'ice' ? '#9bd4ff' : spell.damageType === 'fire' ? '#ff6a00' : spell.color, crit ? 14 : 8);
+        screenShakeRef.current = Math.max(screenShakeRef.current, crit ? 8 : 4);
         addMessage('System', `${spell.name} → ${target.name}: ${finalDmg}${crit ? ' CRIT!' : ''}!`, spell.color, 'battle');
         // Lifesteal from spell
         if (spell.lifestealPercent && spell.lifestealPercent > 0) {
@@ -1746,6 +1628,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           const sp = renderState.player || {};
           const { x, y, inventory: serverInventory, quests: serverQuestState, adventure: serverAdventure, skills: serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
           const serverOfficial = renderState.official;
+          const serverSocial = renderState.social;
           Object.assign(p, compatibleServerPlayer);
           if (serverSkills && typeof serverSkills === 'object') p.skills = serverSkills;
           if (Number.isFinite(x) && Number.isFinite(y)) p.pos = { x, y };
@@ -1764,6 +1647,13 @@ export default function GameScreen({ account, onLogout }: Props) {
               setOfficialState(serverOfficial);
               if (Array.isArray(serverOfficial.state?.achievements)) p.achievements = serverOfficial.state.achievements;
               if (serverOfficial.state?.reputation && typeof serverOfficial.state.reputation === 'object') p.reputation = serverOfficial.state.reputation;
+            }
+          }
+          if (serverSocial && typeof serverSocial === 'object') {
+            const signature = JSON.stringify(serverSocial);
+            if (signature !== lastSocialSignatureRef.current) {
+              lastSocialSignatureRef.current = signature;
+              setSocialState(serverSocial);
             }
           }
           if (serverQuestState && typeof serverQuestState === 'object') {
@@ -1797,7 +1687,11 @@ export default function GameScreen({ account, onLogout }: Props) {
           serverMonstersRef.current = renderState.monsters;
           serverPlayersRef.current = renderState.nearbyPlayers;
           serverGroundRef.current = renderState.groundItems;
-          serverSync.processEvents(addFloatingText, addMessage);
+          serverSync.processEvents(addFloatingText, addMessage, (event) => {
+            applyAuthoritativeCombatFeedback(event, p.pos, spawnParticles, (strength) => {
+              screenShakeRef.current = Math.max(screenShakeRef.current, strength);
+            });
+          });
         }
       } else if (!onlineAccount) {
       // LOCAL MODE (single-player or BroadcastChannel): original simulation
@@ -2384,6 +2278,18 @@ export default function GameScreen({ account, onLogout }: Props) {
       const sx = (mx - cam.x) * TILE_SIZE;
       const sy = (my - cam.y) * TILE_SIZE;
       if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
+      if (m.type === 'boss' || m.type === 'elite') {
+        const accent = m.type === 'boss' ? '#ffd87b' : '#b88aff';
+        const aura = 0.24 + (Math.sin(now / (m.type === 'boss' ? 220 : 320)) + 1) * 0.09;
+        ctx.save();
+        ctx.globalAlpha = aura;
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = m.type === 'boss' ? 3 : 2;
+        ctx.beginPath();
+        ctx.arc(sx + TILE_SIZE / 2, sy + TILE_SIZE / 2, TILE_SIZE * (m.type === 'boss' ? 0.58 : 0.48), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       drawMonster(ctx, sx, sy, TILE_SIZE, {
         name: m.name, hp: m.hp, maxHp: m.maxHp,
         color: m.color, emoji: m.emoji, msSize: m.size,
@@ -2456,15 +2362,31 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
     }
 
-    // Target highlight
+    // Target highlight — use the same authoritative/local collection used to render monsters.
     if (p.targetId) {
-      const t = monstersRef.current.find((m) => m.id === p.targetId);
-      if (t && !t.dead) {
-        const tx = (t.pos.x - cam.x) * TILE_SIZE;
-        const ty = (t.pos.y - cam.y) * TILE_SIZE;
-        ctx.strokeStyle = `rgba(255,60,60,${0.5 + Math.sin(now / 200) * 0.3})`;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(tx + 1, ty + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+      const t = renderMonsters.find((monster: any) => monster.id === p.targetId);
+      if (t) {
+        const targetX = t.pos ? t.pos.x : t.x;
+        const targetY = t.pos ? t.pos.y : t.y;
+        const tx = (targetX - cam.x) * TILE_SIZE;
+        const ty = (targetY - cam.y) * TILE_SIZE;
+        const boss = t.type === 'boss';
+        const elite = t.type === 'elite';
+        const accent = boss ? '#ffd87b' : elite ? '#b88aff' : '#ff6060';
+        const pulse = 0.62 + Math.sin(now / 140) * 0.22;
+        ctx.save();
+        ctx.strokeStyle = accent;
+        ctx.globalAlpha = pulse;
+        ctx.lineWidth = boss ? 3 : 2;
+        ctx.beginPath();
+        ctx.ellipse(tx + TILE_SIZE / 2, ty + TILE_SIZE * 0.84, TILE_SIZE * (boss ? 0.52 : 0.43), TILE_SIZE * 0.16, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.22 + pulse * 0.16;
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.ellipse(tx + TILE_SIZE / 2, ty + TILE_SIZE * 0.84, TILE_SIZE * (boss ? 0.48 : 0.39), TILE_SIZE * 0.13, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
     }
 
@@ -2554,44 +2476,16 @@ export default function GameScreen({ account, onLogout }: Props) {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // Biome overlay (shadowlands darkness, swamp fog, etc)
-    const overlayBiome = MAPS[currentMapIdRef.current]?.biome;
-    if (overlayBiome === 'shadow') {
-      ctx.fillStyle = 'rgba(10,0,20,0.45)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else if (overlayBiome === 'swamp') {
-      ctx.fillStyle = 'rgba(20,40,10,0.25)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else if (overlayBiome === 'snow') {
-      ctx.fillStyle = 'rgba(200,220,255,0.08)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    // Player torch light (warm glow around player at night)
-    const nightAmt = (MAPS[currentMapIdRef.current]?.biome === 'shadow')
-      ? 0.6 : Math.max(0, Math.min(0.6, nightAlpha * 1.3));
-    if (nightAmt > 0.15) {
-      const px = (p.pos.x - cam.x + 0.5) * TILE_SIZE;
-      const py = (p.pos.y - cam.y + 0.5) * TILE_SIZE;
-      const torch = ctx.createRadialGradient(px, py, TILE_SIZE * 0.5, px, py, TILE_SIZE * 6);
-      torch.addColorStop(0, 'rgba(255,200,120,0.0)');
-      torch.addColorStop(0.5, `rgba(255,180,80,${nightAmt * 0.15})`);
-      torch.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = torch;
-      ctx.fillRect(px - TILE_SIZE * 6, py - TILE_SIZE * 6, TILE_SIZE * 12, TILE_SIZE * 12);
-      ctx.globalCompositeOperation = 'source-over';
-    }
-
-    // Vignette
-    const vignette = ctx.createRadialGradient(
-      canvas.width / 2, canvas.height / 2, Math.min(canvas.width, canvas.height) / 3,
-      canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) / 1.3
+    drawWorldAtmosphere(
+      ctx,
+      canvas,
+      MAPS[currentMapIdRef.current]?.biome || 'plains',
+      nightAlpha,
+      p.pos,
+      cam,
+      TILE_SIZE,
+      now,
     );
-    vignette.addColorStop(0, 'rgba(0,0,0,0)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.5)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.restore();
   };
@@ -2624,9 +2518,16 @@ export default function GameScreen({ account, onLogout }: Props) {
     coins: { icon: '💎', label: 'Coins', hotkey: '', onClick: () => onlineAccount ? openOfficial('coins') : setShowCoinShop(true) },
     world: { icon: '🌍', label: 'World', hotkey: '', onClick: () => onlineAccount ? openOfficial('world') : setShowWorldEvents(true) },
     mail: { icon: '📮', label: 'Mail', hotkey: '', onClick: () => onlineAccount ? openOfficial('mail') : setShowMail(true) },
+    social: { icon: '👥', label: 'Social', hotkey: '', onClick: () => onlineAccount && setShowSocialHub(true) },
     inv: { icon: '📦', label: 'Inv', hotkey: 'I', onClick: () => setShowInventory((v) => !v) },
   };
   const orderedQuickActions = uiLayout.panelOrder.map((id) => ({ id, action: quickActions[id] })).filter((entry) => Boolean(entry.action));
+  const activeTarget = resolveCombatTarget(
+    player.targetId,
+    serverSync.isActive(),
+    serverMonstersRef.current,
+    monstersRef.current,
+  );
 
   return (
     <div className="w-screen h-screen flex flex-col bg-[#05070c] text-slate-100 overflow-hidden select-none">
@@ -2699,6 +2600,8 @@ export default function GameScreen({ account, onLogout }: Props) {
               boxShadow: '0 28px 90px rgba(0,0,0,0.58), 0 0 0 1px rgba(164,184,216,0.10), 0 0 55px rgba(110,168,255,0.05)',
             }}
           />
+          <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
+
           {/* Zoom controls */}
           <div className="moria-panel absolute bottom-4 right-4 z-20 flex flex-col gap-1 rounded-xl p-1.5">
             <button onClick={() => { const nz = Math.min(2.5, zoomRef.current + 0.25); zoomRef.current = nz; setZoom(nz); }} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-base font-black">+</button>
@@ -2707,32 +2610,8 @@ export default function GameScreen({ account, onLogout }: Props) {
             <button onClick={() => { zoomRef.current = 1; setZoom(1); }} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-xs" title="Reset zoom">⊙</button>
           </div>
 
-          {/* Target Frame */}
-          {player.targetId && (() => {
-            const t = serverSync.isActive()
-              ? serverMonstersRef.current.find((m: any) => m.id === player.targetId && m.hp > 0)
-              : monstersRef.current.find((m) => m.id === player.targetId && !m.dead);
-            if (!t) return null;
-            return (
-              <div className="moria-panel absolute left-3 top-3 min-w-[230px] rounded-2xl border p-3" style={{ borderColor: t.type === 'boss' ? 'rgba(255,216,123,.62)' : t.type === 'elite' ? 'rgba(184,138,255,.56)' : 'rgba(255,100,116,.42)' }}>
-                <div className="moria-eyebrow mb-2" style={{ color: t.type === 'boss' ? '#ffd87b' : t.type === 'elite' ? '#b88aff' : '#ff818d' }}>{t.type === 'boss' ? 'BOSS TARGET' : t.type === 'elite' ? 'ELITE TARGET' : 'TARGET'}</div>
-                <div className="flex items-center gap-2">
-                  <div className="text-2xl">{t.emoji}</div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-amber-100 font-bold text-sm">{t.name}</span>
-                      <span className="text-amber-200/60 text-xs">Lv {t.level}</span>
-                    </div>
-                    <div className="h-2 bg-black/60 rounded overflow-hidden border border-red-900/50 mt-1">
-                      <div className="h-full bg-gradient-to-r from-rose-700 to-rose-400" style={{ width: `${Math.max(0, Math.min(100, (t.hp / Math.max(1, t.maxHp)) * 100))}%` }} />
-                    </div>
-                    <div className="text-[10px] text-red-300 mt-0.5">{Math.max(0, t.hp)} / {t.maxHp}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
+          {/* Combat target presentation is isolated from the game orchestrator. */}
+          <CombatTargetFrame target={activeTarget} playerLevel={player.level} playerPos={player.pos} />
 
           {/* Active Hunt Tracker */}
           {serverSync.isActive() && adventureState?.active && (
@@ -3020,7 +2899,14 @@ export default function GameScreen({ account, onLogout }: Props) {
           })()}
 
           {/* Chat - WoW style bottom-left */}
-          <Chat messages={messages} onSendMessage={(text) => { addMessage(player.name, text, '#ffffff', 'world'); broadcastChat(player.name, text, '#ffffff', 'world'); }} />
+          <Chat messages={messages} social={socialState} onSendMessage={(text, channel) => {
+            if (serverSync.isActive()) broadcastChat(player.name, text, '#ffffff', channel);
+            else { addMessage(player.name, text, '#ffffff', 'world'); broadcastChat(player.name, text, '#ffffff', 'world'); }
+          }} />
+
+          {showSocialHub && serverSync.isActive() && socialState && (
+            <SocialHub player={player} inventory={inventory} social={socialState} onAction={(action, payload) => serverSync.sendSocial(action, payload)} onClose={() => setShowSocialHub(false)} />
+          )}
 
           {showOfficialHub && serverSync.isActive() && officialState && (
             <OfficialSystemsHub

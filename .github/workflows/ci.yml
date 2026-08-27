@@ -3,16 +3,24 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
-    branches: [master, hardening-3.1, mvp-adventure-5.0, mvp-complete-6.0]
+    branches: [master]
   push:
-    branches: [master, hardening-3.1, mvp-adventure-5.0, mvp-complete-6.0]
-
-permissions:
-  contents: read
+    branches:
+      - master
+      - hardening-3.1
+      - mvp-adventure-5.0
+      - mvp-complete-6.0
+      - mvp-foundation-7.0
+      - content-expansion-8.0
+      - 'moria-8.*'
+      - 'moria-9.*'
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build-and-test:
@@ -36,7 +44,7 @@ jobs:
         run: npm ci
 
       - name: Audit client dependencies
-        run: npm audit --audit-level=high
+        run: npm audit
 
       - name: Typecheck client
         run: npm run typecheck
@@ -48,10 +56,10 @@ jobs:
         run: npm ci --prefix server --no-fund
 
       - name: Audit server dependencies
-        run: npm audit --prefix server --audit-level=high
+        run: npm audit --prefix server
 
       - name: Check server syntax
         run: npm run check --prefix server
 
-      - name: Run server test suite
+      - name: Run server hardening tests
         run: npm test --prefix server
