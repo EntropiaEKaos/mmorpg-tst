@@ -5,7 +5,15 @@ on:
   pull_request:
     branches: [master]
   push:
-    branches: [master, hardening-3.1, mvp-adventure-5.0, mvp-complete-6.0, mvp-foundation-7.0]
+    branches:
+      - master
+      - hardening-3.1
+      - mvp-adventure-5.0
+      - mvp-complete-6.0
+      - mvp-foundation-7.0
+      - content-expansion-8.0
+      - 'moria-8.*'
+      - 'moria-9.*'
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
