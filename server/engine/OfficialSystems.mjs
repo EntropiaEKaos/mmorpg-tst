@@ -14,10 +14,11 @@ import { officialDungeonDomain } from './OfficialDungeonDomain.mjs';
 import { officialWorldEventDomain } from './OfficialWorldEventDomain.mjs';
 import { officialInventoryEconomyDomain } from './OfficialInventoryEconomyDomain.mjs';
 import { officialExplorationKnowledgeDomain } from './OfficialExplorationKnowledgeDomain.mjs';
+import { officialCombatAugmentationDomain } from './OfficialCombatAugmentationDomain.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
-  ACHIEVEMENTS, SETS,
+  ACHIEVEMENTS,
 } from './OfficialCatalogs.mjs';
 export {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
@@ -239,65 +240,15 @@ export class OfficialSystems {
   }
 
   applyDerivedBonuses(player, stats) {
-    const s = this.ensurePlayer(player);
-    stats.totalAttack += s.training * 2;
-    stats.totalDefense += s.training;
-    stats.totalMagic += s.training;
-    if (Date.now() < s.blessingsUntil) stats.damageReduction += 5;
-    for (const buff of Array.isArray(player.buffs) ? player.buffs : []) {
-      if (Number(buff.expiresAt) <= Date.now()) continue;
-      if (buff.type === 'official_attack') stats.totalAttack *= 1 + clamp(buff.value, 0, 50, 0) / 100;
-      if (buff.type === 'official_defense') stats.damageReduction += clamp(buff.value, 0, 50, 0);
-    }
-
-    for (const eq of Object.values(player.equipment || {})) {
-      for (const gemId of Array.isArray(eq?.socketedGems) ? eq.socketedGems : []) {
-        const gem = OFFICIAL_GEMS.find(g => g.id === gemId);
-        if (!gem) continue;
-        if (gem.stat === 'attack') stats.totalAttack += gem.value;
-        else if (gem.stat === 'defense') stats.totalDefense += gem.value;
-        else if (gem.stat === 'magic') stats.totalMagic += gem.value;
-        else if (gem.stat === 'hp') stats.totalMaxHp += gem.value;
-        else if (gem.stat === 'mana') stats.totalMaxMana += gem.value;
-        else if (gem.stat === 'crit') stats.critChance += gem.value;
-        else if (gem.stat === 'lifesteal') stats.lifesteal += gem.value;
-        else if (gem.stat === 'speed') stats.moveSpeed += gem.value;
-      }
-    }
-
-    const equippedIds = new Set(Object.values(player.equipment || {}).map(eq => eq?.id).filter(Boolean));
-    let damagePct = 0, magicPct = 0;
-    for (const set of SETS) {
-      const count = set.pieces.filter(id => equippedIds.has(id)).length;
-      for (const bonus of set.bonuses) {
-        if (count < bonus.at) continue;
-        damagePct += bonus.damage || 0;
-        magicPct += bonus.magicPct || 0;
-        stats.xpBonus += bonus.xp || 0;
-        stats.goldBonus += bonus.gold || 0;
-        stats.totalMaxMana += bonus.mana || 0;
-        stats.critChance += bonus.crit || 0;
-        stats.moveSpeed += bonus.speed || 0;
-        stats.damageReduction += bonus.reduction || 0;
-        stats.thorns += bonus.thorns || 0;
-        stats.totalMaxHp += bonus.hp || 0;
-        stats.lifesteal += bonus.lifesteal || 0;
-      }
-    }
-    if (damagePct) stats.totalAttack *= 1 + damagePct / 100;
-    if (magicPct) stats.totalMagic *= 1 + magicPct / 100;
-    return stats;
+    return officialCombatAugmentationDomain.applyDerivedBonuses(this, player, stats);
   }
 
   getActivePet(player) {
-    const s = this.ensurePlayer(player);
-    return s.pets.active ? OFFICIAL_PETS.find(p => p.id === s.pets.active) || null : null;
+    return officialCombatAugmentationDomain.getActivePet(this, player);
   }
 
   getPetDamage(player, monster) {
-    const pet = this.getActivePet(player);
-    if (!pet) return null;
-    return { pet, damage: Math.max(1, Math.floor(pet.attack + player.level * 0.25 - (Number(monster.defense) || 0) * 0.25)) };
+    return officialCombatAugmentationDomain.getPetDamage(this, player, monster);
   }
 
   getMasteryBonus(player) {
@@ -308,18 +259,6 @@ export class OfficialSystems {
     return officialProgressionDomain.recordWeaponHit(this, player);
   }
 
-  maybeGemDrop(player, monster) {
-    const chance = monster.type === 'boss' ? 0.45 : monster.type === 'elite' ? 0.15 : 0.025;
-    if (Math.random() >= chance) return null;
-    const maxTier = Math.min(4, Math.floor(player.level / 8) + 1);
-    const eligible = OFFICIAL_GEMS.filter(g => g.tier <= maxTier);
-    if (!eligible.length) return null;
-    const gem = eligible[Math.floor(Math.random() * eligible.length)];
-    return {
-      id: `gem_${Date.now()}_${Math.random()}`, name: gem.name, icon: gem.icon, type: 'gem', gemId: gem.id,
-      quantity: 1, value: gem.tier * 100, rarity: gem.rarity, description: `${gem.stat} +${gem.value}`,
-    };
-  }
 
   refreshAchievements(player) {
     return officialProgressionDomain.refreshAchievements(this, player);
@@ -330,11 +269,9 @@ export class OfficialSystems {
   }
 
   onMonsterKill(player, monster) {
-    const s = this.ensurePlayer(player);
-    const key = slug(monster.contentSourceId || monster.name);
-    s.bestiary[key] = int(s.bestiary[key], 0, 1_000_000, 0) + 1;
+    const key = officialCombatAugmentationDomain.recordBestiaryKill(this, player, monster);
     const result = { xpMultiplier: this.getXpMultiplier(player), bonusLoot: [], nextDungeonWave: null, dungeonComplete: null, worldEventProgress: null, achievements: [] };
-    const gem = this.maybeGemDrop(player, monster);
+    const gem = officialCombatAugmentationDomain.maybeGemDrop(player, monster);
     if (gem) result.bonusLoot.push(gem);
 
     result.worldEventProgress = officialWorldEventDomain.recordKill(this, player, key);
