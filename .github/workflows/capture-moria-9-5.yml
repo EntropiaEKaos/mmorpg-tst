@@ -1,0 +1,60 @@
+name: Capture Mor'ia 9.5 Gameplay
+
+on:
+  push:
+    branches: [moria-9.5-hud-world-polish]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm install --no-save playwright@1.55.0
+      - name: Build client
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start preview
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/moria-preview.log 2>&1 &
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/moria-preview.log
+          exit 1
+      - name: Capture real gameplay
+        run: |
+          cat > capture-9-5.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1 });
+          const errors = [];
+          page.on('pageerror', error => errors.push(String(error)));
+          await page.goto('http://127.0.0.1:4173', { waitUntil: 'networkidle' });
+          await page.getByRole('button', { name: /OFFLINE QUICK PLAY/i }).click();
+          await page.waitForTimeout(4500);
+          await page.screenshot({ path: 'moria-gameplay-9-5.png', fullPage: true });
+          console.log('HUD_WINDOWS', await page.locator('[data-hud-window]').count());
+          console.log('CANVAS', await page.locator('canvas').first().evaluate(el => ({ width: el.clientWidth, height: el.clientHeight })));
+          console.log('PAGE_ERRORS', JSON.stringify(errors));
+          if (errors.length) process.exitCode = 1;
+          await browser.close();
+          EOF
+          node capture-9-5.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: moria-9-5-gameplay
+          path: moria-gameplay-9-5.png
+          if-no-files-found: error
