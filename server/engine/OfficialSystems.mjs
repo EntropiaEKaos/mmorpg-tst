@@ -15,24 +15,17 @@ import { officialCombatAugmentationDomain } from './OfficialCombatAugmentationDo
 import { exportPlayerState, freshGlobalState, freshPlayerState, normalizePlayerState } from './OfficialStateSchema.mjs';
 import { DEFAULT_OFFICIAL_STATE_FILE, OfficialStateRepository } from './OfficialStateRepository.mjs';
 import { officialPlayerLifecycleDomain } from './OfficialPlayerLifecycleDomain.mjs';
+import { officialSnapshotReadModel } from './OfficialSnapshotReadModel.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
-  ACHIEVEMENTS,
 } from './OfficialCatalogs.mjs';
 export {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
 } from './OfficialCatalogs.mjs';
 
-const clamp = (value, min, max, fallback = min) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
-};
-const int = (value, min, max, fallback = min) => Math.floor(clamp(value, min, max, fallback));
-const slug = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 const cleanText = (value, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-const playerKey = (name) => String(name || '').trim().toLocaleLowerCase('en-US');
 
 
 
@@ -280,28 +273,7 @@ export class OfficialSystems {
   }
 
   snapshot(player, nearbyPlayers = []) {
-    const s = this.ensurePlayer(player);
-    const event = this.ensureWorldEvent();
-    const inbox = this.global.mail.filter(m => m.to === playerKey(player.name)).slice(-50).map(m => ({ ...m, body: cleanText(m.body, 500) }));
-    const pendingRewards = officialWorldEventDomain.pendingRewards(this, player);
-    return {
-      state: {
-        depot: s.depot, pets: s.pets, coins: s.coins, training: s.training, professions: s.professions,
-        bestiary: s.bestiary, achievements: s.achievements, daily: s.daily, stamina: s.stamina,
-        booksRead: s.booksRead, mysteries: s.mysteries, pvp: s.pvp, mastery: s.mastery,
-        blessingsUntil: s.blessingsUntil, titles: s.titles, dungeon: s.dungeon,
-        reputation: { ...(player.reputation || { town: 0 }) }, shopDiscount: this.getReputationDiscount(player),
-      },
-      catalogs: {
-        pets: OFFICIAL_PETS, gems: OFFICIAL_GEMS, shop: OFFICIAL_SHOP, food: OFFICIAL_FOOD,
-        recipes: OFFICIAL_RECIPES, coinStore: OFFICIAL_COIN_STORE, books: OFFICIAL_BOOKS,
-        mysteries: officialExplorationKnowledgeDomain.publicMysteries(), achievements: ACHIEVEMENTS.map(({ test, ...rest }) => rest),
-      },
-      mail: inbox,
-      auctions: this.global.auctions.slice(-100).map(a => ({ id: a.id, seller: a.seller, price: a.price, item: a.item, createdAt: a.createdAt })),
-      worldEvent: { ...event, participants: undefined, pendingRewards },
-      nearbyPvp: nearbyPlayers.map(p => ({ id: p.id, name: p.name, level: p.level, hp: p.hp, maxHp: p.maxHp, ...this.publicPvp(p) })),
-    };
+    return officialSnapshotReadModel.snapshot(this, player, nearbyPlayers);
   }
 
   handle(player, payload, ctx = {}) {
