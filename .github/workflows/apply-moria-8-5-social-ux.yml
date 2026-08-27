@@ -1,0 +1,68 @@
+name: Apply Mor'ia 8.5 Social UX
+
+on:
+  push:
+    branches: [moria-8.5-social-ux]
+    paths:
+      - tools/apply-moria-8-5-social-ux.py
+      - .github/workflows/apply-moria-8-5-social-ux.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-8.5-social-ux
+          fetch-depth: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Apply 8.5 social UX
+        run: python3 tools/apply-moria-8-5-social-ux.py
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Audit client dependencies
+        run: npm audit
+
+      - name: Typecheck client
+        run: npm run typecheck
+
+      - name: Build client
+        run: npm run build
+
+      - name: Install server dependencies
+        run: npm ci --prefix server --no-fund
+
+      - name: Audit server dependencies
+        run: npm audit --prefix server
+
+      - name: Check server syntax
+        run: npm run check --prefix server
+
+      - name: Run full server suite
+        run: npm test --prefix server
+
+      - name: Commit validated 8.5 social UX
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/engine/SocialSystems.mjs src/components/SocialHub.tsx server/test/social-ux-8-5.test.mjs docs/MORIA_8_5_SOCIAL_UX.md
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(8.5): harden social durability and UX"
+          git fetch origin moria-8.5-social-ux
+          git rebase origin/moria-8.5-social-ux
+          git push origin HEAD:moria-8.5-social-ux
