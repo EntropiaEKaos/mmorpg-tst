@@ -7,6 +7,7 @@ on:
       - tools/apply-moria-9-2-alpha-systems-client.py
       - tools/fix-moria-9-2-client-applicator.py
       - tools/fix-moria-9-2-client-intents.py
+      - tools/fix-moria-9-2-game-screen-budget.py
       - .github/workflows/apply-moria-9-2-alpha-systems-client.yml
 
 permissions:
@@ -35,6 +36,8 @@ jobs:
         run: python3 tools/apply-moria-9-2-alpha-systems-client.py
       - name: Upgrade 9.2 client intent contract
         run: python3 tools/fix-moria-9-2-client-intents.py
+      - name: Keep GameScreen inside architecture budget
+        run: python3 tools/fix-moria-9-2-game-screen-budget.py
       - name: Install client dependencies
         run: npm ci
       - name: Audit client dependencies
@@ -55,7 +58,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/game/types.ts src/game/network.ts src/game/ServerSync.ts src/game/serverContentAdapters.ts src/game/playerAvatar.ts src/game/housingPresentation.ts src/game/render.ts src/components/LifeStylePanel.tsx src/components/GameScreen.tsx server/test/client-alpha-systems-9-2.test.mjs docs/MORIA_9_2_ALPHA_SYSTEMS.md
+          git add src/game/types.ts src/game/network.ts src/game/ServerSync.ts src/game/serverContentAdapters.ts src/game/playerAvatar.ts src/game/housingPresentation.ts src/game/render.ts src/components/LifeStylePanel.tsx src/components/ActiveQuestTracker.tsx src/components/GameScreen.tsx server/test/client-alpha-systems-9-2.test.mjs docs/MORIA_9_2_ALPHA_SYSTEMS.md
           git diff --cached --quiet && exit 0
           git commit -m "feat(9.2): render outfits housing and complete mount UX"
           git fetch origin moria-9.2-alpha-housing-outfits-mounts
