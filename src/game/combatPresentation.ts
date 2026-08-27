@@ -1,4 +1,5 @@
 import { audio } from './audio';
+import { dispatchCinematicReward } from './cinematicRewards';
 import { classCombatFx, rewardFxForEvent } from './rewardPresentation';
 
 export interface CombatTargetCandidate {
@@ -39,6 +40,7 @@ export function applyAuthoritativeCombatFeedback(
   applyShake: ApplyShake,
 ): void {
   if (!event || typeof event !== 'object') return;
+  dispatchCinematicReward(event);
   const pos = event.pos && Number.isFinite(event.pos.x) && Number.isFinite(event.pos.y)
     ? event.pos as Position
     : fallbackPos;
@@ -51,8 +53,8 @@ export function applyAuthoritativeCombatFeedback(
     }
     if (rewardFx.shake > 0) applyShake(rewardFx.shake);
     if (event.kind === 'levelup') audio.levelUp();
-    else if (event.kind === 'boss_defeated' || event.kind === 'loot_reward') audio.hitCrit();
-    else if (event.kind === 'quest_complete' || event.kind === 'task_ready' || event.kind === 'adventure_claimed') audio.heal();
+    else if (event.kind === 'boss_defeated' || event.kind === 'boss_intro' || event.kind === 'loot_reward' || event.kind === 'reward_chest_opened') audio.hitCrit();
+    else if (event.kind === 'quest_complete' || event.kind === 'task_ready' || event.kind === 'adventure_claimed' || event.kind === 'achievement_unlocked' || event.kind === 'cosmetic_unlocked') audio.heal();
     return;
   }
 
