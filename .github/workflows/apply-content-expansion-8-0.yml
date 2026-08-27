@@ -1,4 +1,4 @@
-name: Apply Content Expansion 8.0 Shattered Frontier
+name: Diagnose Content Expansion 8.0 Transaction Regression
 
 on:
   push:
@@ -8,10 +8,10 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  diagnose:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,45 +20,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply Shattered Frontier content expansion
+      - name: Apply Shattered Frontier migration
         run: python3 tools/apply-content-expansion-8-0.py
-      - name: Validate expansion boundaries
+      - name: Capture transaction test output
         run: |
-          test -f server/engine/ContentPacks.mjs
-          test -f server/engine/ExpansionCatalogs8.mjs
-          test -f server/test/content-expansion-8.test.mjs
-      - name: Install dependencies and compile
-        run: |
-          npm ci
-          npm audit
-          npm run typecheck
-          npm run build
-          npm ci --prefix server --no-fund
-          npm audit --prefix server
-          npm run check --prefix server
-      - name: Test expansion and ContentDB
-        run: node --test server/test/content-expansion-8.test.mjs server/test/content-db.test.mjs
-      - name: Test action gateway
-        run: node --test server/test/official-action-gateway.test.mjs
-      - name: Test action registry
-        run: node --test server/test/official-action-registry.test.mjs
-      - name: Test runtime coordinator
-        run: node --test server/test/official-runtime-coordinator.test.mjs
-      - name: Test transaction manager
-        run: node --test server/test/official-transaction-manager.test.mjs
-      - name: Run full server tests
-        run: npm test --prefix server
-      - name: Commit validated Content Expansion 8.0
-        run: |
-          if git diff --quiet -- server src docs; then
-            echo "No source changes"
-            exit 0
+          set +e
+          node --test server/test/official-transaction-manager.test.mjs > tools/tx-failure.log 2>&1
+          status=$?
+          cat tools/tx-failure.log
+          if [ "$status" -ne 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add tools/tx-failure.log
+            git commit -m "chore(content): capture transaction regression diagnostic"
+            git fetch origin content-expansion-8.0
+            git rebase origin/content-expansion-8.0
+            git push origin HEAD:content-expansion-8.0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server src docs
-          git commit -m "feat(content): add Shattered Frontier expansion"
-          git restore tools || true
-          git fetch origin content-expansion-8.0
-          git rebase origin/content-expansion-8.0
-          git push origin HEAD:content-expansion-8.0
+          exit "$status"
