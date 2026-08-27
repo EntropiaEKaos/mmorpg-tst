@@ -15,6 +15,7 @@ import { officialWorldEventDomain } from './OfficialWorldEventDomain.mjs';
 import { officialInventoryEconomyDomain } from './OfficialInventoryEconomyDomain.mjs';
 import { officialExplorationKnowledgeDomain } from './OfficialExplorationKnowledgeDomain.mjs';
 import { officialCombatAugmentationDomain } from './OfficialCombatAugmentationDomain.mjs';
+import { exportPlayerState, freshGlobalState, freshPlayerState, normalizeGlobalState, normalizePlayerState } from './OfficialStateSchema.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
@@ -40,72 +41,6 @@ const playerKey = (name) => String(name || '').trim().toLocaleLowerCase('en-US')
 
 
 
-function freshPlayerState() {
-  return {
-    version: 1,
-    depot: [],
-    pets: { owned: [], active: null },
-    coins: 50,
-    training: 0,
-    professions: {
-      mining: { level: 1, xp: 0 }, herbalism: { level: 1, xp: 0 },
-      fishing: { level: 1, xp: 0 }, woodcutting: { level: 1, xp: 0 },
-    },
-    bestiary: {}, achievements: [],
-    daily: { lastDay: '', streak: 0 },
-    stamina: 2520, lastStaminaTick: Date.now(),
-    booksRead: [], mysteries: {},
-    pvp: { enabled: false, skull: 'none', aggression: 0, lastAggression: 0 },
-    mastery: {}, blessingsUntil: 0,
-    titles: { owned: [], active: null },
-    dungeon: { active: false, runId: null, wave: 0, maxWaves: 0, killsRemaining: 0, highestWave: 0, clears: 0 },
-    welcomeMailSent: false,
-    lastGatherAt: 0, lastMailAt: 0, lastPvpAttack: 0,
-  };
-}
-
-function freshGlobalState() {
-  return { version: 1, auctions: [], mail: [], credits: {}, eventRewards: {}, event: null, eventSequence: 0 };
-}
-
-function normalizeProfession(raw) {
-  return { level: int(raw?.level, 1, 100, 1), xp: int(raw?.xp, 0, 1_000_000, 0) };
-}
-
-function normalizePlayerState(saved) {
-  const base = freshPlayerState();
-  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return base;
-  base.depot = Array.isArray(saved.depot) ? saved.depot.filter(Boolean).slice(0, 40) : [];
-  base.pets.owned = Array.isArray(saved.pets?.owned) ? saved.pets.owned.filter(id => OFFICIAL_PETS.some(p => p.id === id)).slice(0, OFFICIAL_PETS.length) : [];
-  base.pets.active = base.pets.owned.includes(saved.pets?.active) ? saved.pets.active : null;
-  base.coins = int(saved.coins, 0, 10_000_000, 50);
-  base.training = int(saved.training, 0, 20, 0);
-  for (const key of Object.keys(base.professions)) base.professions[key] = normalizeProfession(saved.professions?.[key]);
-  base.bestiary = saved.bestiary && typeof saved.bestiary === 'object' && !Array.isArray(saved.bestiary) ? Object.fromEntries(Object.entries(saved.bestiary).slice(0, 500).map(([k, v]) => [slug(k), int(v, 0, 1_000_000, 0)])) : {};
-  base.achievements = Array.isArray(saved.achievements) ? saved.achievements.filter(id => ACHIEVEMENTS.some(a => a.id === id)) : [];
-  base.daily = { lastDay: cleanText(saved.daily?.lastDay, 10), streak: int(saved.daily?.streak, 0, 7, 0) };
-  base.stamina = int(saved.stamina, 0, 2520, 2520);
-  base.lastStaminaTick = Number(saved.lastStaminaTick) > 0 ? Number(saved.lastStaminaTick) : Date.now();
-  base.booksRead = Array.isArray(saved.booksRead) ? saved.booksRead.filter(id => OFFICIAL_BOOKS.some(b => b.id === id)) : [];
-  base.mysteries = saved.mysteries && typeof saved.mysteries === 'object' && !Array.isArray(saved.mysteries) ? saved.mysteries : {};
-  base.pvp = {
-    enabled: Boolean(saved.pvp?.enabled),
-    skull: ['none', 'white', 'yellow', 'orange', 'red', 'black'].includes(saved.pvp?.skull) ? saved.pvp.skull : 'none',
-    aggression: int(saved.pvp?.aggression, 0, 100, 0),
-    lastAggression: Number(saved.pvp?.lastAggression) || 0,
-  };
-  base.mastery = saved.mastery && typeof saved.mastery === 'object' && !Array.isArray(saved.mastery) ? saved.mastery : {};
-  base.blessingsUntil = Number(saved.blessingsUntil) || 0;
-  base.titles.owned = Array.isArray(saved.titles?.owned) ? saved.titles.owned.filter(v => typeof v === 'string').slice(0, 20) : [];
-  base.titles.active = base.titles.owned.includes(saved.titles?.active) ? saved.titles.active : null;
-  base.dungeon = {
-    active: false, runId: null, wave: 0, maxWaves: 0, killsRemaining: 0,
-    highestWave: int(saved.dungeon?.highestWave, 0, 10, 0), clears: int(saved.dungeon?.clears, 0, 1_000_000, 0),
-  };
-  base.welcomeMailSent = Boolean(saved.welcomeMailSent);
-  return base;
-}
-
 export class OfficialSystems {
   constructor(dbFile = DEFAULT_DB_FILE) {
     this.dbFile = dbFile;
@@ -119,11 +54,7 @@ export class OfficialSystems {
       if (!fs.existsSync(this.dbFile)) return false;
       const raw = JSON.parse(fs.readFileSync(this.dbFile, 'utf8'));
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
-      this.global = { ...freshGlobalState(), ...raw };
-      this.global.auctions = Array.isArray(raw.auctions) ? raw.auctions.filter(Boolean).slice(0, 500) : [];
-      this.global.mail = Array.isArray(raw.mail) ? raw.mail.filter(Boolean).slice(-5000) : [];
-      this.global.credits = raw.credits && typeof raw.credits === 'object' ? raw.credits : {};
-      this.global.eventRewards = raw.eventRewards && typeof raw.eventRewards === 'object' ? raw.eventRewards : {};
+      this.global = normalizeGlobalState(raw);
       return true;
     } catch (error) {
       console.warn('⚠ Official systems DB load failed:', error?.message || error);
@@ -152,7 +83,7 @@ export class OfficialSystems {
   }
 
   ensurePlayer(player) {
-    if (!player.official || typeof player.official !== 'object') player.official = freshPlayerState();
+    if (!player.official || typeof player.official !== 'object' || Array.isArray(player.official)) player.official = freshPlayerState();
     return player.official;
   }
 
@@ -163,28 +94,7 @@ export class OfficialSystems {
   }
 
   exportPlayer(player) {
-    const s = this.ensurePlayer(player);
-    return {
-      version: 1,
-      depot: s.depot,
-      pets: s.pets,
-      coins: s.coins,
-      training: s.training,
-      professions: s.professions,
-      bestiary: s.bestiary,
-      achievements: s.achievements,
-      daily: s.daily,
-      stamina: s.stamina,
-      lastStaminaTick: s.lastStaminaTick,
-      booksRead: s.booksRead,
-      mysteries: s.mysteries,
-      pvp: { enabled: s.pvp.enabled, skull: s.pvp.skull, aggression: s.pvp.aggression, lastAggression: s.pvp.lastAggression },
-      mastery: s.mastery,
-      blessingsUntil: s.blessingsUntil,
-      titles: s.titles,
-      dungeon: { highestWave: s.dungeon.highestWave, clears: s.dungeon.clears },
-      welcomeMailSent: s.welcomeMailSent,
-    };
+    return exportPlayerState(this.ensurePlayer(player));
   }
 
   onLogin(player) {
