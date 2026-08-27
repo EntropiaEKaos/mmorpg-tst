@@ -23,6 +23,7 @@ export const OFFICIAL_STATE_LIMITS = Object.freeze({
   bestiary: 500,
   bestiaryCount: 1_000_000,
   achievements: ACHIEVEMENTS.length,
+  regions: 100,
   books: OFFICIAL_BOOKS.length,
   mastery: 100,
   titles: 20,
@@ -114,7 +115,7 @@ export function freshPlayerState(now = Date.now()) {
       mining: { level: 1, xp: 0 }, herbalism: { level: 1, xp: 0 },
       fishing: { level: 1, xp: 0 }, woodcutting: { level: 1, xp: 0 },
     },
-    bestiary: {}, achievements: [],
+    bestiary: {}, achievements: [], regionsDiscovered: ['eldoria'],
     daily: { lastDay: '', streak: 0 },
     stamina: 2520, lastStaminaTick: timestamp,
     booksRead: [], mysteries: {},
@@ -155,6 +156,11 @@ export function normalizePlayerState(saved, now = Date.now()) {
   base.achievements = Array.isArray(saved.achievements)
     ? unique(saved.achievements.filter(id => ACHIEVEMENTS.some(achievement => achievement.id === id))).slice(0, OFFICIAL_STATE_LIMITS.achievements)
     : [];
+  base.regionsDiscovered = Array.isArray(saved.regionsDiscovered)
+    ? unique(saved.regionsDiscovered.map(value => text(value, 100)).filter(Boolean)).slice(0, OFFICIAL_STATE_LIMITS.regions)
+    : ['eldoria'];
+  if (!base.regionsDiscovered.includes('eldoria')) base.regionsDiscovered.unshift('eldoria');
+  base.regionsDiscovered = base.regionsDiscovered.slice(0, OFFICIAL_STATE_LIMITS.regions);
   base.daily = {
     lastDay: text(saved.daily?.lastDay, 10),
     streak: int(saved.daily?.streak, 0, 7, 0),
@@ -229,6 +235,7 @@ export function exportPlayerState(state) {
     professions: s.professions,
     bestiary: s.bestiary,
     achievements: s.achievements,
+    regionsDiscovered: s.regionsDiscovered,
     daily: s.daily,
     stamina: s.stamina,
     lastStaminaTick: s.lastStaminaTick,

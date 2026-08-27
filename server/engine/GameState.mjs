@@ -23,6 +23,7 @@ import { createWorldClockSnapshot } from './WorldClock.mjs';
 import { contextualizeSpell, effectForRelation, multiplierForRelation } from './ContextualSkillEngine.mjs';
 import { applyClassDerivedStats, classBasicAttackRules, classSpellMultiplier, applyClassKillSustain } from './ClassIdentity.mjs';
 import { buildBossDefeatEvent, buildLootRewardEvent } from './RewardFeedback.mjs';
+import { buildBossIntroEvent, buildRegionDiscoveryEvent, buildAchievementUnlockEvent, buildCosmeticUnlockEvent, buildRewardChestEvent } from './CinematicRewards.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -409,6 +410,9 @@ class GameEngine {
     else if (dy < 0) player.direction = 'up';
     else if (dy > 0) player.direction = 'down';
 
+    const nearbyBoss = monsters.find(monster => !monster.dead && monster.type === 'boss' && Math.hypot(monster.x - player.x, monster.y - player.y) <= 7);
+    if (nearbyBoss) this.emitBossIntroIfNeeded(player, nearbyBoss);
+
     // Portals are server-owned. Stepping onto one attempts travel automatically.
     const portal = map.portals?.find(p => p.pos.x === player.x && p.pos.y === player.y);
     if (portal) this.travelThroughPortal(player, portal);
@@ -491,12 +495,30 @@ class GameEngine {
     return stats;
   }
 
+  emitBossIntroIfNeeded(player, monster) {
+    if (!monster || monster.type !== 'boss' || monster.dead) return false;
+    if (!Array.isArray(player._bossIntroIds)) player._bossIntroIds = [];
+    if (player._bossIntroIds.includes(monster.id)) return false;
+    player._bossIntroIds = [...player._bossIntroIds, monster.id].slice(-50);
+    const event = buildBossIntroEvent(player, monster);
+    if (event) this.emitEvent(player.mapId, event);
+    return Boolean(event);
+  }
+
+  emitAchievementUnlocks(player, achievements = []) {
+    for (const achievement of achievements) {
+      const event = buildAchievementUnlockEvent(player, achievement);
+      if (event) this.emitEvent(player.mapId, event);
+    }
+  }
+
   handleAttack(player, payload) {
     const now = Date.now();
     const monsterId = typeof payload.monsterId === 'string' ? payload.monsterId : player.targetId;
     const monsters = this.monstersByMap.get(player.mapId) || [];
     const monster = monsters.find(m => m.id === monsterId && !m.dead);
     if (!monster || (monster.dungeonOwnerId && monster.dungeonOwnerId !== player.id)) return false;
+    this.emitBossIntroIfNeeded(player, monster);
 
     const derived = this.computeDerivedStats(player);
     const classRules = classBasicAttackRules(player, monster, derived);
@@ -590,9 +612,7 @@ class GameEngine {
       const event = officialKill.worldEventProgress;
       this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🌍 ${event.name}: ${event.progress}/${event.needed}`, color: '#ff9b4d', pos: { x: player.x, y: player.y } });
     }
-    for (const achievement of officialKill.achievements || []) {
-      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🏆 Achievement: ${achievement.icon} ${achievement.name} · +${achievement.coins} coins`, color: '#c084fc', pos: { x: player.x, y: player.y } });
-    }
+    this.emitAchievementUnlocks(player, officialKill.achievements || []);
     if (officialKill.nextDungeonWave) {
       this.spawnOfficialDungeonWave(player);
       this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🌀 Dungeon wave ${officialKill.nextDungeonWave} begins!`, color: '#c084fc', pos: { x: player.x, y: player.y } });
@@ -623,6 +643,7 @@ class GameEngine {
       player.stats.levelUps++;
       this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y }, vocation: player.vocation });
     }
+    this.emitAchievementUnlocks(player, officialSystems.refreshAchievements(player));
   }
 
   handleCast(player, payload) {
@@ -843,6 +864,10 @@ class GameEngine {
       return false;
     }
     this.emitEvent(player.mapId, { kind:'mount_update', targetId:player.id, text: result.mounted === false ? 'Dismounted.' : result.mount ? `${result.mount.name} ready.` : 'Mount updated.', color:result.mount?.color || '#d9bd7a' });
+    if (action === 'buy' && result.mount) {
+      const unlock = buildCosmeticUnlockEvent(player, { type:'mount', id:result.mount.id, name:result.mount.name, icon:result.mount.icon, color:result.mount.color });
+      if (unlock) this.emitEvent(player.mapId, unlock);
+    }
     return true;
   }
 
@@ -855,6 +880,17 @@ class GameEngine {
     const result = appearanceSystem.handle(player, payload, contentDB);
     if (!result.ok) { this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:result.error || 'Appearance action rejected.', color:'#ff9090' }); return false; }
     this.emitEvent(player.mapId, { kind:'appearance_update', targetId:player.id, text:'Outfit updated.', color:'#d49bc8' });
+    if (action === 'buy' || action === 'buy_addon') {
+      const snapshot = appearanceSystem.snapshot(player, contentDB);
+      const outfit = snapshot.catalog.find(entry => entry.id === result.outfitId);
+      const addonName = action === 'buy_addon' ? (result.addon === 1 ? outfit?.addon1Name : outfit?.addon2Name) : '';
+      const unlock = buildCosmeticUnlockEvent(player, {
+        type: action === 'buy_addon' ? 'addon' : 'outfit', id: action === 'buy_addon' ? `${result.outfitId}_addon_${result.addon}` : result.outfitId,
+        name: action === 'buy_addon' ? `${outfit?.name || result.outfitId} · ${addonName || `Addon ${result.addon}`}` : (outfit?.name || result.outfitId),
+        icon: outfit?.icon || '🧥', color:'#d49bc8',
+      });
+      if (unlock) this.emitEvent(player.mapId, unlock);
+    }
     return true;
   }
 
@@ -948,6 +984,10 @@ class GameEngine {
     player.x = spawn.x;
     player.y = spawn.y;
     player.targetId = null;
+    if (officialSystems.discoverRegion(player, targetMap.id || portal.targetMap)) {
+      const discovery = buildRegionDiscoveryEvent(player, { ...targetMap, id: targetMap.id || portal.targetMap });
+      if (discovery) this.emitEvent(player.mapId, discovery);
+    }
     this.emitEvent(player.mapId, {
       kind: 'system', targetId: player.id,
       text: `🌍 Entered ${targetMap.name}`,
@@ -1000,6 +1040,7 @@ class GameEngine {
     player.stats.adventuresCompleted = Math.max(0, Number(player.stats.adventuresCompleted) || 0) + 1;
 
     let cacheItem = null;
+    let cacheReward = null;
     if (result.cache) {
       const pool = buildEquipmentLootPool(this.contentItems)
         .filter(item => (Number(item.level) || 1) <= player.level + 3)
@@ -1008,6 +1049,7 @@ class GameEngine {
       if (pool.length > 0) {
         const reward = pool[Math.floor(Math.random() * pool.length)];
         cacheItem = reward.name;
+        cacheReward = reward;
         player.inventory.push({
           id: `hunt_cache_${Date.now()}_${Math.random()}`,
           name: reward.name, icon: reward.icon, quantity: 1, value: reward.value || 0,
@@ -1029,6 +1071,11 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y }, vocation: player.vocation });
     }
 
+    if (cacheReward) {
+      const chest = buildRewardChestEvent(player, cacheReward);
+      if (chest) this.emitEvent(player.mapId, chest);
+    }
+    this.emitAchievementUnlocks(player, officialSystems.refreshAchievements(player));
     const cacheText = cacheItem ? ` · 🎁 Cache: ${cacheItem}` : result.cache ? ' · 🎁 Equipment cache earned' : '';
     this.emitEvent(player.mapId, {
       kind: 'adventure_claimed', targetId: player.id,
@@ -1087,6 +1134,7 @@ class GameEngine {
       });
     }
     this.monstersByMap.set(player.mapId, [...monsters, ...spawned]);
+    if (wave.boss && spawned[0]) this.emitBossIntroIfNeeded(player, spawned[0]);
     return true;
   }
 
@@ -1138,6 +1186,7 @@ class GameEngine {
       const target = this.players.get(payload.targetId);
       if (target) this.emitEvent(target.mapId, { kind: 'system', targetId: target.id, text: `${player.name} hit you for ${result.detail.damage}${result.detail.killed ? ' · DEFEATED' : ''}`, color: '#ff6060', pos: { x: target.x, y: target.y } });
     }
+    this.emitAchievementUnlocks(player, officialSystems.refreshAchievements(player));
     this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text, color: '#7dd3fc', pos: { x: player.x, y: player.y } });
     return true;
   }

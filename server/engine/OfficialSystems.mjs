@@ -117,6 +117,10 @@ export class OfficialSystems {
     return officialProgressionDomain.refreshAchievements(this, player);
   }
 
+  discoverRegion(player, mapId) {
+    return officialProgressionDomain.discoverRegion(this, player, mapId);
+  }
+
   ensureWorldEvent(now = Date.now()) {
     return officialWorldEventDomain.ensure(this, now);
   }

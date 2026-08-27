@@ -81,6 +81,17 @@ export class OfficialProgressionDomain {
     return unlocked;
   }
 
+  discoverRegion(host, player, rawMapId) {
+    const s = state(host, player);
+    const mapId = typeof rawMapId === 'string' ? rawMapId.trim().slice(0, 100) : '';
+    if (!mapId) return false;
+    if (!Array.isArray(s.regionsDiscovered)) s.regionsDiscovered = ['eldoria'];
+    if (s.regionsDiscovered.includes(mapId)) return false;
+    if (s.regionsDiscovered.length >= 100) return false;
+    s.regionsDiscovered.push(mapId);
+    return true;
+  }
+
   tickStamina(host, player, now = Date.now()) {
     const s = state(host, player);
     if (now - s.lastStaminaTick < 60_000) return 0;

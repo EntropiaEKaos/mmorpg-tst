@@ -30,7 +30,8 @@ import { DUNGEON_WAVES, spawnDungeonWave, getDungeonReward, PETS, getActivePet, 
 import { randomGemDrop, GEMS } from '../game/itemSets';
 import { RECIPES, canCraft } from '../game/crafting';
 import { generateMap, MAPS, MAP_WIDTH, MAP_HEIGHT, syncServerMaps } from '../game/maps';
-import { createCorpse, createLootBag, rollLoot, CORPSE_LIFETIME, type GroundItem, type LootItem } from '../game/loot';
+import { createCorpse, createLootBag, rollLoot, type GroundItem, type LootItem } from '../game/loot';
+import { drawGroundLootPresentation } from '../game/groundLootPresentation';
 import QuestCreator from './QuestCreator';
 import MysteryQuestBook from './MysteryQuestBook';
 import Depot from './Depot';
@@ -2251,42 +2252,8 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
     }
 
-    // Ground loot (corpses / loot bags)
-    for (const g of groundItemsRef.current) {
-      const sx = (g.pos.x - cam.x) * TILE_SIZE;
-      const sy = (g.pos.y - cam.y) * TILE_SIZE;
-      if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
-      // Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.beginPath();
-      ctx.ellipse(sx + TILE_SIZE / 2, sy + TILE_SIZE - 4, TILE_SIZE * 0.35, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      const hasItems = g.items.length > 0;
-      const age = (now - g.createdAt) / CORPSE_LIFETIME;
-      const flicker = age > 0.8 ? (Math.sin(now / 80) > 0 ? 1 : 0.4) : 1;
-      ctx.globalAlpha = flicker;
-      // Glow if has loot
-      if (hasItems) {
-        const glowPulse = 0.5 + Math.sin(now / 250) * 0.3;
-        ctx.fillStyle = `rgba(244,224,77,${glowPulse * 0.3})`;
-        ctx.beginPath();
-        ctx.arc(sx + TILE_SIZE / 2, sy + TILE_SIZE / 2, TILE_SIZE * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.font = `${TILE_SIZE * 0.65}px system-ui`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(hasItems ? g.monsterEmoji : '💀', sx + TILE_SIZE / 2, sy + TILE_SIZE / 2);
-      ctx.globalAlpha = 1;
-      // Label
-      ctx.font = 'bold 8px system-ui';
-      ctx.fillStyle = hasItems ? '#f4e04d' : '#666';
-      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-      ctx.lineWidth = 2;
-      const label = hasItems ? `${g.items.length} item(s)` : 'empty';
-      ctx.strokeText(label, sx + TILE_SIZE / 2, sy + TILE_SIZE - 2);
-      ctx.fillText(label, sx + TILE_SIZE / 2, sy + TILE_SIZE - 2);
-    }
+    // Ground loot is extracted from the orchestrator and supports authoritative rarity beams.
+    drawGroundLootPresentation(ctx, serverSync.isActive() ? serverGroundRef.current : groundItemsRef.current, cam, TILE_SIZE, now);
 
     // Monsters — use server data in authoritative mode, local data otherwise
     const renderMonsters = serverSync.isActive() ? serverMonstersRef.current : monstersRef.current.filter(m => !m.dead);
