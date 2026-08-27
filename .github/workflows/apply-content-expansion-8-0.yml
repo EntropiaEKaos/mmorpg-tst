@@ -29,6 +29,7 @@ jobs:
           status=$?
           cat tools/tx-failure.log
           if [ "$status" -ne 0 ]; then
+            git restore server src docs || true
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add tools/tx-failure.log
