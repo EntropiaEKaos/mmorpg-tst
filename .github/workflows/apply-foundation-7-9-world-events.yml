@@ -22,6 +22,8 @@ jobs:
           node-version: 22
       - name: Apply world event domain extraction
         run: python3 tools/apply-foundation-7-9-world-events.py
+      - name: Harden persistence movement tests
+        run: python3 tools/harden-persistence-adjacent-move.py
       - name: Validate world event boundaries
         run: |
           test -f server/engine/OfficialWorldEventDomain.mjs
@@ -30,6 +32,7 @@ jobs:
           grep -q "officialWorldEventDomain.recordKill" server/engine/OfficialSystems.mjs
           grep -q "return officialWorldEventDomain.claim" server/engine/OfficialSystems.mjs
           grep -q "world event reward claim is private and exactly once" server/test/official-world-event-domain.test.mjs
+          grep -q "const moved = await moveToAnyAdjacentTile(client);" server/test/persistence-durability.test.mjs
       - name: Validate all gates
         run: |
           npm ci
@@ -49,7 +52,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add server src docs
-          git commit -m "refactor(official): extract global world event domain"
+          git commit -m "refactor(official): extract world events and harden durability tests"
           git restore tools || true
           git fetch origin mvp-foundation-7.0
           git rebase origin/mvp-foundation-7.0
