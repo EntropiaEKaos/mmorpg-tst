@@ -16,6 +16,7 @@ export interface RenderState {
   groundItems: any[];
   events: any[];
   official: any;
+  social: any;
 }
 
 class ServerSyncManager {
@@ -166,6 +167,11 @@ class ServerSyncManager {
     sendIntent({ type: 'official', payload: { action, ...payload } });
   }
 
+  sendSocial(action: string, payload: Record<string, unknown> = {}) {
+    if (!this.isActive() || !action) return;
+    sendIntent({ type: 'social', payload: { action, ...payload } });
+  }
+
   updateSnapshot(snap: ServerSnapshot) {
     this.authed = true;
     setSnapshot(snap);
@@ -182,6 +188,7 @@ class ServerSyncManager {
       groundItems: snap.groundItems,
       events: snap.events || [],
       official: snap.official || null,
+      social: snap.social || null,
     };
   }
 

@@ -41,7 +41,7 @@ export interface Intent {
         'pickup' | 'drop' | 'talk_npc' | 'buy' | 'sell' | 'deposit' |
         'train' | 'rest' | 'mount' | 'travel' | 'socket_gem' | 'talent' |
         'talent_reset' | 'quest_accept' | 'quest_complete' |
-        'adventure_start' | 'adventure_abandon' | 'adventure_claim' | 'official';
+        'adventure_start' | 'adventure_abandon' | 'adventure_claim' | 'official' | 'social';
   payload: any;
   timestamp: number;
 }
@@ -53,6 +53,7 @@ export interface ServerSnapshot {
   groundItems: any[];
   events: any[];
   official?: any;
+  social?: any;
 }
 
 type Handler = (msg: NetMessage) => void;

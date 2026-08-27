@@ -17,6 +17,7 @@ import { WORLD } from './engine/World.mjs';
 import { questEngine } from './engine/QuestEngine.mjs';
 import { adventureEngine } from './engine/AdventureEngine.mjs';
 import { officialSystems } from './engine/OfficialSystems.mjs';
+import { socialSystems } from './engine/SocialSystems.mjs';
 import { validateContentReferences, findBlockingContentReferences } from './engine/ContentIntegrity.mjs';
 import { accountStore, sessionManager } from './engine/AuthService.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
@@ -655,12 +656,18 @@ wss.on('connection', ws => {
       const payload = msg.payload && typeof msg.payload === 'object' && !Array.isArray(msg.payload) ? msg.payload : {};
       const text = typeof payload.text === 'string' ? payload.text.trim().slice(0, 200) : '';
       if (!text) return;
-      const allowedChannels = new Set(['world', 'say', 'party', 'guild', 'trade', 'system']);
+      const allowedChannels = new Set(['world', 'say', 'party', 'guild', 'trade']);
       const channel = allowedChannels.has(payload.channel) ? payload.channel : 'world';
-      const color = typeof payload.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(payload.color) ? payload.color : '#fff';
+      const senderPlayer = engine.getPlayer(clientId);
+      if (!senderPlayer) return;
+      const color = VOCATIONS[senderPlayer.vocation]?.color || '#d9e0eb';
       const chatMsg = { id: `chat_${Date.now()}_${clientId}`, sender: authenticatedPlayer, text, color, time: Date.now(), channel };
       const data = JSON.stringify({ kind: 'chat', payload: chatMsg });
-      for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(data);
+      const recipients = new Set(socialSystems.chatRecipients(senderPlayer, channel, engine.players));
+      for (const recipientId of recipients) {
+        const entry = wsClients.get(recipientId);
+        if (entry?.ws.readyState === WebSocket.OPEN) entry.ws.send(data);
+      }
       return;
     }
 
@@ -689,6 +696,7 @@ wss.on('connection', ws => {
 // ===================================================================
 setInterval(() => engine.tick(), engine.TICK_RATE);
 setInterval(() => sessionManager.prune(), 10 * 60 * 1000);
+setInterval(() => socialSystems.prune(), 60 * 1000);
 
 setInterval(() => {
   const mapsDelivered = new Set();
@@ -715,8 +723,8 @@ function broadcastContentUpdate() {
   console.log('📡 Content update broadcast to all clients');
 }
 
-process.on('SIGTERM', () => { playerDB.save(); contentDB.save(); officialSystems.save(); process.exit(0); });
-process.on('SIGINT', () => { playerDB.save(); contentDB.save(); officialSystems.save(); process.exit(0); });
+process.on('SIGTERM', () => { playerDB.save(); contentDB.save(); officialSystems.save(); socialSystems.save(); process.exit(0); });
+process.on('SIGINT', () => { playerDB.save(); contentDB.save(); officialSystems.save(); socialSystems.save(); process.exit(0); });
 
 server.listen(PORT, () => {
   console.log('');

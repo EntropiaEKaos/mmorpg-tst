@@ -61,6 +61,7 @@ import Bestiary from './Bestiary';
 import DPSMeter from './DPSMeter';
 import AdventureBoard, { type AdventureSnapshot } from './AdventureBoard';
 import OfficialSystemsHub, { type OfficialTab } from './OfficialSystemsHub';
+import SocialHub from './SocialHub';
 import { dpsMeter } from '../game/dpsMeter';
 import { recordKill } from '../game/bestiary';
 import {
@@ -243,6 +244,9 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [officialTab, setOfficialTab] = useState<OfficialTab>('progress');
   const [officialState, setOfficialState] = useState<any>(null);
   const lastOfficialSignatureRef = useRef('');
+  const [showSocialHub, setShowSocialHub] = useState(false);
+  const [socialState, setSocialState] = useState<any>(null);
+  const lastSocialSignatureRef = useRef('');
   const openOfficial = useCallback((tab: OfficialTab) => { setOfficialTab(tab); setShowOfficialHub(true); }, []);
   const serverQuestsRef = useRef<{ active: any[]; completed: string[] } | null>(null);
   const [serverQuestCatalog, setServerQuestCatalog] = useState<Quest[]>([]);
@@ -1751,6 +1755,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           const sp = renderState.player || {};
           const { x, y, inventory: serverInventory, quests: serverQuestState, adventure: serverAdventure, skills: serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
           const serverOfficial = renderState.official;
+          const serverSocial = renderState.social;
           Object.assign(p, compatibleServerPlayer);
           if (serverSkills && typeof serverSkills === 'object') p.skills = serverSkills;
           if (Number.isFinite(x) && Number.isFinite(y)) p.pos = { x, y };
@@ -1769,6 +1774,13 @@ export default function GameScreen({ account, onLogout }: Props) {
               setOfficialState(serverOfficial);
               if (Array.isArray(serverOfficial.state?.achievements)) p.achievements = serverOfficial.state.achievements;
               if (serverOfficial.state?.reputation && typeof serverOfficial.state.reputation === 'object') p.reputation = serverOfficial.state.reputation;
+            }
+          }
+          if (serverSocial && typeof serverSocial === 'object') {
+            const signature = JSON.stringify(serverSocial);
+            if (signature !== lastSocialSignatureRef.current) {
+              lastSocialSignatureRef.current = signature;
+              setSocialState(serverSocial);
             }
           }
           if (serverQuestState && typeof serverQuestState === 'object') {
@@ -2629,6 +2641,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     coins: { icon: '💎', label: 'Coins', hotkey: '', onClick: () => onlineAccount ? openOfficial('coins') : setShowCoinShop(true) },
     world: { icon: '🌍', label: 'World', hotkey: '', onClick: () => onlineAccount ? openOfficial('world') : setShowWorldEvents(true) },
     mail: { icon: '📮', label: 'Mail', hotkey: '', onClick: () => onlineAccount ? openOfficial('mail') : setShowMail(true) },
+    social: { icon: '👥', label: 'Social', hotkey: '', onClick: () => onlineAccount && setShowSocialHub(true) },
     inv: { icon: '📦', label: 'Inv', hotkey: 'I', onClick: () => setShowInventory((v) => !v) },
   };
   const orderedQuickActions = uiLayout.panelOrder.map((id) => ({ id, action: quickActions[id] })).filter((entry) => Boolean(entry.action));
@@ -3025,7 +3038,14 @@ export default function GameScreen({ account, onLogout }: Props) {
           })()}
 
           {/* Chat - WoW style bottom-left */}
-          <Chat messages={messages} onSendMessage={(text) => { addMessage(player.name, text, '#ffffff', 'world'); broadcastChat(player.name, text, '#ffffff', 'world'); }} />
+          <Chat messages={messages} social={socialState} onSendMessage={(text, channel) => {
+            if (serverSync.isActive()) broadcastChat(player.name, text, '#ffffff', channel);
+            else { addMessage(player.name, text, '#ffffff', 'world'); broadcastChat(player.name, text, '#ffffff', 'world'); }
+          }} />
+
+          {showSocialHub && serverSync.isActive() && socialState && (
+            <SocialHub player={player} inventory={inventory} social={socialState} onAction={(action, payload) => serverSync.sendSocial(action, payload)} onClose={() => setShowSocialHub(false)} />
+          )}
 
           {showOfficialHub && serverSync.isActive() && officialState && (
             <OfficialSystemsHub

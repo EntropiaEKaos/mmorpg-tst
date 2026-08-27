@@ -10,6 +10,7 @@ import { rollLoot, getStarterInventory, buildEquipmentLootPool } from './Items.m
 import { questEngine } from './QuestEngine.mjs';
 import { adventureEngine, createAdventureState } from './AdventureEngine.mjs';
 import { officialSystems } from './OfficialSystems.mjs';
+import { socialSystems } from './SocialSystems.mjs';
 import { contentDB } from './ContentDB.mjs';
 import { accountStore } from './AuthService.mjs';
 
@@ -107,7 +108,7 @@ class GameEngine {
     return player;
   }
 
-  playerDisconnect(id) { questEngine.clearPlayer(id); this.players.delete(id); }
+  playerDisconnect(id) { const player = this.players.get(id); if (player) socialSystems.onDisconnect(player); questEngine.clearPlayer(id); this.players.delete(id); }
   getPlayer(id) { return this.players.get(id); }
   getPlayersOnMap(mapId) {
     const result = [];
@@ -325,6 +326,7 @@ class GameEngine {
       case 'adventure_abandon': return this.handleAdventureAbandon(player);
       case 'adventure_claim': return this.handleAdventureClaim(player);
       case 'official': return this.handleOfficial(player, payload);
+      case 'social': return this.handleSocial(player, payload);
       case 'quest_accept': return this.handleQuestAccept(player, payload);
       case 'quest_complete': return this.handleQuestComplete(player, payload);
       case 'travel': return this.handleTravel(player, payload);
@@ -951,6 +953,22 @@ class GameEngine {
     return true;
   }
 
+  handleSocial(player, payload) {
+    const result = socialSystems.handle(player, payload, { players: this.players });
+    if (!result.ok) {
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `❌ ${result.error || 'Social action rejected.'}`, color: '#ff6060', pos: { x: player.x, y: player.y } });
+      return false;
+    }
+    for (const notice of result.notices || []) {
+      const target = this.players.get(notice.playerId);
+      if (target) this.emitEvent(target.mapId, { kind: 'system', targetId: target.id, text: notice.text, color: '#7dd3fc', pos: { x: target.x, y: target.y } });
+    }
+    if (result.message && !(result.notices || []).some(notice => notice.playerId === player.id && notice.text === result.message)) {
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: result.message, color: '#7dd3fc', pos: { x: player.x, y: player.y } });
+    }
+    return true;
+  }
+
   getQuestNpcRequirement(questId) {
     const quest = contentDB.get('quests').find(entry => entry?.id === questId);
     if (!quest || typeof quest.npcId !== 'string' || !quest.npcId.trim()) return null;
@@ -1156,7 +1174,8 @@ class GameEngine {
     const sessionSeconds = Math.max(1, (Date.now() - (Number(player.sessionStartedAt) || Date.now())) / 1000);
     const sessionDamage = Math.max(0, (Number(player.stats?.damageDealt) || 0) - (Number(player.sessionDamageBase) || 0));
     official.state.combat = { sessionDamage, sessionSeconds: Math.floor(sessionSeconds), dps: Math.round((sessionDamage / sessionSeconds) * 10) / 10 };
-    return { player: playerData, nearbyPlayers, monsters, groundItems, events, official };
+    const social = socialSystems.snapshot(player, this.players);
+    return { player: playerData, nearbyPlayers, monsters, groundItems, events, official, social };
   }
 
   consumeEvents(mapId) { this.pendingEvents.set(mapId, []); }

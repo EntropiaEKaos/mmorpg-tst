@@ -329,7 +329,7 @@ export interface ChatMessage {
   text: string;
   color: string;
   time: number;
-  channel: 'world' | 'system' | 'battle' | 'loot' | 'quest';
+  channel: 'world' | 'say' | 'party' | 'guild' | 'trade' | 'system' | 'battle' | 'loot' | 'quest';
 }
 
 export interface Account {
