@@ -13,9 +13,10 @@ import { officialPvpDomain } from './OfficialPvpDomain.mjs';
 import { officialDungeonDomain } from './OfficialDungeonDomain.mjs';
 import { officialWorldEventDomain } from './OfficialWorldEventDomain.mjs';
 import { officialInventoryEconomyDomain } from './OfficialInventoryEconomyDomain.mjs';
+import { officialExplorationKnowledgeDomain } from './OfficialExplorationKnowledgeDomain.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
-  OFFICIAL_COIN_STORE, OFFICIAL_BOOKS, MYSTERIES,
+  OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
   ACHIEVEMENTS, SETS,
 } from './OfficialCatalogs.mjs';
 export {
@@ -102,38 +103,6 @@ function normalizePlayerState(saved) {
   };
   base.welcomeMailSent = Boolean(saved.welcomeMailSent);
   return base;
-}
-
-function addItem(player, item) {
-  const copy = { ...item };
-  copy.quantity = int(copy.quantity, 1, 9999, 1);
-  if (copy.type !== 'equipment' && copy.type !== 'gem') {
-    const existing = player.inventory.find(entry => entry.name === copy.name && entry.type === copy.type && !entry.equipment);
-    if (existing) { existing.quantity = int(existing.quantity, 0, 999999, 0) + copy.quantity; return existing; }
-  }
-  copy.id = copy.id || `official_${Date.now()}_${Math.random()}`;
-  player.inventory.push(copy);
-  return copy;
-}
-
-function consumeNamed(player, name, quantity) {
-  let remaining = quantity;
-  for (const item of player.inventory) {
-    if (item.name !== name || remaining <= 0) continue;
-    const take = Math.min(int(item.quantity, 0, 999999, 0), remaining);
-    item.quantity -= take;
-    remaining -= take;
-  }
-  player.inventory = player.inventory.filter(item => Number(item.quantity) > 0 || item.type === 'equipment');
-  return remaining === 0;
-}
-
-function publicMysteries() {
-  return MYSTERIES.map(m => ({
-    id: m.id, name: m.name, icon: m.icon, requiredLevel: m.requiredLevel,
-    rewardGold: m.rewardGold, rewardXp: m.rewardXp, rewardItem: m.rewardItem, intro: m.intro,
-    chapters: m.chapters.map(c => ({ clue: c.clue, riddle: c.riddle, hint: c.hint })),
-  }));
 }
 
 export class OfficialSystems {
@@ -449,61 +418,15 @@ export class OfficialSystems {
   }
 
   gather(player, world) {
-    const s = this.ensurePlayer(player);
-    const now = Date.now();
-    if (now - s.lastGatherAt < 4000) return null;
-    const map = world.getMap(player.mapId);
-    if (!map) return null;
-    const resources = {
-      rock: { profession: 'mining', name: 'Ore', icon: '⛏', value: 15 },
-      stone: { profession: 'mining', name: 'Ore', icon: '⛏', value: 15 },
-      bush: { profession: 'herbalism', name: 'Herb', icon: '🌿', value: 12 },
-      water: { profession: 'fishing', name: 'Fish', icon: '🐟', value: 18 },
-      tree: { profession: 'woodcutting', name: 'Wood', icon: '🪵', value: 10 },
-    };
-    const around = [[1,0],[-1,0],[0,1],[0,-1]];
-    let found = null;
-    for (const [dx, dy] of around) {
-      const tile = map.tiles?.[player.y + dy]?.[player.x + dx];
-      if (tile && resources[tile.type]) { found = resources[tile.type]; break; }
-    }
-    if (!found) return null;
-    s.lastGatherAt = now;
-    const prof = s.professions[found.profession];
-    const qty = 1 + (Math.random() < Math.min(0.5, prof.level * 0.02) ? 1 : 0);
-    addItem(player, { name: found.name, icon: found.icon, type: 'material', quantity: qty, value: found.value });
-    prof.xp += 1;
-    if (prof.xp >= prof.level * 10 && prof.level < 100) { prof.xp -= prof.level * 10; prof.level++; }
-    player.professions = s.professions;
-    return { ...found, quantity: qty, level: prof.level, xp: prof.xp };
+    return officialExplorationKnowledgeDomain.gather(this, player, world);
   }
 
   readBook(player, bookId) {
-    const s = this.ensurePlayer(player);
-    if (!OFFICIAL_BOOKS.some(b => b.id === bookId)) return false;
-    if (!s.booksRead.includes(bookId)) s.booksRead.push(bookId);
-    return true;
+    return officialExplorationKnowledgeDomain.readBook(this, player, bookId);
   }
 
   answerMystery(player, mysteryId, answer) {
-    const s = this.ensurePlayer(player);
-    const mystery = MYSTERIES.find(m => m.id === mysteryId);
-    if (!mystery || player.level < mystery.requiredLevel) return { ok: false, error: 'Mystery locked.' };
-    const progress = s.mysteries[mystery.id] || { solvedChapters: 0, completed: false };
-    if (progress.completed) return { ok: false, error: 'Mystery already completed.' };
-    const chapter = mystery.chapters[progress.solvedChapters];
-    if (!chapter) return { ok: false, error: 'Mystery state invalid.' };
-    if (cleanText(answer, 80).toLowerCase() !== chapter.answer.toLowerCase()) return { ok: false, error: 'Incorrect answer.' };
-    progress.solvedChapters++;
-    if (progress.solvedChapters >= mystery.chapters.length) {
-      progress.completed = true;
-      player.gold += mystery.rewardGold; player.xp += mystery.rewardXp;
-      player.stats.goldEarned = (player.stats.goldEarned || 0) + mystery.rewardGold;
-      this.awardReputation(player, 75);
-      if (mystery.rewardItem) addItem(player, { ...mystery.rewardItem, type: 'misc', quantity: 1 });
-    }
-    s.mysteries[mystery.id] = progress;
-    return { ok: true, completed: progress.completed, solvedChapters: progress.solvedChapters, reward: progress.completed ? { gold: mystery.rewardGold, xp: mystery.rewardXp, item: mystery.rewardItem } : null };
+    return officialExplorationKnowledgeDomain.answerMystery(this, player, mysteryId, answer);
   }
 
   buyCoinItem(player, itemId, contentItems = []) {
@@ -562,7 +485,7 @@ export class OfficialSystems {
       catalogs: {
         pets: OFFICIAL_PETS, gems: OFFICIAL_GEMS, shop: OFFICIAL_SHOP, food: OFFICIAL_FOOD,
         recipes: OFFICIAL_RECIPES, coinStore: OFFICIAL_COIN_STORE, books: OFFICIAL_BOOKS,
-        mysteries: publicMysteries(), achievements: ACHIEVEMENTS.map(({ test, ...rest }) => rest),
+        mysteries: officialExplorationKnowledgeDomain.publicMysteries(), achievements: ACHIEVEMENTS.map(({ test, ...rest }) => rest),
       },
       mail: inbox,
       auctions: this.global.auctions.slice(-100).map(a => ({ id: a.id, seller: a.seller, price: a.price, item: a.item, createdAt: a.createdAt })),
