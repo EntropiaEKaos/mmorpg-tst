@@ -1,0 +1,59 @@
+name: Apply Content Expansion 8.0 Shattered Frontier
+
+on:
+  push:
+    branches: [content-expansion-8.0]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content-expansion-8.0
+          fetch-depth: 4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply Shattered Frontier content expansion
+        run: python3 tools/apply-content-expansion-8-0.py
+      - name: Validate expansion boundaries
+        run: |
+          test -f server/engine/ContentPacks.mjs
+          test -f server/engine/ExpansionCatalogs8.mjs
+          test -f server/test/content-expansion-8.test.mjs
+          grep -q "SHATTERED_FRONTIER_PACK_ID" server/engine/ContentPacks.mjs
+          grep -q "applyBundledPacks" server/engine/ContentDB.mjs
+          grep -q "EXPANSION_8_PETS" server/engine/OfficialCatalogs.mjs
+          grep -q "ironvale" server/engine/ContentPacks.mjs
+          grep -q "ashenmoor" server/engine/ContentPacks.mjs
+          grep -q "starfall" server/engine/ContentPacks.mjs
+      - name: Validate all gates
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm ci --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated Content Expansion 8.0
+        run: |
+          if git diff --quiet -- server src docs; then
+            echo "No source changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server src docs
+          git commit -m "feat(content): add Shattered Frontier expansion"
+          git restore tools || true
+          git fetch origin content-expansion-8.0
+          git rebase origin/content-expansion-8.0
+          git push origin HEAD:content-expansion-8.0
