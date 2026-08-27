@@ -1,0 +1,60 @@
+name: Apply MVP Complete 6.1 Finalization
+
+on:
+  push:
+    branches: [mvp-complete-6.0]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mvp-complete-6.0
+          fetch-depth: 4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply 6.1 finalization
+        run: python3 tools/apply-mvp-complete-6-1.py
+      - name: Validate finalization invariants
+        run: |
+          grep -q "getReputationDiscount(player)" server/engine/OfficialSystems.mjs
+          grep -q "characterExists: name => Boolean(accountStore.findCharacter(name))" server/engine/GameState.mjs
+          grep -q "questEngine.progressQuest(player.id, result.detail.name" server/engine/GameState.mjs
+          grep -q "sessionDamage" server/engine/GameState.mjs
+          grep -q "official={serverSync.isActive() ? officialState : null}" src/components/GameScreen.tsx
+          grep -q "SESSION DPS · SERVER" src/components/OfficialSystemsHub.tsx
+          grep -q "itemId: mailItem" src/components/OfficialSystemsHub.tsx
+          grep -q "shop prices honor authoritative town reputation discounts" server/test/official-systems.test.mjs
+          grep -q "official fishing gathering progresses" server/test/hardening.test.mjs
+          ! grep -q "skills: _serverSkills" src/components/GameScreen.tsx
+      - name: Validate all gates
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm install --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated 6.1 source
+        run: |
+          if git diff --quiet -- server src docs; then
+            echo "No source changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server src docs
+          git commit -m "feat(mvp): finalize authoritative online systems"
+          git restore tools || true
+          git fetch origin mvp-complete-6.0
+          git rebase origin/mvp-complete-6.0
+          git push origin HEAD:mvp-complete-6.0
