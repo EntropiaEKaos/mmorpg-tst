@@ -6,13 +6,13 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { buildEquipmentLootPool } from './Items.mjs';
 import { executeOfficialAction, getOfficialActionService, hasOfficialAction } from './OfficialActionRegistry.mjs';
 import { officialCommerceDomain } from './OfficialCommerceDomain.mjs';
 import { officialProgressionDomain } from './OfficialProgressionDomain.mjs';
 import { officialPvpDomain } from './OfficialPvpDomain.mjs';
 import { officialDungeonDomain } from './OfficialDungeonDomain.mjs';
 import { officialWorldEventDomain } from './OfficialWorldEventDomain.mjs';
+import { officialInventoryEconomyDomain } from './OfficialInventoryEconomyDomain.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS, MYSTERIES,
@@ -401,45 +401,23 @@ export class OfficialSystems {
   }
 
   buyPet(player, petId) {
-    const s = this.ensurePlayer(player);
-    const pet = OFFICIAL_PETS.find(p => p.id === petId);
-    if (!pet || player.level < pet.levelRequired || s.pets.owned.includes(pet.id) || player.gold < pet.price) return false;
-    player.gold -= pet.price; s.pets.owned.push(pet.id); return true;
+    return officialInventoryEconomyDomain.buyPet(this, player, petId);
   }
 
   togglePet(player, petId) {
-    const s = this.ensurePlayer(player);
-    if (petId === null || petId === '') { s.pets.active = null; return true; }
-    if (!s.pets.owned.includes(petId)) return false;
-    s.pets.active = s.pets.active === petId ? null : petId; return true;
+    return officialInventoryEconomyDomain.togglePet(this, player, petId);
   }
 
   depotPut(player, itemId) {
-    const s = this.ensurePlayer(player);
-    if (s.depot.length >= 40) return false;
-    const index = player.inventory.findIndex(item => item.id === itemId);
-    if (index < 0) return false;
-    const [item] = player.inventory.splice(index, 1);
-    s.depot.push({ ...item, depotId: `depot_${Date.now()}_${Math.random()}` });
-    return true;
+    return officialInventoryEconomyDomain.depotPut(this, player, itemId);
   }
 
   depotTake(player, depotId) {
-    const s = this.ensurePlayer(player);
-    const index = s.depot.findIndex(item => item.depotId === depotId);
-    if (index < 0) return false;
-    const [item] = s.depot.splice(index, 1);
-    delete item.depotId;
-    addItem(player, { ...item, id: `depot_take_${Date.now()}_${Math.random()}` });
-    return true;
+    return officialInventoryEconomyDomain.depotTake(this, player, depotId);
   }
 
   bank(player, direction, rawAmount) {
-    const amount = int(rawAmount, 1, 100_000_000, 0);
-    if (!amount) return false;
-    if (direction === 'deposit' && player.gold >= amount) { player.gold -= amount; player.bankGold += amount; return true; }
-    if (direction === 'withdraw' && player.bankGold >= amount) { player.bankGold -= amount; player.gold += amount; return true; }
-    return false;
+    return officialInventoryEconomyDomain.bank(player, direction, rawAmount);
   }
 
   rest(player) {
@@ -451,57 +429,19 @@ export class OfficialSystems {
   }
 
   buyFood(player, foodId) {
-    const food = OFFICIAL_FOOD.find(f => f.id === foodId);
-    if (!food || player.level < food.levelRequired || player.gold < food.price) return false;
-    player.gold -= food.price;
-    const now = Date.now();
-    player.buffs = (Array.isArray(player.buffs) ? player.buffs : []).filter(b => b.type !== food.buffType && Number(b.expiresAt) > now);
-    player.buffs.push({ id: `${food.buffType}_${now}`, type: food.buffType, name: food.name, value: food.value, startTime: now, expiresAt: now + 10 * 60_000 });
-    return true;
+    return officialInventoryEconomyDomain.buyFood(player, foodId);
   }
 
   buyShop(player, itemId, rawQty) {
-    const item = OFFICIAL_SHOP.find(entry => entry.id === itemId);
-    const qty = int(rawQty, 1, 20, 1);
-    if (!item) return false;
-    const discount = this.getReputationDiscount(player);
-    const unitPrice = Math.max(1, Math.floor(item.price * (1 - discount)));
-    if (player.level < (item.levelRequired || 1) || player.gold < unitPrice * qty) return false;
-    player.gold -= unitPrice * qty;
-    addItem(player, { name: item.name, icon: item.icon, type: item.type, quantity: qty, value: unitPrice, description: item.description });
-    return true;
+    return officialInventoryEconomyDomain.buyShop(this, player, itemId, rawQty);
   }
 
   craft(player, recipeId) {
-    const recipe = OFFICIAL_RECIPES.find(r => r.id === recipeId);
-    if (!recipe || player.level < recipe.levelRequired) return false;
-    for (const ing of recipe.ingredients) {
-      if (ing.name === 'Gold') { if (player.gold < ing.quantity) return false; }
-      else {
-        const total = player.inventory.filter(i => i.name === ing.name).reduce((sum, i) => sum + int(i.quantity, 0, 999999, 0), 0);
-        if (total < ing.quantity) return false;
-      }
-    }
-    for (const ing of recipe.ingredients) {
-      if (ing.name === 'Gold') player.gold -= ing.quantity;
-      else consumeNamed(player, ing.name, ing.quantity);
-    }
-    addItem(player, { ...recipe.result, id: `craft_${Date.now()}_${Math.random()}` });
-    return true;
+    return officialInventoryEconomyDomain.craft(player, recipeId);
   }
 
   socketGem(player, itemId, gemItemId) {
-    const equipmentItem = player.inventory.find(i => i.id === itemId && i.equipment);
-    const gemItem = player.inventory.find(i => i.id === gemItemId && i.type === 'gem' && i.gemId);
-    const gem = gemItem ? OFFICIAL_GEMS.find(g => g.id === gemItem.gemId) : null;
-    if (!equipmentItem || !gemItem || !gem) return false;
-    const sockets = int(equipmentItem.equipment.sockets, 0, 4, 0);
-    const filled = Array.isArray(equipmentItem.equipment.socketedGems) ? equipmentItem.equipment.socketedGems : [];
-    if (sockets <= filled.length) return false;
-    equipmentItem.equipment.socketedGems = [...filled, gem.id];
-    gemItem.quantity--;
-    if (gemItem.quantity <= 0) player.inventory = player.inventory.filter(i => i.id !== gemItem.id);
-    return true;
+    return officialInventoryEconomyDomain.socketGem(player, itemId, gemItemId);
   }
 
   claimDaily(player, now = Date.now()) {
@@ -567,26 +507,7 @@ export class OfficialSystems {
   }
 
   buyCoinItem(player, itemId, contentItems = []) {
-    const s = this.ensurePlayer(player);
-    const entry = OFFICIAL_COIN_STORE.find(item => item.id === itemId);
-    if (!entry || s.coins < entry.price) return false;
-    if (entry.id === 'title_shadow' && s.titles.owned.includes('Shadow Walker')) return false;
-    s.coins -= entry.price;
-    if (entry.id === 'supplies') {
-      addItem(player, { name: 'Health Potion', icon: '🧪', type: 'potion', quantity: 5, value: 50 });
-      addItem(player, { name: 'Mana Potion', icon: '🧴', type: 'potion', quantity: 5, value: 50 });
-    } else if (entry.id === 'equipment_cache') {
-      const pool = buildEquipmentLootPool(contentItems).filter(item => (item.level || 1) <= player.level + 3);
-      if (!pool.length) { s.coins += entry.price; return false; }
-      const sorted = pool.sort((a, b) => Math.abs((a.level || 1) - player.level) - Math.abs((b.level || 1) - player.level)).slice(0, 8);
-      const reward = sorted[Math.floor(Math.random() * sorted.length)];
-      addItem(player, { name: reward.name, icon: reward.icon, type: 'equipment', quantity: 1, value: reward.value || 0, rarity: reward.rarity, description: reward.description, equipment: { ...reward, sockets: Math.random() < 0.35 ? 1 : 0, socketedGems: [] } });
-    } else if (entry.id === 'blessing') {
-      s.blessingsUntil = Math.max(Date.now(), s.blessingsUntil) + 60 * 60_000;
-    } else if (entry.id === 'title_shadow') {
-      s.titles.owned.push('Shadow Walker'); s.titles.active = 'Shadow Walker';
-    }
-    return true;
+    return officialInventoryEconomyDomain.buyCoinItem(this, player, itemId, contentItems);
   }
 
   listAuction(player, itemId, rawPrice) {
