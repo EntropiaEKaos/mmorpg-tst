@@ -47,7 +47,11 @@ jobs:
         run: npm audit --prefix server
       - name: Check server syntax
         run: npm run check --prefix server
-      - name: Run server tests
+      - name: Test Shattered Frontier pack
+        run: node --test server/test/content-expansion-8.test.mjs
+      - name: Test ContentDB compatibility
+        run: node --test server/test/content-db.test.mjs
+      - name: Run full server tests
         run: npm test --prefix server
       - name: Commit validated Content Expansion 8.0
         run: |
