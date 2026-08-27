@@ -3,6 +3,7 @@ import type { Player } from '../game/types';
 import { VOCATIONS } from '../game/classes';
 import { EQUIPMENT_LOOT, RARITY_COLORS } from '../game/equipment';
 import { MAPS, MAP_WIDTH, MAP_HEIGHT } from '../game/maps';
+import CityDesigner from './CityDesigner';
 import {
   getAllBooks, saveBook, deleteBook, type Book,
   getCustomNPCs, saveCustomNPC, deleteCustomNPC, type CustomNPC,
@@ -15,18 +16,19 @@ interface Props {
   player: Player;
   setPlayer: (p: Player) => void;
   onClose: () => void;
+  onMapsChanged?: () => void;
 }
 
 type EditorTab = 'items' | 'spells' | 'classes' | 'maps' | 'books' | 'npcs' | 'monsters';
 
-export default function GameEditor({ player, setPlayer: _setPlayer, onClose }: Props) {
+export default function GameEditor({ player, setPlayer: _setPlayer, onClose, onMapsChanged }: Props) {
   const [tab, setTab] = useState<EditorTab>('items');
 
   const tabs: { id: EditorTab; label: string; icon: string }[] = [
     { id: 'items', label: 'Items · Preview', icon: '⚔' },
     { id: 'spells', label: 'Spells · Preview', icon: '🔮' },
     { id: 'classes', label: 'Classes · View', icon: '👤' },
-    { id: 'maps', label: 'Maps · Preview', icon: '🗺' },
+    { id: 'maps', label: 'City Designer · Live', icon: '🏙' },
     { id: 'books', label: 'Books', icon: '📚' },
     { id: 'npcs', label: 'NPCs', icon: '🧙' },
     { id: 'monsters', label: 'Monsters', icon: '👹' },
@@ -58,7 +60,7 @@ export default function GameEditor({ player, setPlayer: _setPlayer, onClose }: P
           ))}
         </div>
 
-        {(['items', 'spells', 'classes', 'maps'] as EditorTab[]).includes(tab) && (
+        {(['items', 'spells', 'classes'] as EditorTab[]).includes(tab) && (
           <div className="mb-3 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-100/80">
             ⚠ This section is a design preview. Its data is not part of the live gameplay runtime yet, so it will not silently claim to change the active game. Books, NPCs and Monsters are live local content.
           </div>
@@ -68,7 +70,7 @@ export default function GameEditor({ player, setPlayer: _setPlayer, onClose }: P
           {tab === 'items' && <ItemEditor />}
           {tab === 'spells' && <SpellEditor player={player} />}
           {tab === 'classes' && <ClassEditor player={player} />}
-          {tab === 'maps' && <MapCreator player={player} />}
+          {tab === 'maps' && <CityDesigner onApplied={onMapsChanged} />}
           {tab === 'books' && <BookCreator />}
           {tab === 'npcs' && <NPCCreator />}
           {tab === 'monsters' && <MonsterCreator />}
@@ -278,71 +280,6 @@ function ClassEditor({ player }: { player: Player }) {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-// ============ MAP CREATOR ============
-function MapCreator({ player: _player }: { player: Player }) {
-  const [customMaps, setCustomMaps] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('tibia_custom_maps') || '[]'); } catch { return []; }
-  });
-  const [form, setForm] = useState({ id: '', name: '', biome: 'plains', description: '', spawnX: 40, spawnY: 40 });
-
-  const save = () => {
-    if (!form.name.trim()) return;
-    const map = { id: form.id || `custommap_${Date.now()}`, name: form.name, biome: form.biome, description: form.description, spawnPoint: { x: form.spawnX, y: form.spawnY }, townCenter: { x: form.spawnX, y: form.spawnY }, townRange: 8, portals: [] };
-    const existing = customMaps.findIndex((m: any) => m.id === map.id);
-    const newMaps = existing >= 0 ? customMaps.map((m: any, i: number) => i === existing ? map : m) : [...customMaps, map];
-    setCustomMaps(newMaps);
-    localStorage.setItem('tibia_custom_maps', JSON.stringify(newMaps));
-    setForm({ id: '', name: '', biome: 'plains', description: '', spawnX: 40, spawnY: 40 });
-  };
-
-  const biomeColors: Record<string, string> = { plains: '#4a7c3a', snow: '#c2cdd6', swamp: '#4a5a3a', desert: '#e8d7a1', shadow: '#2a2535' };
-  const biomeIcons: Record<string, string> = { plains: '🌳', snow: '❄', swamp: '🍄', desert: '🌋', shadow: '☠' };
-
-  return (
-    <div className="space-y-4">
-      <div className="text-xs text-purple-300 tracking-widest mb-2">🗺 BUILT-IN MAPS ({Object.keys(MAPS).length})</div>
-      <div className="grid grid-cols-3 gap-2">
-        {Object.values(MAPS).map((m) => (
-          <div key={m.id} className="p-2 rounded border border-purple-700/40 bg-black/40">
-            <div className="flex items-center gap-1"><span className="text-lg">{biomeIcons[m.biome]}</span><span className="font-bold text-xs text-purple-200">{m.name}</span></div>
-            <div className="text-[9px] text-purple-200/50">{m.description}</div>
-          </div>
-        ))}
-      </div>
-      <div className="p-3 rounded border-2 border-purple-600/50 bg-black/40">
-        <div className="text-xs text-purple-300 tracking-widest mb-2">➕ CREATE CUSTOM MAP</div>
-        <div className="grid grid-cols-3 gap-2 text-xs">
-          <Field label="Map Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
-          <SelectField label="Biome" value={form.biome} options={['plains', 'snow', 'swamp', 'desert', 'shadow']} onChange={(v) => setForm({ ...form, biome: v })} />
-          <div>
-            <label className="text-[9px] text-purple-200/60 block mb-0.5">Preview</label>
-            <div className="w-full h-8 rounded border border-purple-700/50 flex items-center justify-center" style={{ background: biomeColors[form.biome] }}>{biomeIcons[form.biome]}</div>
-          </div>
-          <div className="col-span-3"><Field label="Description" value={form.description} onChange={(v) => setForm({ ...form, description: v })} /></div>
-          <Field label="Spawn X" type="number" value={form.spawnX} onChange={(v) => setForm({ ...form, spawnX: parseInt(v) || 40 })} />
-          <Field label="Spawn Y" type="number" value={form.spawnY} onChange={(v) => setForm({ ...form, spawnY: parseInt(v) || 40 })} />
-        </div>
-        <button onClick={save} className="mt-2 px-4 py-2 rounded bg-gradient-to-b from-green-500 to-green-700 text-white font-bold text-xs">💾 {form.id ? 'Update' : 'Create'} Map</button>
-      </div>
-      {customMaps.length > 0 && (
-        <div>
-          <div className="text-xs text-purple-300 tracking-widest mb-2">✦ CUSTOM MAPS ({customMaps.length})</div>
-          <div className="space-y-1">
-            {customMaps.map((m: any) => (
-              <div key={m.id} className="flex items-center gap-2 p-2 rounded border border-purple-700/40 bg-black/40 text-xs">
-                <span className="text-lg">{biomeIcons[m.biome]}</span>
-                <div className="flex-1"><span className="text-purple-200 font-bold">{m.name}</span><span className="text-purple-200/50 text-[10px] ml-2">{m.biome} · spawn {m.spawnPoint.x},{m.spawnPoint.y}</span></div>
-                <button onClick={() => setForm(m)} className="text-amber-400 px-2 text-[10px]">Edit</button>
-                <button onClick={() => { const f = customMaps.filter((x: any) => x.id !== m.id); setCustomMaps(f); localStorage.setItem('tibia_custom_maps', JSON.stringify(f)); }} className="text-red-400 px-2 text-[10px]">🗑</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

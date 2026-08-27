@@ -491,8 +491,12 @@ export interface Building {
   y: number; // tile y (top-left)
   w: number; // width in tiles
   h: number; // height in tiles
-  type: 'house' | 'tower' | 'shop' | 'temple' | 'castle' | 'inn' | 'well' | 'tree_deco';
+  type: 'house' | 'tower' | 'shop' | 'temple' | 'castle' | 'inn' | 'well' | 'tree_deco' | 'market' | 'forge' | 'dock' | 'arena' | 'obelisk' | 'library' | 'graveyard';
   roofColor?: string;
+  wallColor?: string;
+  accentColor?: string;
+  label?: string;
+  icon?: string;
 }
 
 export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: number, building: Building, tileSize: number, time: number) {
@@ -531,6 +535,24 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
     return;
   }
 
+  if (building.type === 'obelisk') {
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(cx - w * .22, sy + h * .78, w * .44, h * .14);
+    const g = ctx.createLinearGradient(cx - w*.18, sy, cx + w*.18, sy + h); g.addColorStop(0, building.accentColor || '#a86dff'); g.addColorStop(.22, '#4b405c'); g.addColorStop(1, '#19151f');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(cx, sy); ctx.lineTo(cx + w*.18, sy+h*.78); ctx.lineTo(cx-w*.18, sy+h*.78); ctx.closePath(); ctx.fill(); return;
+  }
+  if (building.type === 'graveyard') {
+    ctx.strokeStyle = building.wallColor || '#6b6870'; ctx.lineWidth = 2; ctx.strokeRect(sx+2, sy+h*.25, w-4, h*.68);
+    ctx.fillStyle = '#77757a'; for (let i=0;i<4;i++){const gx=sx+w*(.2+i*.2);ctx.fillRect(gx-3,sy+h*(.48+(i%2)*.12),6,h*.24);} return;
+  }
+  if (building.type === 'market') {
+    const colors=[building.roofColor || '#8b3a2a',building.accentColor || '#d8b45a'];
+    for(let i=0;i<3;i++){const bx=sx+i*w/3;ctx.fillStyle=colors[i%2];ctx.beginPath();ctx.moveTo(bx,sy+h*.42);ctx.lineTo(bx+w/6,sy+h*.12);ctx.lineTo(bx+w/3,sy+h*.42);ctx.closePath();ctx.fill();ctx.fillStyle='#76502d';ctx.fillRect(bx+2,sy+h*.43,w/3-4,h*.4);} return;
+  }
+  if (building.type === 'arena') {
+    ctx.strokeStyle = building.wallColor || '#8d7861'; ctx.lineWidth = Math.max(3,tileSize*.12); ctx.beginPath(); ctx.ellipse(cx,sy+h*.58,w*.46,h*.33,0,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = building.accentColor || '#ff9b45'; ctx.lineWidth = 2; ctx.beginPath();ctx.ellipse(cx,sy+h*.58,w*.32,h*.21,0,0,Math.PI*2);ctx.stroke();return;
+  }
+
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
@@ -539,7 +561,10 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 
   // Walls (stone/wood)
   const wallGrad = ctx.createLinearGradient(sx, sy, sx, sy + h);
-  if (building.type === 'temple' || building.type === 'castle' || building.type === 'tower') {
+  if (building.wallColor) {
+    wallGrad.addColorStop(0, building.wallColor);
+    wallGrad.addColorStop(1, building.wallColor);
+  } else if (building.type === 'temple' || building.type === 'castle' || building.type === 'tower') {
     wallGrad.addColorStop(0, '#c8c8c0');
     wallGrad.addColorStop(1, '#8a8a82');
   } else {
@@ -562,7 +587,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   // Door
   ctx.fillStyle = '#5a3a1a';
   ctx.fillRect(cx - w * 0.08, sy + h * 0.6, w * 0.16, h * 0.35);
-  ctx.fillStyle = '#ffd700';
+  ctx.fillStyle = building.accentColor || '#ffd700';
   ctx.beginPath();
   ctx.arc(cx + w * 0.03, sy + h * 0.78, 1.5, 0, Math.PI * 2);
   ctx.fill();
@@ -613,9 +638,9 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   // Building label/sign
   if (building.type !== 'house') {
     const labels: Record<string, string> = {
-      shop: '🛒', temple: '⛪', inn: '🛏', castle: '🏰', tower: '🗼',
+      shop: '▣', temple: '✦', inn: '⌂', castle: '♜', tower: '◆', forge: '⚒', dock: '⚓', library: '▤', market: '⚖', arena: '◎', obelisk: '◇', graveyard: '☠',
     };
-    const icon = labels[building.type] || '🏠';
+    const icon = building.icon || labels[building.type] || '⌂';
     ctx.font = `${tileSize * 0.5}px system-ui`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
