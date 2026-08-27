@@ -128,3 +128,39 @@ export function findBlockingContentReferences(contentDB, type, id) {
 
   return blockers;
 }
+
+
+const AUDIT_TYPES = Object.freeze(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
+
+export function auditContentReferences(contentDB) {
+  const issues = [];
+  const counts = {};
+  for (const type of AUDIT_TYPES) {
+    const records = contentDB.get(type);
+    counts[type] = Array.isArray(records) ? records.length : 0;
+    const seen = new Set();
+    for (const record of Array.isArray(records) ? records : []) {
+      const id = typeof record?.id === 'string' ? record.id.trim() : '';
+      if (!id) {
+        issues.push({ severity: 'error', type, id: '(missing)', message: 'Content record has no valid id.' });
+        continue;
+      }
+      if (seen.has(id)) issues.push({ severity: 'error', type, id, message: `Duplicate ${type} id: ${id}` });
+      seen.add(id);
+      const error = validateContentReferences(contentDB, type, record);
+      if (error) issues.push({ severity: 'error', type, id, message: error });
+    }
+  }
+
+  // Cross-catalog warnings that are legal but commonly indicate unpublished content.
+  for (const monster of contentDB.get('monsters')) {
+    if (!monster?.mapId) issues.push({ severity: 'warning', type: 'monsters', id: monster?.id || '(missing)', message: 'Monster is catalog-only because mapId is empty.' });
+  }
+  for (const event of contentDB.get('events')) {
+    if (!event?.mapId) issues.push({ severity: 'warning', type: 'events', id: event?.id || '(missing)', message: 'World event has no mapId and cannot target a regional runtime.' });
+  }
+
+  const errors = issues.filter(issue => issue.severity === 'error').length;
+  const warnings = issues.filter(issue => issue.severity === 'warning').length;
+  return { healthy: errors === 0, errors, warnings, issues, counts };
+}
