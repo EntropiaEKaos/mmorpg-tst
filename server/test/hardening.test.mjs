@@ -255,14 +255,28 @@ test('full potions are not consumed and quest XP can level the player', () => {
   } finally { cleanup(id); }
 });
 
-test('mounting is server-gated by progression', () => {
+test('mounting is server-gated by progression, ownership and stable purchase', () => {
   const { id, player } = makePlayer();
   try {
     player.level = 4;
-    assert.equal(engine.processIntent(id, { type: 'mount', payload: {} }), false);
+    assert.equal(engine.processIntent(id, { type: 'mount', payload: { action: 'toggle' } }), false);
     assert.equal(player.mounted, false);
+
     player.level = 5;
-    assert.equal(engine.processIntent(id, { type: 'mount', payload: {} }), true);
+    // Level alone is no longer sufficient: 9.2 requires an owned selected mount.
+    assert.equal(engine.processIntent(id, { type: 'mount', payload: { action: 'toggle' } }), false);
+    assert.equal(player.mounted, false);
+
+    const stable = contentDB.get('npcs').find(npc => npc.role === 'stablemaster' && npc.mapId === 'eldoria');
+    assert.ok(stable);
+    player.x = Number(stable.posX);
+    player.y = Number(stable.posY);
+    player.gold = 1000;
+    assert.equal(engine.processIntent(id, { type: 'mount', payload: { action: 'buy', mountId: 'horse' } }), true);
+    assert.equal(player.mountId, 'horse');
+    assert.ok(player.gold < 1000);
+
+    assert.equal(engine.processIntent(id, { type: 'mount', payload: { action: 'toggle' } }), true);
     assert.equal(player.mounted, true);
   } finally { cleanup(id); }
 });

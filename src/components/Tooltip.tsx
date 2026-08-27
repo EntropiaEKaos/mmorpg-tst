@@ -279,6 +279,9 @@ export function SpellTooltip({
     variance?: number;
     hitCount?: number;
     piercePercent?: number;
+    targetMode?: string; allyEffect?: string; enemyEffect?: string;
+    allyMultiplier?: number; enemyMultiplier?: number; selfMultiplier?: number;
+    dayMultiplier?: number; nightMultiplier?: number; drainPercent?: number;
   };
   idx: number;
   noMana: boolean;
@@ -349,6 +352,15 @@ export function SpellTooltip({
         )}
         {(spell.variance ?? 0) > 0 && (
           <div className="flex justify-between"><span className="text-amber-200/70">Variance:</span><span className="text-amber-100">±{((spell.variance ?? 0) * 100).toFixed(0)}%</span></div>
+        )}
+        {(spell.allyEffect || spell.enemyEffect) && (
+          <div className="mt-1 border-t border-cyan-400/20 pt-1 space-y-0.5">
+            <div className="font-bold text-cyan-200">Contextual skill</div>
+            {spell.allyEffect && spell.allyEffect !== 'none' && <div>🤝 Ally: {spell.allyEffect} ×{(spell.allyMultiplier ?? 1).toFixed(2)}</div>}
+            {spell.enemyEffect && spell.enemyEffect !== 'none' && <div>⚔ Enemy: {spell.enemyEffect} ×{(spell.enemyMultiplier ?? 1).toFixed(2)}</div>}
+            {((spell.dayMultiplier ?? 1) !== 1 || (spell.nightMultiplier ?? 1) !== 1) && <div>☀ ×{(spell.dayMultiplier ?? 1).toFixed(2)} · 🌙 ×{(spell.nightMultiplier ?? 1).toFixed(2)}</div>}
+            {(spell.drainPercent ?? 0) > 0 && <div>🩸 Drain: {spell.drainPercent}%</div>}
+          </div>
         )}
       </div>
       {locked && (

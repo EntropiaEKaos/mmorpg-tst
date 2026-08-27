@@ -1,4 +1,4 @@
-# ⚔ Mor'ia MMO Server — Alpha Edition 9.1
+# ⚔ Mor'ia MMO Server — Alpha Edition 9.2
 
 Servidor autoritativo do **Mor'ia — Realm of Shadows**. O processo Node.js serve o cliente compilado, expõe APIs HTTP de autenticação/administração e mantém o multiplayer em tempo real por WebSocket na mesma porta.
 
@@ -8,7 +8,8 @@ Servidor autoritativo do **Mor'ia — Realm of Shadows**. O processo Node.js ser
 - Personagens vinculados à conta e nomes globais protegidos contra colisão.
 - Servidor autoritativo para movimento, combate, inventário, equipamento, talentos, quests, aventura e sistemas oficiais.
 - Conteúdo data-driven com painel administrativo e validação de referências.
-- Alpha 9.1: 11 mapas, conteúdo regional 1–60, shops/loot tables editáveis e Ilha GM com roster server-side.
+- Alpha 9.1/9.2: 11 mapas, conteúdo regional 1–60, shops/loot tables editáveis, Ilha GM com roster server-side, Tasks, Housing, Outfits e Mounts.
+- Alpha 9.2: relógio mundial autoritativo com dawn/day/dusk/night e skills contextuais que podem resolver efeitos diferentes em self/aliados/inimigos, incluindo multiplicadores por relação e período do dia.
 - WebSocket com payload limitado, heartbeat e estado controlado pelo servidor.
 - Rate limiting de autenticação bounded para impedir crescimento ilimitado de memória sob tráfego distribuído.
 - CI de produção em todo push para `master`: audit, typecheck, build, syntax check e suíte server-side.
@@ -40,6 +41,7 @@ Por padrão o jogo fica disponível em `http://localhost:3000`.
 | `TRUST_PROXY` | não | `false` | Usa o primeiro `X-Forwarded-For` para rate limiting quando atrás de proxy confiável |
 | `AUTH_RATE_LIMIT_MAX_ENTRIES` | não | `10000` | Limite global de janelas ativas do rate limiter de autenticação |
 | `MORIA_ACCOUNT_DB` | não | `server/moria-accounts.json` | Caminho do banco persistente de contas |
+| `MORIA_DAY_LENGTH_MS` | não | `1440000` | Duração real de um dia completo do mundo; servidor limita entre 5 min e 2 h |
 
 > Só habilite `TRUST_PROXY=true` quando o processo estiver realmente atrás de um proxy/reverse proxy controlado. Caso contrário um cliente pode falsificar `X-Forwarded-For`.
 
@@ -72,7 +74,14 @@ As rotas autenticadas usam `Authorization: Bearer <sessionToken>`.
 - `GET /admin` — painel web; exige `ADMIN_TOKEN`.
 - `/admin/api/*` — CRUD/ações administrativas protegidas pelo mesmo token.
 - O token pode ser estabelecido inicialmente por `/admin?token=...`; o servidor redireciona e grava cookie `HttpOnly`/`SameSite=Strict` para o painel.
-- Catálogos editáveis: items, monsters, NPCs, spells, quests, maps, events, shops, loot tables e GM roster. Mapas publicados reconstroem o runtime determinístico; referências inválidas são bloqueadas antes da persistência.
+- Catálogos editáveis: items, monsters, NPCs, spells, quests, maps, events, shops, loot tables, GM roster e catálogos dos sistemas 9.2. Mapas publicados reconstroem o runtime determinístico; referências inválidas são bloqueadas antes da persistência.
+- O schema declarativo de spells permite `targetMode`, efeitos de aliado/inimigo, multiplicadores de relação, multiplicadores day/night e drain, todos semanticamente validados antes de persistir.
+
+## Combate contextual e relógio mundial
+
+`WorldClock.mjs` deriva o horário a partir do relógio do servidor e projeta `worldClock` nos snapshots. O navegador usa essa projeção para apresentação, mas não escolhe a fase usada nos cálculos online.
+
+`ContextualSkillEngine.mjs` mantém compatibilidade com as spells antigas e permite comportamento por relação. `GameState.mjs` decide target, alcance, relação, efeito, mana, cooldown e potência final. Skills podem curar ou buffar jogadores aliados e, no mesmo contrato, causar dano ou drain em monstros. Dawn e dusk interpolam os multiplicadores day/night para evitar saltos bruscos de poder. O sistema não transforma automaticamente outro jogador em alvo hostil; PvP continua passando pelas regras autoritativas e opt-in já existentes.
 
 ## WebSocket
 
@@ -89,6 +98,7 @@ A arquitetura atual separa credenciais de estado de personagem:
 - `moria-accounts.json`: contas, credenciais derivadas e ownership dos personagens.
 - Player/content stores: estado autoritativo de personagem e catálogos do jogo.
 - Sessões ficam em memória e são deliberadamente invalidadas quando o processo reinicia.
+- O horário mundial não precisa de save por personagem: é derivado deterministicamente do relógio do servidor e da duração configurada do dia.
 
 Para múltiplas instâncias horizontais, o próximo passo arquitetural é mover persistência e coordenação compartilhada para serviços externos (por exemplo PostgreSQL + Redis), sem abandonar a autoridade server-side.
 
@@ -125,12 +135,15 @@ server/
 │   ├── AuthService.mjs
 │   ├── ContentDB.mjs
 │   ├── ContentIntegrity.mjs
+│   ├── ContextualSkillEngine.mjs
 │   ├── GameState.mjs
 │   ├── OfficialSystems.mjs
 │   ├── RateLimiter.mjs
+│   ├── WorldClock.mjs
 │   └── ...
 ├── test/
 │   ├── auth*.test.mjs
+│   ├── contextual-skills-9-2.test.mjs
 │   ├── hardening.test.mjs
 │   ├── official-systems.test.mjs
 │   ├── rate-limiter.test.mjs

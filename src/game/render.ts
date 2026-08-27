@@ -1,4 +1,5 @@
 import type { Tile } from './types';
+import { drawAvatar, type AvatarAppearance, type AvatarMount } from './playerAvatar';
 
 const tileCache = new Map<string, HTMLCanvasElement>();
 
@@ -376,117 +377,11 @@ export function drawPlayer(
   time: number,
   vocationColor = '#8b2e2e',
   mounted = false,
-  mountIcon?: string
+  mountIcon?: string,
+  appearance?: AvatarAppearance | null,
+  mount?: AvatarMount | null,
 ) {
-  // Soft ambient glow under player (subtle vocation-colored aura)
-  const glowGrad = ctx.createRadialGradient(x + size / 2, y + size / 2, 2, x + size / 2, y + size / 2, size * 0.7);
-  glowGrad.addColorStop(0, vocationColor + '22');
-  glowGrad.addColorStop(1, 'transparent');
-  ctx.fillStyle = glowGrad;
-  ctx.beginPath();
-  ctx.arc(x + size / 2, y + size / 2, size * 0.7, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.beginPath();
-  ctx.ellipse(x + size / 2, y + size - 3, size * 0.35, size * 0.1, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  const bob = Math.sin(time / 200) * (mounted ? 2 : 1.5);
-  const cx = x + size / 2;
-  const cy = y + size / 2 + bob;
-
-  // Mount
-  if (mounted && mountIcon) {
-    ctx.font = `${size * 0.9}px system-ui`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(mountIcon, cx, cy + size * 0.1);
-  }
-
-  const scale = mounted ? 0.8 : 1;
-  const offsetY = mounted ? -size * 0.2 : 0;
-
-  // Cape
-  ctx.fillStyle = vocationColor;
-  ctx.beginPath();
-  ctx.moveTo(cx - size * 0.3 * scale, cy + size * 0.1 * scale + offsetY);
-  ctx.lineTo(cx + size * 0.3 * scale, cy + size * 0.1 * scale + offsetY);
-  ctx.lineTo(cx + size * 0.35 * scale, cy + size * 0.45 * scale + offsetY);
-  ctx.lineTo(cx - size * 0.35 * scale, cy + size * 0.45 * scale + offsetY);
-  ctx.closePath();
-  ctx.fill();
-
-  // Torso
-  ctx.fillStyle = '#4a5a7a';
-  ctx.fillRect(cx - size * 0.22 * scale, cy - size * 0.05 * scale + offsetY, size * 0.44 * scale, size * 0.2 * scale);
-
-  // Arms
-  ctx.fillStyle = '#d4a574';
-  ctx.fillRect(cx - size * 0.3 * scale, cy - size * 0.02 * scale + offsetY, size * 0.08 * scale, size * 0.18 * scale);
-  ctx.fillRect(cx + size * 0.22 * scale, cy - size * 0.02 * scale + offsetY, size * 0.08 * scale, size * 0.18 * scale);
-
-  // Head
-  ctx.fillStyle = '#e8c192';
-  ctx.beginPath();
-  ctx.arc(cx, cy - size * 0.18 * scale + offsetY, size * 0.14 * scale, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Hair
-  ctx.fillStyle = '#3a2a1a';
-  ctx.beginPath();
-  ctx.arc(cx, cy - size * 0.22 * scale + offsetY, size * 0.14 * scale, Math.PI, 0, false);
-  ctx.fill();
-
-  // Helmet
-  ctx.fillStyle = '#a8a8a8';
-  ctx.beginPath();
-  ctx.arc(cx, cy - size * 0.22 * scale + offsetY, size * 0.15 * scale, Math.PI * 1.1, Math.PI * 1.9, false);
-  ctx.fill();
-
-  // Eyes
-  ctx.fillStyle = '#000';
-  let eyeOffsetX = 0, eyeOffsetY = 0;
-  if (direction === 'left') eyeOffsetX = -1;
-  if (direction === 'right') eyeOffsetX = 1;
-  if (direction === 'up') eyeOffsetY = -1;
-  if (direction === 'down') eyeOffsetY = 1;
-  ctx.fillRect(cx - 3 + eyeOffsetX, cy - size * 0.2 * scale + eyeOffsetY + offsetY, 1.5, 1.5);
-  ctx.fillRect(cx + 1.5 + eyeOffsetX, cy - size * 0.2 * scale + eyeOffsetY + offsetY, 1.5, 1.5);
-
-  // Sword
-  ctx.save();
-  ctx.translate(cx + size * 0.25, cy + offsetY);
-  ctx.rotate(Math.PI / 4);
-  ctx.fillStyle = '#d4d4d4';
-  ctx.fillRect(-1, -size * 0.25, 2, size * 0.3);
-  ctx.fillStyle = '#8b6f47';
-  ctx.fillRect(-3, 0, 6, 2);
-  ctx.restore();
-
-  // Name plate
-  ctx.font = 'bold 10px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-  ctx.lineWidth = 3;
-  ctx.strokeText(name, cx, y - 2);
-  ctx.fillStyle = '#f4e04d';
-  ctx.fillText(name, cx, y - 2);
-
-  // HP bar
-  const hpBarW = size * 0.9;
-  const hpBarH = 3;
-  const hpX = cx - hpBarW / 2;
-  const hpY = y + size - 6;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(hpX - 1, hpY - 1, hpBarW + 2, hpBarH + 2);
-  ctx.fillStyle = '#3a1a1a';
-  ctx.fillRect(hpX, hpY, hpBarW, hpBarH);
-  const hpPct = Math.max(0, hp / maxHp);
-  ctx.fillStyle = hpPct > 0.5 ? '#2ecc71' : hpPct > 0.25 ? '#f39c12' : '#e74c3c';
-  ctx.fillRect(hpX, hpY, hpBarW * hpPct, hpBarH);
+  drawAvatar(ctx, x, y, size, direction, name, hp, maxHp, time, vocationColor, mounted, mountIcon, appearance, mount);
 }
 
 export function drawMonster(

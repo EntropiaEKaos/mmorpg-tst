@@ -3,7 +3,7 @@ import { MAPS, MAP_HEIGHT, MAP_WIDTH } from './maps';
 import type { CustomMonster, CustomNPC } from './content';
 
 export function customNpcToRuntime(npc: CustomNPC): NPC {
-  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper'];
+  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper', 'taskmaster', 'stablemaster', 'outfitter', 'realtor'];
   const role: NPC['role'] = validRoles.includes(npc.role as NPC['role']) ? npc.role as NPC['role'] : 'guard';
   const options: NPC['dialogues'][number]['options'] = [{ text: 'Farewell.', action: 'bye' }];
   if (role === 'banker') options.unshift({ text: 'Bank & depot', action: 'bank' });
@@ -12,6 +12,7 @@ export function customNpcToRuntime(npc: CustomNPC): NPC {
     options.unshift({ text: 'Food & drinks', action: 'food' });
     options.unshift({ text: 'Rest (50 gold)', action: 'heal' });
   }
+  if (['taskmaster','stablemaster','outfitter','realtor'].includes(role)) options.unshift({ text: 'Life & Style', action: 'life' });
   return {
     id: npc.id, name: npc.name, pos: { x: npc.posX, y: npc.posY },
     emoji: npc.emoji, color: npc.color, role,
@@ -39,11 +40,12 @@ export function serverNpcToClient(raw: any, quests: Quest[]): { mapId: string; n
   const y = Math.floor(Number(raw.posY));
   if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) return null;
   const mapId = typeof raw.mapId === 'string' && MAPS[raw.mapId] ? raw.mapId : 'eldoria';
-  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper'];
+  const validRoles: NPC['role'][] = ['merchant', 'quest', 'banker', 'trainer', 'guard', 'innkeeper', 'taskmaster', 'stablemaster', 'outfitter', 'realtor'];
   const role: NPC['role'] = validRoles.includes(raw.role as NPC['role']) ? raw.role as NPC['role'] : 'guard';
   const options: NPC['dialogues'][number]['options'] = quests
     .filter((quest) => quest.npcId === raw.id)
     .map((quest) => ({ text: `📜 ${quest.name}`, action: 'quest' as const, questId: quest.id }));
+  if (['taskmaster','stablemaster','outfitter','realtor'].includes(role)) options.unshift({ text: '🏠 Life & Style', action: 'life' });
   options.push({ text: 'Farewell.', action: 'bye' });
   return {
     mapId,
@@ -113,6 +115,18 @@ export function mergeServerSpells(vocationId: string, baseSpells: Spell[], conte
       levelRequired: Math.floor(finiteSpellNumber(record.levelRequired, 1, 100_000, previous?.levelRequired ?? 1)),
     };
     if (Number.isFinite(Number(record.scalingCoeff))) next.scalingCoeff = finiteSpellNumber(record.scalingCoeff, 0, 20, 1);
+    const targetModes: NonNullable<Spell['targetMode']>[] = ['smart','self','target','area'];
+    const allyEffects: NonNullable<Spell['allyEffect']>[] = ['none','heal','buff'];
+    const enemyEffects: NonNullable<Spell['enemyEffect']>[] = ['none','damage','drain'];
+    if (typeof record.targetMode === 'string' && targetModes.includes(record.targetMode as NonNullable<Spell['targetMode']>)) next.targetMode = record.targetMode as NonNullable<Spell['targetMode']>;
+    if (typeof record.allyEffect === 'string' && allyEffects.includes(record.allyEffect as NonNullable<Spell['allyEffect']>)) next.allyEffect = record.allyEffect as NonNullable<Spell['allyEffect']>;
+    if (typeof record.enemyEffect === 'string' && enemyEffects.includes(record.enemyEffect as NonNullable<Spell['enemyEffect']>)) next.enemyEffect = record.enemyEffect as NonNullable<Spell['enemyEffect']>;
+    if (record.allyMultiplier !== undefined) next.allyMultiplier = finiteSpellNumber(record.allyMultiplier, 0, 5, previous?.allyMultiplier ?? 1);
+    if (record.enemyMultiplier !== undefined) next.enemyMultiplier = finiteSpellNumber(record.enemyMultiplier, 0, 5, previous?.enemyMultiplier ?? 1);
+    if (record.selfMultiplier !== undefined) next.selfMultiplier = finiteSpellNumber(record.selfMultiplier, 0, 5, previous?.selfMultiplier ?? 1);
+    if (record.dayMultiplier !== undefined) next.dayMultiplier = finiteSpellNumber(record.dayMultiplier, 0.25, 3, previous?.dayMultiplier ?? 1);
+    if (record.nightMultiplier !== undefined) next.nightMultiplier = finiteSpellNumber(record.nightMultiplier, 0.25, 3, previous?.nightMultiplier ?? 1);
+    if (record.drainPercent !== undefined) next.drainPercent = finiteSpellNumber(record.drainPercent, 0, 100, previous?.drainPercent ?? 0);
     if (type === 'buff') {
       const requestedBuffType = typeof record.buffType === 'string'
         ? record.buffType.trim().toLowerCase() as NonNullable<Spell['buffType']>

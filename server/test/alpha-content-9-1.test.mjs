@@ -27,7 +27,7 @@ test('9.1 alpha seed ships launch-sized editable content', () => {
     assert.ok(db.get('events').length >= 10);
     assert.ok(db.get('shops').length >= 10);
     assert.ok(db.get('lootTables').length >= 10);
-    assert.equal(db.data.version, 2);
+    assert.equal(db.data.version, 3);
     assert.equal(ALPHA_CONTENT_COUNTS.maps, 11);
   } finally { fs.rmSync(dir, { recursive:true, force:true }); }
 });
@@ -71,7 +71,7 @@ test('content loot tables resolve server-side equipment and materials', () => {
 });
 
 
-test('9.0 content migrates to alpha v2 once while preserving admin edits across restart', () => {
+test('9.0 content crosses alpha migrations while preserving admin edits across restart', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'moria-alpha-migrate-'));
   const file = path.join(dir, 'content.json');
   try {
@@ -81,7 +81,7 @@ test('9.0 content migrates to alpha v2 once while preserving admin edits across 
       monsters: [], npcs: [], quests: [], spells: [], maps: [], worldEvents: [], shops: [], lootTables: [],
     }));
     const migrated = new ContentDB(file);
-    assert.equal(migrated.data.version, 2);
+    assert.equal(migrated.data.version, 3);
     assert.ok(migrated.get('maps').length >= 11);
     assert.equal(migrated.get('items').find(item => item.id === 'iron_sword').name, 'Admin Iron Sword');
     assert.equal(migrated.get('items').find(item => item.id === 'iron_sword').attack, 99);
@@ -94,13 +94,13 @@ test('9.0 content migrates to alpha v2 once while preserving admin edits across 
   } finally { fs.rmSync(dir, { recursive:true, force:true }); }
 });
 
-test('intentionally empty legacy content remains empty after v2 migration marker', () => {
+test('intentionally empty legacy content remains empty after v3 migration marker', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'moria-alpha-empty-'));
   const file = path.join(dir, 'content.json');
   try {
     fs.writeFileSync(file, JSON.stringify({ version:1, items:[], monsters:[], npcs:[], quests:[], spells:[], maps:[], worldEvents:[], shops:[], lootTables:[] }));
     const db = new ContentDB(file);
-    assert.equal(db.data.version, 2);
+    assert.equal(db.data.version, 3);
     assert.equal(db.get('items').length, 0);
     db.add('items', { id:'admin_only_item', name:'Admin Only' });
     const restarted = new ContentDB(file);

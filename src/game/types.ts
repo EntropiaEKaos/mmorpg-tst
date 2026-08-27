@@ -86,9 +86,13 @@ export interface Player {
   equipment: Partial<Record<EquipmentSlot, Equipment>>;
   // Buffs
   buffs: Buff[];
-  // Stats
+  // Alpha life systems (authoritative server snapshots when online)
   mounted: boolean;
   mountId?: string;
+  tasks?: TaskSnapshot;
+  appearance?: AppearanceSnapshot;
+  mounts?: MountSnapshot;
+  housing?: HousingSnapshot;
   // Death protection
   blessings: number;
   aol: boolean;
@@ -299,6 +303,16 @@ export interface Spell {
   hitCount?: number;           // number of hits (multihit spells)
   piercePercent?: number;      // % of enemy defense ignored
   costPercent?: number;        // % of max mana as cost (alt to flat mana)
+  // Mor'ia 9.2 contextual skill contract (server authoritative online)
+  targetMode?: 'smart' | 'self' | 'target' | 'area';
+  allyEffect?: 'none' | 'heal' | 'buff';
+  enemyEffect?: 'none' | 'damage' | 'drain';
+  allyMultiplier?: number;
+  enemyMultiplier?: number;
+  selfMultiplier?: number;
+  dayMultiplier?: number;
+  nightMultiplier?: number;
+  drainPercent?: number;
 }
 
 export interface Buff {
@@ -407,7 +421,7 @@ export interface NPC {
   pos: Position;
   emoji: string;
   color: string;
-  role: 'merchant' | 'quest' | 'banker' | 'trainer' | 'guard' | 'innkeeper';
+  role: 'merchant' | 'quest' | 'banker' | 'trainer' | 'guard' | 'innkeeper' | 'taskmaster' | 'stablemaster' | 'outfitter' | 'realtor';
   dialogues: Dialogue[];
   shop?: ShopItem[];
   questId?: string;
@@ -421,7 +435,7 @@ export interface Dialogue {
 export interface DialogueOption {
   text: string;
   nextDialogue?: number;
-  action?: 'shop' | 'quest' | 'bank' | 'train' | 'heal' | 'bye' | 'mail' | 'books' | 'depot' | 'food';
+  action?: 'shop' | 'quest' | 'bank' | 'train' | 'heal' | 'bye' | 'mail' | 'books' | 'depot' | 'food' | 'life';
   questId?: string;
 }
 
@@ -435,7 +449,28 @@ export interface ShopItem {
   equipment?: Equipment;
 }
 
-// Mount system
+// Alpha 9.2 life-system snapshots.
+export interface TaskCatalogEntry {
+  id: string; name: string; npcId: string; mapId: string; target: string; targetName: string; count: number;
+  minLevel: number; maxLevel: number; repeatLimit: number; taskPoints: number; rewardGold: number; rewardXp: number;
+  bossUnlock?: string; description?: string; completedCount: number; locked: boolean;
+}
+export interface ActiveTaskEntry extends TaskCatalogEntry { progress: number; ready: boolean; startedAt: number; }
+export interface TaskSnapshot { points: number; rank: string; maxActive: number; completed: Record<string,number>; unlockedBosses: string[]; active: ActiveTaskEntry[]; catalog: TaskCatalogEntry[]; }
+
+export interface OutfitCatalogEntry { id:string; name:string; icon:string; style:string; price:number; levelRequired:number; addon1Name?:string; addon2Name?:string; addonPrice:number; }
+export interface PublicAppearance { outfit:{id:string;name:string;icon?:string;style:string}; colors:{head:string;primary:string;secondary:string;detail:string}; addonMask:number; }
+export interface AppearanceSnapshot { selectedOutfitId:string; ownedOutfits:string[]; ownedAddons:Record<string,number[]>; addonMasks:Record<string,number>; colors:{head:string;primary:string;secondary:string;detail:string}; catalog:OutfitCatalogEntry[]; public:PublicAppearance; }
+
+export interface MountCatalogEntry { id:string; name:string; icon:string; color:string; speedBonus:number; price:number; levelRequired:number; description?:string; }
+export interface MountSnapshot { ownedMounts:string[]; selectedId:string; mounted:boolean; catalog:MountCatalogEntry[]; }
+
+export interface HousingDecoration { id:string; decorId:string; x:number; y:number; name:string; icon:string; color:string; }
+export interface HouseSnapshot { id:string; name:string; mapId:string; x:number; y:number; width:number; height:number; entranceX:number; entranceY:number; price:number; weeklyRent:number; levelRequired:number; style?:string; ownerName:string; rentDueAt:number; access:boolean; guests?:string[]; decor:HousingDecoration[]; }
+export interface HousingDecorCatalogEntry { id:string; name:string; icon:string; kind:string; color:string; price:number; }
+export interface HousingSnapshot { ownedHouseId:string; houses:HouseSnapshot[]; decorCatalog:HousingDecorCatalogEntry[]; }
+
+// Mount system (legacy Quick Play catalog; authoritative mode uses MountSnapshot.catalog)
 export interface Mount {
   id: string;
   name: string;

@@ -39,6 +39,20 @@ export function validateContentReferences(contentDB, type, record) {
     }
   }
 
+  if (type === 'taskQuests') {
+    const npcId=typeof record.npcId==='string'?record.npcId.trim():'';
+    if(!contentDB.get('npcs').some(npc=>npc.id===npcId)) return `Task references unknown NPC: ${npcId || '(empty)'}`;
+    const mapId=typeof record.mapId==='string'?record.mapId.trim():'';
+    if(!hasMap(contentDB,mapId)) return `Task references unknown map: ${mapId || '(empty)'}`;
+    const wanted=objectiveKey(record.target); const match=contentDB.get('monsters').some(monster=>objectiveKey(monster.id)===wanted||objectiveKey(monster.name)===wanted);
+    if(!match) return `Task references unknown monster target: ${record.target || '(empty)'}`;
+  }
+
+  if (type === 'houses') {
+    const mapId=typeof record.mapId==='string'?record.mapId.trim():'';
+    if(!hasMap(contentDB,mapId)) return `House references unknown map: ${mapId || '(empty)'}`;
+  }
+
   if (type === 'spells') {
     const vocation = typeof record.vocation === 'string' ? record.vocation.trim().toLowerCase() : '';
     if (!vocation || !VOCATIONS[vocation]) return `Spell references unknown vocation: ${vocation || '(empty)'}`;
@@ -115,6 +129,7 @@ export function findBlockingContentReferences(contentDB, type, id) {
   if (type === 'npcs') {
     for (const quest of contentDB.get('quests')) if (quest.npcId === canonicalId) blockers.push({ type: 'quest', id: quest.id, field: 'npcId' });
     for (const shop of contentDB.get('shops')) if (shop.npcId === canonicalId) blockers.push({ type: 'shop', id: shop.id, field: 'npcId' });
+    for (const task of contentDB.get('taskQuests')) if (task.npcId === canonicalId) blockers.push({ type: 'taskQuest', id: task.id, field: 'npcId' });
   }
 
   if (type === 'items') {
@@ -137,6 +152,7 @@ export function findBlockingContentReferences(contentDB, type, id) {
     if (monster?.mapId) {
       const targetKeys = new Set([objectiveKey(monster.id), objectiveKey(monster.name)].filter(Boolean));
       for (const quest of contentDB.get('quests')) if (targetKeys.has(objectiveKey(quest.target))) blockers.push({ type: 'quest', id: quest.id, field: 'target' });
+      for (const task of contentDB.get('taskQuests')) if (targetKeys.has(objectiveKey(task.target))) blockers.push({ type: 'taskQuest', id: task.id, field: 'target' });
     }
   }
 
@@ -145,6 +161,8 @@ export function findBlockingContentReferences(contentDB, type, id) {
     for (const npc of contentDB.get('npcs')) if (npc.mapId === canonicalId) blockers.push({ type: 'npc', id: npc.id, field: 'mapId' });
     for (const monster of contentDB.get('monsters')) if (monster.mapId === canonicalId) blockers.push({ type: 'monster', id: monster.id, field: 'mapId' });
     for (const event of contentDB.get('events')) if (event.mapId === canonicalId) blockers.push({ type: 'event', id: event.id, field: 'mapId' });
+    for (const task of contentDB.get('taskQuests')) if (task.mapId === canonicalId) blockers.push({ type: 'taskQuest', id: task.id, field: 'mapId' });
+    for (const house of contentDB.get('houses')) if (house.mapId === canonicalId) blockers.push({ type: 'house', id: house.id, field: 'mapId' });
     for (const map of contentDB.get('maps')) {
       if (map.id === canonicalId || !Array.isArray(map.portals)) continue;
       for (const portal of map.portals) if (portal?.targetMap === canonicalId) blockers.push({ type: 'map', id: map.id, field: 'portals.targetMap' });
@@ -155,7 +173,7 @@ export function findBlockingContentReferences(contentDB, type, id) {
 }
 
 
-const AUDIT_TYPES = Object.freeze(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events', 'shops', 'lootTables', 'gmRoster']);
+const AUDIT_TYPES = Object.freeze(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events', 'shops', 'lootTables', 'gmRoster', 'taskQuests', 'houses', 'housingDecor', 'outfits', 'mounts']);
 
 export function auditContentReferences(contentDB) {
   const issues = [];

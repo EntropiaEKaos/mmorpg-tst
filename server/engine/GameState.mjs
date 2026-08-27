@@ -15,6 +15,12 @@ import { socialSystems } from './SocialSystems.mjs';
 import { contentDB } from './ContentDB.mjs';
 import { accountStore } from './AuthService.mjs';
 import { canAccessMap, explainMapAccess } from './ContentAccess.mjs';
+import { tibiaTaskEngine } from './TibiaTaskEngine.mjs';
+import { appearanceSystem } from './AppearanceSystem.mjs';
+import { mountSystem } from './MountSystem.mjs';
+import { housingSystem } from './HousingSystem.mjs';
+import { createWorldClockSnapshot } from './WorldClock.mjs';
+import { contextualizeSpell, effectForRelation, multiplierForRelation } from './ContextualSkillEngine.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -99,13 +105,17 @@ class GameEngine {
       equipment: {},
       buffs: [], skills: freshSkills(),
       lastAttack: 0, lastMove: 0, lastRegen: 0, cooldowns: {},
-      mounted: false, professions: {}, reputation: { town: 0 }, talents: {},
+      mounted: false, mountId: undefined, mountState: null, appearanceState: null, taskState: null, professions: {}, reputation: { town: 0 }, talents: {},
       adventure: createAdventureState(),
       official: null,
       stats: { monstersKilled: 0, bossesKilled: 0, damageDealt: 0, damageTaken: 0, healingDone: 0, goldEarned: 0, distanceWalked: 0, deaths: 0, levelUps: 0, spellsCast: 0, adventuresCompleted: 0 },
       sessionStartedAt: Date.now(), sessionDamageBase: 0,
       ws, lastActivity: Date.now(),
     };
+    appearanceSystem.initializePlayer(player, contentDB);
+    mountSystem.initializePlayer(player, contentDB);
+    tibiaTaskEngine.initializePlayer(player, contentDB);
+    housingSystem.maintainPlayer(player, contentDB);
     this.players.set(id, player);
     return player;
   }
@@ -116,6 +126,15 @@ class GameEngine {
     const result = [];
     for (const p of this.players.values()) if (p.mapId === mapId) result.push(p);
     return result;
+  }
+
+  isNearContentNpc(player, idOrRole, range = 2) {
+    const wanted = typeof idOrRole === 'string' ? idOrRole.trim() : '';
+    if (!wanted) return false;
+    return contentDB.get('npcs').some(npc => npc && npc.mapId === player.mapId
+      && (npc.id === wanted || npc.role === wanted)
+      && Number.isFinite(Number(npc.posX)) && Number.isFinite(Number(npc.posY))
+      && Math.abs(Number(npc.posX) - player.x) + Math.abs(Number(npc.posY) - player.y) <= range);
   }
 
   enforcePlayerMapAccess(player) {
@@ -200,7 +219,7 @@ class GameEngine {
   getSpellList(vocationId) {
     const vocation = VOCATIONS[vocationId];
     if (!vocation) return [];
-    const merged = vocation.spells.map(spell => ({ ...spell }));
+    const merged = vocation.spells.map(spell => contextualizeSpell({ ...spell }));
 
     for (const raw of this.contentSpells) {
       const rawVocation = typeof raw.vocation === 'string' ? raw.vocation.trim().toLowerCase() : '';
@@ -238,8 +257,12 @@ class GameEngine {
         next.buffValue = boundedNumber(raw.buffValue, 0, 100, previous?.buffValue ?? ({ shield: 25, haste: 35, invisible: 1, frenzy: 25 }[next.buffType]));
       }
 
-      if (matchIndex >= 0) merged[matchIndex] = next;
-      else if (merged.length < 8) merged.push(next);
+      for (const key of ['targetMode','allyEffect','enemyEffect','allyMultiplier','enemyMultiplier','selfMultiplier','dayMultiplier','nightMultiplier','drainPercent']) {
+        if (raw[key] !== undefined) next[key] = raw[key];
+      }
+      const contextualNext = contextualizeSpell(next);
+      if (matchIndex >= 0) merged[matchIndex] = contextualNext;
+      else if (merged.length < 8) merged.push(contextualNext);
     }
     return merged;
   }
@@ -337,7 +360,10 @@ class GameEngine {
       case 'unequip': return this.handleUnequip(player, payload);
       case 'drop': return this.handleDrop(player, payload);
       case 'pickup': return this.handlePickup(player, payload);
-      case 'mount': return this.handleMount(player);
+      case 'mount': return this.handleMount(player, payload);
+      case 'appearance': return this.handleAppearance(player, payload);
+      case 'task': return this.handleTask(player, payload);
+      case 'housing': return this.handleHousing(player, payload);
       case 'talent': return this.handleTalent(player, payload);
       case 'talent_reset': return this.handleTalentReset(player);
       case 'adventure_start': return this.handleAdventureStart(player, payload);
@@ -359,14 +385,15 @@ class GameEngine {
 
     const now = Date.now();
     const movementStats = this.computeDerivedStats(player);
-    const moveBonus = boundedNumber(movementStats.moveSpeed, 0, 50, 0);
-    const moveCooldown = Math.max(50, Math.floor(100 * (1 - moveBonus / 100)));
+    const moveBonus = boundedNumber(movementStats.moveSpeed + mountSystem.speedBonus(player, contentDB), 0, 70, 0);
+    const moveCooldown = Math.max(35, Math.floor(100 * (1 - moveBonus / 100)));
     if (now - player.lastMove < moveCooldown) return false;
 
     const nx = player.x + dx, ny = player.y + dy;
     const map = WORLD.getMap(player.mapId);
     if (!map || nx < 0 || nx >= map.width || ny < 0 || ny >= map.height) return false;
     if (!map.tiles?.[ny]?.[nx]?.walkable) return false;
+    if (!housingSystem.canStep(player, player.mapId, nx, ny, contentDB)) return false;
 
     const monsters = this.monstersByMap.get(player.mapId) || [];
     if (monsters.some(m => !m.dead && m.x === nx && m.y === ny)) return false;
@@ -511,6 +538,10 @@ class GameEngine {
 
     const derived = this.computeDerivedStats(player);
     const adventureKill = adventureEngine.onMonsterKill(player, monster);
+    const taskUpdates = tibiaTaskEngine.onMonsterKill(player, monster, contentDB);
+    for (const update of taskUpdates) {
+      this.emitEvent(player.mapId, { kind:update.ready ? 'task_ready' : 'task_progress', targetId:player.id, text:`${update.name}: ${update.current}/${update.needed}${update.ready ? ' · return to task master' : ''}`, color:update.ready ? '#f4e04d' : '#9bd4ff' });
+    }
     const officialKill = officialSystems.onMonsterKill(player, monster);
     const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100) * adventureKill.xpMultiplier * officialKill.xpMultiplier);
     player.xp += xpGain;
@@ -577,53 +608,107 @@ class GameEngine {
     const now = Date.now();
     const voc = VOCATIONS[player.vocation];
     if (!voc || !Number.isInteger(payload.spellIndex)) return false;
-    const spell = this.getSpellList(player.vocation)[payload.spellIndex];
+    const spell = contextualizeSpell(this.getSpellList(player.vocation)[payload.spellIndex]);
     if (!spell) return false;
     if (player.level < (spell.levelRequired || 1)) return false;
     if (now - (player.cooldowns[spell.name] || 0) < spell.cooldown) return false;
     if (player.mana < spell.mana) return false;
 
+    const monsters = this.monstersByMap.get(player.mapId) || [];
+    const requestedTargetId = typeof payload.targetId === 'string' && payload.targetId ? payload.targetId : player.targetId;
+    const explicitPlayer = requestedTargetId ? this.players.get(requestedTargetId) : null;
+    const explicitMonster = requestedTargetId ? monsters.find(m => m.id === requestedTargetId && !m.dead) : null;
+    const maxRange = Math.max(0, Number(spell.range) || 0);
+    const inRange = entity => entity?.id === player.id || Math.hypot(entity.x - player.x, entity.y - player.y) <= maxRange;
+    const validMonster = monster => Boolean(monster && !monster.dead && (!monster.dungeonOwnerId || monster.dungeonOwnerId === player.id) && inRange(monster));
+    const targets = [];
+
+    if (spell.targetMode === 'self') {
+      targets.push({ relation: 'self', entity: player, kind: 'player' });
+    } else if (spell.targetMode === 'area') {
+      for (const candidate of this.players.values()) {
+        if (candidate.mapId === player.mapId && inRange(candidate)) {
+          targets.push({ relation: candidate.id === player.id ? 'self' : 'ally', entity: candidate, kind: 'player' });
+        }
+      }
+      for (const monster of monsters) {
+        if (validMonster(monster)) targets.push({ relation: 'enemy', entity: monster, kind: 'monster' });
+      }
+    } else if (explicitPlayer && explicitPlayer.mapId === player.mapId && inRange(explicitPlayer)) {
+      targets.push({ relation: explicitPlayer.id === player.id ? 'self' : 'ally', entity: explicitPlayer, kind: 'player' });
+    } else if (validMonster(explicitMonster)) {
+      targets.push({ relation: 'enemy', entity: explicitMonster, kind: 'monster' });
+    } else if (spell.type === 'heal' || spell.type === 'buff') {
+      targets.push({ relation: 'self', entity: player, kind: 'player' });
+    } else {
+      const nearest = monsters
+        .filter(validMonster)
+        .sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y))[0];
+      if (nearest) targets.push({ relation: 'enemy', entity: nearest, kind: 'monster' });
+    }
+
+    const actionableTargets = targets.filter(target => effectForRelation(spell, target.relation) !== 'none');
+    if (actionableTargets.length === 0) return false;
+
     player.mana -= spell.mana;
     player.cooldowns[spell.name] = now;
     player.stats.spellsCast++;
     this.progressSkill(player, 'magic', 1);
+    if (requestedTargetId) player.targetId = requestedTargetId;
 
-    const derived = this.computeDerivedStats(player);
+    const casterDerived = this.computeDerivedStats(player);
+    const clock = createWorldClockSnapshot(now);
+    const basePower = Math.max(0, Number(spell.damage) || 0) + Math.floor(casterDerived.totalMagic * (Number(spell.scalingCoeff) || 1) * 0.5);
     this.emitEvent(player.mapId, { kind: 'spell', targetId: player.id, text: spell.name, color: spell.color, pos: { x: player.x, y: player.y } });
 
-    if (spell.type === 'buff') {
-      const validBuffs = new Set(['shield', 'haste', 'invisible', 'frenzy']);
-      const buffType = validBuffs.has(spell.buffType) ? spell.buffType : 'shield';
-      const defaults = { shield: 25, haste: 35, invisible: 1, frenzy: 25 };
-      const duration = Math.floor(boundedNumber(spell.buffDuration, 1000, 60000, 8000));
-      const value = boundedNumber(spell.buffValue, 0, 100, defaults[buffType]);
-      player.buffs = this.getActiveBuffs(player, now).filter(buff => buff.type !== buffType);
-      player.buffs.push({
-        id: `${buffType}_${now}`, type: buffType, name: spell.name, value,
-        startTime: now, expiresAt: now + duration,
-      });
-      this.emitEvent(player.mapId, { kind: 'buff', targetId: player.id, text: spell.name, color: spell.color, pos: { x: player.x, y: player.y } });
-    } else if (spell.type === 'heal' && spell.damage > 0) {
-      const baseHeal = spell.damage + Math.floor(derived.totalMagic * 0.5);
-      const healAmt = Math.floor(baseHeal * (1 + derived.healBonus / 100));
-      const before = player.hp;
-      player.hp = Math.min(derived.totalMaxHp, player.hp + healAmt);
-      player.stats.healingDone += Math.max(0, player.hp - before);
-      this.emitEvent(player.mapId, { kind: 'heal', targetId: player.id, amount: healAmt, pos: { x: player.x, y: player.y }, color: '#2ecc71' });
-    } else {
-      const monsters = this.monstersByMap.get(player.mapId) || [];
-      for (const m of monsters) {
-        if (m.dead || (m.dungeonOwnerId && m.dungeonOwnerId !== player.id)) continue;
-        const dist = Math.hypot(m.x - player.x, m.y - player.y);
-        if (dist <= spell.range) {
-          const baseDmg = spell.damage + Math.floor(derived.totalMagic * (spell.scalingCoeff || 1) * 0.5);
-          const dmg = Math.max(1, baseDmg - m.defense);
-          m.hp -= dmg;
-          player.stats.damageDealt += dmg;
-          this.emitEvent(player.mapId, { kind: 'damage', targetId: m.id, amount: dmg, pos: { x: m.x, y: m.y }, color: spell.color });
-          if (m.hp <= 0) this.killMonster(player, m);
-          if (spell.type === 'attack') break;
+    for (const target of actionableTargets) {
+      const effect = effectForRelation(spell, target.relation);
+      const multiplier = multiplierForRelation(spell, target.relation, clock);
+      if (multiplier <= 0) continue;
+
+      if (target.kind === 'player' && effect === 'heal') {
+        const receiver = target.entity;
+        const receiverDerived = this.computeDerivedStats(receiver);
+        const healAmount = Math.max(1, Math.floor(basePower * (1 + casterDerived.healBonus / 100) * multiplier));
+        const before = receiver.hp;
+        receiver.hp = Math.min(receiverDerived.totalMaxHp, receiver.hp + healAmount);
+        const actual = Math.max(0, receiver.hp - before);
+        player.stats.healingDone += actual;
+        this.emitEvent(player.mapId, { kind: 'heal', targetId: receiver.id, amount: actual, text: `${spell.name} x${multiplier.toFixed(2)}`, pos: { x: receiver.x, y: receiver.y }, color: '#2ecc71' });
+        continue;
+      }
+
+      if (target.kind === 'player' && effect === 'buff') {
+        const receiver = target.entity;
+        const validBuffs = new Set(['shield', 'haste', 'invisible', 'frenzy']);
+        const buffType = validBuffs.has(spell.buffType) ? spell.buffType : 'shield';
+        const defaults = { shield: 25, haste: 35, invisible: 1, frenzy: 25 };
+        const duration = Math.floor(boundedNumber(spell.buffDuration, 1000, 60000, 8000));
+        const rawValue = boundedNumber(spell.buffValue, 0, 100, defaults[buffType]);
+        const value = boundedNumber(rawValue * multiplier, 0, 100, rawValue);
+        receiver.buffs = this.getActiveBuffs(receiver, now).filter(buff => buff.type !== buffType);
+        receiver.buffs.push({ id: `${buffType}_${now}_${player.id}`, type: buffType, name: spell.name, value, startTime: now, expiresAt: now + duration });
+        this.emitEvent(player.mapId, { kind: 'buff', targetId: receiver.id, text: `${spell.name} x${multiplier.toFixed(2)}`, color: spell.color, pos: { x: receiver.x, y: receiver.y } });
+        continue;
+      }
+
+      if (target.kind === 'monster' && (effect === 'damage' || effect === 'drain')) {
+        const monster = target.entity;
+        const rawDamage = Math.floor(basePower * multiplier);
+        const damage = Math.max(1, rawDamage - Math.max(0, Number(monster.defense) || 0));
+        monster.hp -= damage;
+        player.stats.damageDealt += damage;
+        this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: damage, text: `${spell.name} x${multiplier.toFixed(2)}`, pos: { x: monster.x, y: monster.y }, color: spell.color });
+        if (effect === 'drain' && spell.drainPercent > 0) {
+          const derivedNow = this.computeDerivedStats(player);
+          const drained = Math.max(1, Math.floor(damage * spell.drainPercent / 100));
+          const before = player.hp;
+          player.hp = Math.min(derivedNow.totalMaxHp, player.hp + drained);
+          const actual = Math.max(0, player.hp - before);
+          player.stats.healingDone += actual;
+          this.emitEvent(player.mapId, { kind: 'heal', targetId: player.id, amount: actual, text: `${spell.name} drain`, pos: { x: player.x, y: player.y }, color: '#c084fc' });
         }
+        if (monster.hp <= 0) this.killMonster(player, monster);
       }
     }
     return true;
@@ -725,9 +810,56 @@ class GameEngine {
     return true;
   }
 
-  handleMount(player) {
-    if (!player.mounted && player.level < 5) return false;
-    player.mounted = !player.mounted;
+  handleMount(player, payload = {}) {
+    const action = typeof payload.action === 'string' ? payload.action : 'toggle';
+    if (action === 'buy' && !this.isNearContentNpc(player, 'stablemaster')) {
+      this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:'Visit a stablemaster to buy mounts.', color:'#d9bd7a' });
+      return false;
+    }
+    const result = mountSystem.handle(player, { ...payload, action }, contentDB);
+    if (!result.ok) {
+      this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:result.error || 'Mount action rejected.', color:'#ff9090' });
+      return false;
+    }
+    this.emitEvent(player.mapId, { kind:'mount_update', targetId:player.id, text: result.mounted === false ? 'Dismounted.' : result.mount ? `${result.mount.name} ready.` : 'Mount updated.', color:result.mount?.color || '#d9bd7a' });
+    return true;
+  }
+
+  handleAppearance(player, payload) {
+    const action = typeof payload.action === 'string' ? payload.action : '';
+    if ((action === 'buy' || action === 'buy_addon') && !this.isNearContentNpc(player, 'outfitter')) {
+      this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:'Visit an outfitter to unlock outfits and addons.', color:'#d49bc8' });
+      return false;
+    }
+    const result = appearanceSystem.handle(player, payload, contentDB);
+    if (!result.ok) { this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:result.error || 'Appearance action rejected.', color:'#ff9090' }); return false; }
+    this.emitEvent(player.mapId, { kind:'appearance_update', targetId:player.id, text:'Outfit updated.', color:'#d49bc8' });
+    return true;
+  }
+
+  handleTask(player, payload) {
+    const result = tibiaTaskEngine.handle(player, payload, contentDB, npcId => this.isNearContentNpc(player, npcId));
+    if (!result.ok) { this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:result.error || 'Task action rejected.', color:'#ff9090' }); return false; }
+    if (result.reward) {
+      player.gold += result.reward.gold;
+      player.xp += result.reward.xp;
+      const voc = VOCATIONS[player.vocation];
+      while (player.xp >= player.xpNext && voc) {
+        player.xp -= player.xpNext; player.level++; player.xpNext = Math.floor(player.xpNext * 1.4);
+        player.maxHp += voc.hpPerLevel; player.hp = player.maxHp; player.maxMana += voc.manaPerLevel; player.mana = player.maxMana;
+        player.attack += voc.atkPerLevel; player.defense += voc.defPerLevel; player.magic += voc.magPerLevel; player.stats.levelUps++;
+        this.emitEvent(player.mapId, { kind:'levelup', targetId:player.id, text:`LEVEL ${player.level}!`, color:'#f4e04d', pos:{x:player.x,y:player.y} });
+      }
+    }
+    const text = result.action === 'claim' ? `${result.task.name} complete · +${result.reward.points} task points` : result.action === 'accept' ? `Task accepted: ${result.task.name}` : 'Task abandoned.';
+    this.emitEvent(player.mapId, { kind:'task_update', targetId:player.id, text, color:'#d9bd7a' });
+    return true;
+  }
+
+  handleHousing(player, payload) {
+    const result = housingSystem.handle(player, payload, contentDB);
+    if (!result.ok) { this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:result.error || 'Housing action rejected.', color:'#ff9090' }); return false; }
+    this.emitEvent(player.mapId, { kind:'housing_update', targetId:player.id, text:'Housing updated.', color:'#d9bd7a' });
     return true;
   }
 
@@ -1182,6 +1314,10 @@ class GameEngine {
       moveSpeed: derived.moveSpeed,
       quests: questEngine.serialize(playerId),
       adventure: adventureEngine.serialize(player),
+      tasks: tibiaTaskEngine.snapshot(player, contentDB),
+      appearance: appearanceSystem.snapshot(player, contentDB),
+      mounts: mountSystem.snapshot(player, contentDB),
+      housing: housingSystem.snapshot(player, contentDB),
       sessionStartedAt: undefined,
       sessionDamageBase: undefined,
     };
@@ -1191,7 +1327,7 @@ class GameEngine {
       if (p.id !== playerId && p.mapId === player.mapId && Math.abs(p.x - player.x) + Math.abs(p.y - player.y) < 25) {
         const voc = VOCATIONS[p.vocation];
         const pDerived = this.computeDerivedStats(p);
-        nearbyPlayers.push({ id: p.id, name: p.name, vocation: p.vocation, level: p.level, x: p.x, y: p.y, direction: p.direction, hp: p.hp, maxHp: pDerived.totalMaxHp, mounted: p.mounted, icon: voc?.icon, color: voc?.color, ...officialSystems.publicPvp(p) });
+        nearbyPlayers.push({ id: p.id, name: p.name, vocation: p.vocation, level: p.level, x: p.x, y: p.y, direction: p.direction, hp: p.hp, maxHp: pDerived.totalMaxHp, mounted: p.mounted, mountId: p.mountId, mount: mountSystem.publicMount(p, contentDB), appearance: appearanceSystem.publicAppearance(p, contentDB), icon: voc?.icon, color: voc?.color, ...officialSystems.publicPvp(p) });
       }
     }
 
@@ -1202,7 +1338,7 @@ class GameEngine {
     const allGround = this.groundItemsByMap.get(player.mapId) || [];
     const groundItems = allGround.filter(g => Math.abs(g.x - player.x) < 15 && Math.abs(g.y - player.y) < 15).map(g => ({ id: g.id, x: g.x, y: g.y, items: g.items }));
 
-    const privateKinds = new Set(['system', 'quest_progress', 'quest_complete', 'death', 'heal', 'xp', 'levelup', 'adventure_combo', 'adventure_progress', 'adventure_ready', 'adventure_claimed']);
+    const privateKinds = new Set(['system', 'quest_progress', 'quest_complete', 'death', 'heal', 'xp', 'levelup', 'adventure_combo', 'adventure_progress', 'adventure_ready', 'adventure_claimed', 'task_update', 'task_progress', 'task_ready', 'housing_update', 'appearance_update', 'mount_update']);
     const events = (this.pendingEvents.get(player.mapId) || []).filter(event =>
       !privateKinds.has(event.kind) || event.targetId === playerId
     );
@@ -1211,7 +1347,8 @@ class GameEngine {
     const sessionDamage = Math.max(0, (Number(player.stats?.damageDealt) || 0) - (Number(player.sessionDamageBase) || 0));
     official.state.combat = { sessionDamage, sessionSeconds: Math.floor(sessionSeconds), dps: Math.round((sessionDamage / sessionSeconds) * 10) / 10 };
     const social = socialSystems.snapshot(player, this.players);
-    return { player: playerData, nearbyPlayers, monsters, groundItems, events, official, social };
+    const worldClock = createWorldClockSnapshot();
+    return { player: playerData, nearbyPlayers, monsters, groundItems, events, official, social, worldClock };
   }
 
   consumeEvents(mapId) { this.pendingEvents.set(mapId, []); }

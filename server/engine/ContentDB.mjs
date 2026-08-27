@@ -9,18 +9,19 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { ALPHA_CONTENT } from './AlphaContent.mjs';
+import { ALPHA_SYSTEMS_CONTENT } from './AlphaSystemsContent.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DB_FILE = process.env.MORIA_CONTENT_DB || path.join(__dirname, '..', 'moria-content.json');
-const COLLECTION_KEYS = Object.freeze(['items', 'monsters', 'npcs', 'quests', 'spells', 'maps', 'worldEvents', 'shops', 'lootTables', 'gmRoster']);
+const COLLECTION_KEYS = Object.freeze(['items', 'monsters', 'npcs', 'quests', 'spells', 'maps', 'worldEvents', 'shops', 'lootTables', 'gmRoster', 'taskQuests', 'houses', 'housingDecor', 'outfits', 'mounts']);
 const TYPE_ALIASES = Object.freeze({ events: 'worldEvents' });
 
 function emptyContentData() {
   return {
     version: 1,
     items: [], monsters: [], npcs: [], quests: [], spells: [], maps: [],
-    worldEvents: [], shops: [], lootTables: [], gmRoster: [],
+    worldEvents: [], shops: [], lootTables: [], gmRoster: [], taskQuests: [], houses: [], housingDecor: [], outfits: [], mounts: [],
   };
 }
 
@@ -88,7 +89,7 @@ export class ContentDB {
     // Only seed a brand-new or unrecoverably corrupt database. A valid empty
     // collection is intentional admin state and must stay empty after restart.
     if (!this.load()) this.seedDefaults();
-    else this.migrateAlphaV2();
+    else { this.migrateAlphaV2(); this.migrateAlphaV3(); }
   }
 
   load() {
@@ -139,6 +140,22 @@ export class ContentDB {
     // Empty v1 stores stay intentionally empty, but are marked migrated so a
     // later admin-created record cannot unexpectedly trigger the alpha seed.
     this.data.version = 2;
+    this.save();
+    return true;
+  }
+
+  migrateAlphaV3() {
+    if (Number(this.data.version) >= 3) return false;
+    const hasExistingContent = COLLECTION_KEYS.some(key => Array.isArray(this.data[key]) && this.data[key].length > 0);
+    if (hasExistingContent) {
+      this.data.npcs = mergeById(ALPHA_SYSTEMS_CONTENT.npcs, this.data.npcs);
+      this.data.taskQuests = mergeById(ALPHA_SYSTEMS_CONTENT.taskQuests, this.data.taskQuests);
+      this.data.houses = mergeById(ALPHA_SYSTEMS_CONTENT.houses, this.data.houses);
+      this.data.housingDecor = mergeById(ALPHA_SYSTEMS_CONTENT.housingDecor, this.data.housingDecor);
+      this.data.outfits = mergeById(ALPHA_SYSTEMS_CONTENT.outfits, this.data.outfits);
+      this.data.mounts = mergeById(ALPHA_SYSTEMS_CONTENT.mounts, this.data.mounts);
+    }
+    this.data.version = 3;
     this.save();
     return true;
   }
@@ -249,7 +266,13 @@ export class ContentDB {
     this.data.shops = mergeById(this.data.shops, ALPHA_CONTENT.shops);
     this.data.lootTables = mergeById(this.data.lootTables, ALPHA_CONTENT.lootTables);
     this.data.gmRoster = mergeById(this.data.gmRoster, ALPHA_CONTENT.gmRoster);
-    this.data.version = 2;
+    this.data.npcs = mergeById(this.data.npcs, ALPHA_SYSTEMS_CONTENT.npcs);
+    this.data.taskQuests = mergeById(this.data.taskQuests, ALPHA_SYSTEMS_CONTENT.taskQuests);
+    this.data.houses = mergeById(this.data.houses, ALPHA_SYSTEMS_CONTENT.houses);
+    this.data.housingDecor = mergeById(this.data.housingDecor, ALPHA_SYSTEMS_CONTENT.housingDecor);
+    this.data.outfits = mergeById(this.data.outfits, ALPHA_SYSTEMS_CONTENT.outfits);
+    this.data.mounts = mergeById(this.data.mounts, ALPHA_SYSTEMS_CONTENT.mounts);
+    this.data.version = 3;
 
     this.save();
   }
