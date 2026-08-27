@@ -10,7 +10,7 @@ import { buildEquipmentLootPool } from './Items.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DEFAULT_DB_FILE = path.join(__dirname, '..', 'moria-official.json');
+const DEFAULT_DB_FILE = process.env.MORIA_OFFICIAL_DB || path.join(__dirname, '..', 'moria-official.json');
 
 const clamp = (value, min, max, fallback = min) => {
   const n = Number(value);

@@ -565,6 +565,10 @@ wss.on('connection', ws => {
   let authenticatedSessionKey = null;
   let messagesInWindow = 0;
   let messageWindowStart = Date.now();
+  let chatMessagesInWindow = 0;
+  let chatWindowStart = Date.now();
+  let socialActionsInWindow = 0;
+  let socialWindowStart = Date.now();
   wsClients.set(clientId, { ws, name: null, accountId: null, sessionKey: null });
 
   ws.on('message', raw => {
@@ -633,6 +637,10 @@ wss.on('connection', ws => {
     if (msg.kind === 'intent') {
       const intent = msg.payload;
       if (!intent || typeof intent !== 'object' || Array.isArray(intent) || typeof intent.type !== 'string') return;
+      if (intent.type === 'social') {
+        if (now - socialWindowStart >= 10_000) { socialWindowStart = now; socialActionsInWindow = 0; }
+        if (++socialActionsInWindow > 30) return;
+      }
       engine.processIntent(clientId, intent);
       return;
     }
@@ -654,6 +662,8 @@ wss.on('connection', ws => {
 
     if (msg.kind === 'chat') {
       const payload = msg.payload && typeof msg.payload === 'object' && !Array.isArray(msg.payload) ? msg.payload : {};
+      if (now - chatWindowStart >= 5000) { chatWindowStart = now; chatMessagesInWindow = 0; }
+      if (++chatMessagesInWindow > 15) return;
       const text = typeof payload.text === 'string' ? payload.text.trim().slice(0, 200) : '';
       if (!text) return;
       const allowedChannels = new Set(['world', 'say', 'party', 'guild', 'trade']);

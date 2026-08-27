@@ -102,3 +102,19 @@ test('say chat is map-and-range scoped while world and trade channels remain rea
     assert.deepEqual(new Set(systems.chatRecipients(a, 'trade', players)), new Set(['a', 'b', 'c']));
   } finally { cleanup(dir); }
 });
+
+
+test('disconnect cancels active trade and session party while persistent guild membership survives', () => {
+  const { systems, dir, players, a, b } = setup();
+  try {
+    assert.equal(systems.createGuild(a, 'Persistent Wardens').ok, true);
+    assert.equal(systems.inviteParty(a, b, players).ok, true);
+    assert.equal(systems.acceptParty(b).ok, true);
+    assert.equal(systems.requestTrade(a, b).ok, true);
+    assert.equal(systems.acceptTrade(b, players).ok, true);
+    systems.onDisconnect(a);
+    assert.equal(systems.getParty(a), null);
+    assert.equal(systems.tradeByPlayer.size, 0);
+    assert.equal(systems.getGuildByMember(a.name)?.name, 'Persistent Wardens');
+  } finally { cleanup(dir); }
+});

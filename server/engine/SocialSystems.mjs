@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DEFAULT_DB_FILE = path.join(__dirname, '..', 'moria-social.json');
+const DEFAULT_DB_FILE = process.env.MORIA_SOCIAL_DB || path.join(__dirname, '..', 'moria-social.json');
 
 const cleanText = (value, max = 120) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const playerKey = (value) => String(value || '').trim().toLocaleLowerCase('en-US');
@@ -93,7 +93,7 @@ export class SocialSystems {
     const temp = `${this.dbFile}.tmp`;
     try {
       fs.mkdirSync(path.dirname(this.dbFile), { recursive: true });
-      fs.writeFileSync(temp, JSON.stringify(this.state, null, 2));
+      fs.writeFileSync(temp, JSON.stringify(this.state, null, 2), { mode: 0o600 });
       fs.renameSync(temp, this.dbFile);
       return true;
     } catch (error) {
