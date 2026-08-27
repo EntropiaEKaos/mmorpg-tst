@@ -277,6 +277,21 @@ class ServerSyncManager {
         case 'boss_defeated':
           if (event.text) { addMessage('Victory', event.text, event.color || '#ffbf5f', 'system'); addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#ffbf5f', true); }
           break;
+        case 'boss_intro':
+          if (event.subtitle || event.text) addMessage('Boss', event.subtitle || event.text, event.color || '#ffbf5f', 'battle');
+          break;
+        case 'region_discovered':
+          if (event.text) addMessage('Exploration', event.text, event.color || '#7dd3fc', 'system');
+          break;
+        case 'achievement_unlocked':
+          if (event.text) addMessage('Achievement', event.text, event.color || '#c084fc', 'system');
+          break;
+        case 'cosmetic_unlocked':
+          if (event.text) addMessage('Unlock', event.text, event.color || '#d49bc8', 'system');
+          break;
+        case 'reward_chest_opened':
+          if (event.text) addMessage('Treasure', event.text, event.color || '#ffb347', 'loot');
+          break;
         case 'class_sustain':
           if (event.text) addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#c084fc', false);
           break;
