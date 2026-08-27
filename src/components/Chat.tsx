@@ -45,7 +45,7 @@ function ChatInner({ messages, onSendMessage, social }: Props) {
     <MovableHudWindow
       id="chat"
       title="Chat"
-      className={`${expanded ? 'h-[390px] w-[560px]' : 'h-[204px] w-[430px]'} max-w-[calc(100vw-16px)]`}
+      className={`${expanded ? 'h-[390px] w-[520px]' : 'h-[204px] w-[330px]'} max-w-[calc(100vw-16px)]`}
       contentClassName="flex h-[calc(100%-28px)] flex-col"
       defaultStyle={{ left: 8, bottom: 8 }}
     >
@@ -85,7 +85,7 @@ function areEqual(prev: Props, next: Props) {
   const lastPrev = prev.messages[prev.messages.length - 1];
   const lastNext = next.messages[next.messages.length - 1];
   if (!lastPrev || !lastNext) return lastPrev === lastNext && prev.onSendMessage === next.onSendMessage;
-  return lastPrev.id === lastNext.id && lastPrev.text === lastNext.text && lastPrev.channel === lastNext.channel && prev.onSendMessage === next.onSendMessage && prev.social === next.social;
+  return lastPrev.id === lastNext.id && lastPrev.text === lastNext.text && lastPrev.channel === next.lastNext?.channel && prev.onSendMessage === next.onSendMessage && prev.social === next.social;
 }
 
 const Chat = memo(ChatInner, areEqual);
