@@ -17,6 +17,7 @@ export interface RenderState {
   events: any[];
   official: any;
   social: any;
+  worldClock?: any;
 }
 
 class ServerSyncManager {
@@ -87,9 +88,9 @@ class ServerSyncManager {
     sendIntent({ type: 'attack', payload: { monsterId } });
   }
 
-  sendCast(spellIndex: number) {
+  sendCast(spellIndex: number, targetId?: string) {
     if (!this.isActive()) return;
-    sendIntent({ type: 'cast', payload: { spellIndex } });
+    sendIntent({ type: 'cast', payload: { spellIndex, ...(targetId ? { targetId } : {}) } });
   }
 
   sendUseItem(itemId: string) {

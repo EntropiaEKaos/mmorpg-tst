@@ -17,6 +17,9 @@ const MONSTER_TYPES = Object.freeze(['normal', 'elite', 'boss']);
 const NPC_ROLES = Object.freeze(['merchant', 'banker', 'innkeeper', 'trainer', 'guard', 'healer', 'quest', 'taskmaster', 'stablemaster', 'outfitter', 'realtor']);
 const SPELL_TYPES = Object.freeze(['attack', 'heal', 'aoe', 'buff']);
 const BUFF_TYPES = Object.freeze(['shield', 'haste', 'invisible', 'frenzy']);
+const SPELL_TARGET_MODES = Object.freeze(['smart', 'self', 'target', 'area']);
+const ALLY_EFFECTS = Object.freeze(['none', 'heal', 'buff']);
+const ENEMY_EFFECTS = Object.freeze(['none', 'damage', 'drain']);
 
 const field = (id, label = id, kind = 'text', extra = {}) => Object.freeze({ id, label, kind, ...extra });
 
@@ -51,6 +54,10 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('vocation', 'Vocation', 'select', { optionKey: 'vocations' }), field('levelRequired', 'Required level', 'number'),
     field('buffType', 'Buff type', 'select', { optionKey: 'buffTypes', allowEmpty: true }),
     field('buffDuration', 'Buff duration ms', 'number'), field('buffValue', 'Buff value', 'number'), field('scalingCoeff', 'Scaling', 'number'),
+    field('targetMode', 'Target mode', 'select', { optionKey: 'spellTargetModes' }),
+    field('allyEffect', 'Ally effect', 'select', { optionKey: 'allyEffects' }), field('enemyEffect', 'Enemy effect', 'select', { optionKey: 'enemyEffects' }),
+    field('allyMultiplier', 'Ally multiplier', 'number'), field('enemyMultiplier', 'Enemy multiplier', 'number'), field('selfMultiplier', 'Self multiplier', 'number'),
+    field('dayMultiplier', 'Day multiplier', 'number'), field('nightMultiplier', 'Night multiplier', 'number'), field('drainPercent', 'Drain %', 'number'),
   ]),
   quests: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('npcId', 'Quest NPC', 'select', { optionKey: 'npcs', allowEmpty: true }),
@@ -180,6 +187,12 @@ export function validateStudioRecord(type, record) {
       ['buffValue',0,100,false,false], ['scalingCoeff',0,20,false,false],
     ]) { const error = numberIn(record, key, min, max, { required, integer }); if (error) return error; }
     if (spellType === 'buff' && !BUFF_TYPES.includes(String(record.buffType || ''))) return 'buff spells require a supported buffType';
+    if (record.targetMode !== undefined && record.targetMode !== '' && !SPELL_TARGET_MODES.includes(String(record.targetMode))) return 'targetMode is not supported';
+    if (record.allyEffect !== undefined && record.allyEffect !== '' && !ALLY_EFFECTS.includes(String(record.allyEffect))) return 'allyEffect is not supported';
+    if (record.enemyEffect !== undefined && record.enemyEffect !== '' && !ENEMY_EFFECTS.includes(String(record.enemyEffect))) return 'enemyEffect is not supported';
+    for (const key of ['allyMultiplier','enemyMultiplier','selfMultiplier']) { const error = numberIn(record, key, 0, 5); if (error) return error; }
+    for (const key of ['dayMultiplier','nightMultiplier']) { const error = numberIn(record, key, 0.25, 3); if (error) return error; }
+    { const error = numberIn(record, 'drainPercent', 0, 100); if (error) return error; }
     return optionalColor(record);
   }
 
@@ -285,7 +298,7 @@ export function getContentStudioSchema(type, contentDB) {
   const schema = CONTENT_STUDIO_SCHEMAS[type] || [];
   const options = {
     rarities: [...RARITIES], slots: [...ITEM_SLOTS], monsterTypes: [...MONSTER_TYPES], npcRoles: [...NPC_ROLES],
-    spellTypes: [...SPELL_TYPES], buffTypes: [...BUFF_TYPES], vocations: Object.keys(VOCATIONS).sort(),
+    spellTypes: [...SPELL_TYPES], buffTypes: [...BUFF_TYPES], spellTargetModes: [...SPELL_TARGET_MODES], allyEffects: [...ALLY_EFFECTS], enemyEffects: [...ENEMY_EFFECTS], vocations: Object.keys(VOCATIONS).sort(),
     biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], eventTypes: [...EVENT_TYPES],
     npcs: contentDB.get('npcs').map(entry => entry.id).filter(Boolean).sort(),
     quests: contentDB.get('quests').map(entry => entry.id).filter(Boolean).sort(),

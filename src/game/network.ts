@@ -55,6 +55,7 @@ export interface ServerSnapshot {
   events: any[];
   official?: any;
   social?: any;
+  worldClock?: any;
 }
 
 type Handler = (msg: NetMessage) => void;

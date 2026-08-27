@@ -303,6 +303,16 @@ export interface Spell {
   hitCount?: number;           // number of hits (multihit spells)
   piercePercent?: number;      // % of enemy defense ignored
   costPercent?: number;        // % of max mana as cost (alt to flat mana)
+  // Mor'ia 9.2 contextual skill contract (server authoritative online)
+  targetMode?: 'smart' | 'self' | 'target' | 'area';
+  allyEffect?: 'none' | 'heal' | 'buff';
+  enemyEffect?: 'none' | 'damage' | 'drain';
+  allyMultiplier?: number;
+  enemyMultiplier?: number;
+  selfMultiplier?: number;
+  dayMultiplier?: number;
+  nightMultiplier?: number;
+  drainPercent?: number;
 }
 
 export interface Buff {

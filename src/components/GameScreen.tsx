@@ -69,6 +69,8 @@ import SocialHub from './SocialHub';
 import LifeStylePanel from './LifeStylePanel';
 import CombatTargetFrame from './CombatTargetFrame';
 import ActiveQuestTracker from './ActiveQuestTracker';
+import WorldClockBadge from './WorldClockBadge';
+import { legacyOverrideDarkness, localWorldClock, sanitizeWorldClock, type WorldClockSnapshot } from '../game/dayNight';
 import { applyAuthoritativeCombatFeedback, resolveCombatTarget } from '../game/combatPresentation';
 import { dpsMeter } from '../game/dpsMeter';
 import { recordKill } from '../game/bestiary';
@@ -208,6 +210,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const xpMultiplierRef = useRef(xpMultiplier);
   const damageMultiplierRef = useRef(damageMultiplier);
   const dayTimeOverrideRef = useRef(dayTimeOverride);
+  const worldClockRef = useRef<WorldClockSnapshot>(localWorldClock());
   useEffect(() => { godModeRef.current = godMode; }, [godMode]);
   useEffect(() => { noClipRef.current = noClip; }, [noClip]);
   useEffect(() => { oneHitKillRef.current = oneHitKill; }, [oneHitKill]);
@@ -713,7 +716,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     if (onlineAccount && !serverSync.isActive()) return;
     // AUTHORITATIVE MODE: send cast intent to server
     if (serverSync.isActive()) {
-      serverSync.sendCast(idx);
+      serverSync.sendCast(idx, playerRef.current.targetId || undefined);
       audio.spellCast(spellsRef.current[idx]?.color || '#9b59ff');
       return;
     }
@@ -1287,7 +1290,12 @@ export default function GameScreen({ account, onLogout }: Props) {
         return;
       }
       const otherPlayer = serverPlayersRef.current.find((candidate: any) => candidate.x === tile.x && candidate.y === tile.y);
-      if (otherPlayer && officialState?.state?.pvp?.enabled) { serverSync.sendOfficial('pvp_attack', { targetId: otherPlayer.id }); return; }
+      if (otherPlayer) {
+        p.targetId = otherPlayer.id;
+        setPlayer({ ...p });
+        if (officialState?.state?.pvp?.enabled) serverSync.sendOfficial('pvp_attack', { targetId: otherPlayer.id });
+        return;
+      }
       p.targetId = undefined;
       return;
     }
@@ -1635,6 +1643,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           const { x, y, inventory: serverInventory, quests: serverQuestState, adventure: serverAdventure, skills: serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
           const serverOfficial = renderState.official;
           const serverSocial = renderState.social;
+          worldClockRef.current = sanitizeWorldClock(renderState.worldClock, now);
           Object.assign(p, compatibleServerPlayer);
           if (serverSkills && typeof serverSkills === 'object') p.skills = serverSkills;
           if (Number.isFinite(x) && Number.isFinite(y)) p.pos = { x, y };
@@ -2475,16 +2484,15 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
     }
 
-    // Day/night cycle overlay (with override)
-    const dayTime = dayTimeOverrideRef.current !== null ? dayTimeOverrideRef.current : dayTimeRef.current;
-    let nightAlpha = 0;
-    if (dayTime > 120) nightAlpha = Math.min(0.5, (dayTime - 120) / 30 * 0.5);
-    else if (dayTime < 30) nightAlpha = Math.max(0, 0.5 - dayTime / 30 * 0.5);
-    if (nightAlpha > 0) {
-      ctx.fillStyle = `rgba(10,10,40,${nightAlpha})`;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
+      // Authoritative day/night overlay. Admin override remains offline/debug presentation only.
+      const worldClock = worldClockRef.current;
+      const nightAlpha = legacyOverrideDarkness(dayTimeOverrideRef.current, worldClock.darkness);
+      if (nightAlpha > 0) {
+        ctx.save();
+        ctx.fillStyle = `rgba(10,10,40,${nightAlpha})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
     drawWorldAtmosphere(
       ctx,
       canvas,
@@ -2643,6 +2651,8 @@ export default function GameScreen({ account, onLogout }: Props) {
               {adventureState.active.ready && <button onClick={() => setShowAdventure(true)} className="moria-button-primary mt-2 w-full rounded-lg py-1 text-[9px] font-black">🏆 REWARD READY</button>}
             </div>
           )}
+
+          <WorldClockBadge clock={worldClockRef.current} />
 
           {/* Active Quest Tracker is extracted to keep GameScreen an orchestrator. */}
           <ActiveQuestTracker activeQuests={player.activeQuests} questCatalog={questCatalog} />

@@ -115,6 +115,18 @@ export function mergeServerSpells(vocationId: string, baseSpells: Spell[], conte
       levelRequired: Math.floor(finiteSpellNumber(record.levelRequired, 1, 100_000, previous?.levelRequired ?? 1)),
     };
     if (Number.isFinite(Number(record.scalingCoeff))) next.scalingCoeff = finiteSpellNumber(record.scalingCoeff, 0, 20, 1);
+    const targetModes: NonNullable<Spell['targetMode']>[] = ['smart','self','target','area'];
+    const allyEffects: NonNullable<Spell['allyEffect']>[] = ['none','heal','buff'];
+    const enemyEffects: NonNullable<Spell['enemyEffect']>[] = ['none','damage','drain'];
+    if (typeof record.targetMode === 'string' && targetModes.includes(record.targetMode as NonNullable<Spell['targetMode']>)) next.targetMode = record.targetMode as NonNullable<Spell['targetMode']>;
+    if (typeof record.allyEffect === 'string' && allyEffects.includes(record.allyEffect as NonNullable<Spell['allyEffect']>)) next.allyEffect = record.allyEffect as NonNullable<Spell['allyEffect']>;
+    if (typeof record.enemyEffect === 'string' && enemyEffects.includes(record.enemyEffect as NonNullable<Spell['enemyEffect']>)) next.enemyEffect = record.enemyEffect as NonNullable<Spell['enemyEffect']>;
+    if (record.allyMultiplier !== undefined) next.allyMultiplier = finiteSpellNumber(record.allyMultiplier, 0, 5, previous?.allyMultiplier ?? 1);
+    if (record.enemyMultiplier !== undefined) next.enemyMultiplier = finiteSpellNumber(record.enemyMultiplier, 0, 5, previous?.enemyMultiplier ?? 1);
+    if (record.selfMultiplier !== undefined) next.selfMultiplier = finiteSpellNumber(record.selfMultiplier, 0, 5, previous?.selfMultiplier ?? 1);
+    if (record.dayMultiplier !== undefined) next.dayMultiplier = finiteSpellNumber(record.dayMultiplier, 0.25, 3, previous?.dayMultiplier ?? 1);
+    if (record.nightMultiplier !== undefined) next.nightMultiplier = finiteSpellNumber(record.nightMultiplier, 0.25, 3, previous?.nightMultiplier ?? 1);
+    if (record.drainPercent !== undefined) next.drainPercent = finiteSpellNumber(record.drainPercent, 0, 100, previous?.drainPercent ?? 0);
     if (type === 'buff') {
       const requestedBuffType = typeof record.buffType === 'string'
         ? record.buffType.trim().toLowerCase() as NonNullable<Spell['buffType']>

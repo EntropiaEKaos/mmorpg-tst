@@ -117,6 +117,14 @@ export function drawWorldAtmosphere(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
+  if (nightAlpha > 0.04 && nightAlpha < 0.5) {
+    ctx.save();
+    const transition = Math.max(0, 1 - Math.abs(nightAlpha - 0.275) / 0.275);
+    ctx.fillStyle = `rgba(222, 128, 72, ${0.055 * transition})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  }
+
   const vignette = ctx.createRadialGradient(
     canvas.width / 2, canvas.height / 2, Math.min(canvas.width, canvas.height) / 3,
     canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) / 1.3,
