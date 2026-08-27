@@ -35,6 +35,9 @@ const ACTIVE_NAMES = new Map();
 const AUTH_RATE_LIMITS = new Map();
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
+const AUTOSAVE_INTERVAL_MS = Math.max(1000, Math.min(300_000, Math.floor(Number(process.env.MORIA_AUTOSAVE_MS) || 15_000)));
+const CRITICAL_SOCIAL_ACTIONS = new Set(['trade_confirm', 'guild_create']);
+const PERSISTENCE_STATE = { lastAutosaveAt: 0, lastCriticalFlushAt: 0, lastSavedPlayers: 0 };
 
 // ContentDB is persistent; reconcile server-owned catalogs into the already-
 // initialized authoritative runtime at server boot. Maps go first because
@@ -395,6 +398,7 @@ const server = http.createServer((req, res) => {
       tick: engine.getTickCount(),
       auth: 'accounts-v1',
       content: { items: contentDB.get('items').length, monsters: contentDB.get('monsters').length, maps: WORLD.getMapIds().length },
+      persistence: { autosaveMs: AUTOSAVE_INTERVAL_MS, ...PERSISTENCE_STATE },
     });
   }
 
@@ -557,6 +561,39 @@ function handleAdminAPI(req, res, route) {
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: MAX_WS_PAYLOAD });
 const wsClients = new Map();
 
+function persistOnlinePlayers(reason = 'autosave') {
+  let savedPlayers = 0;
+  for (const [clientId, entry] of wsClients) {
+    if (!entry?.name) continue;
+    const player = engine.getPlayer(clientId);
+    if (!player) continue;
+    playerDB.set(entry.name, buildAuthoritativeSave(player));
+    savedPlayers++;
+  }
+  if (savedPlayers > 0) playerDB.save();
+  PERSISTENCE_STATE.lastSavedPlayers = savedPlayers;
+  if (reason === 'critical') PERSISTENCE_STATE.lastCriticalFlushAt = Date.now();
+  else PERSISTENCE_STATE.lastAutosaveAt = Date.now();
+  return savedPlayers;
+}
+
+function shouldFlushCriticalIntent(intent) {
+  if (!intent || typeof intent !== 'object') return false;
+  if (intent.type === 'official') return true;
+  if (intent.type !== 'social') return false;
+  const action = intent.payload && typeof intent.payload === 'object' && !Array.isArray(intent.payload) ? intent.payload.action : '';
+  return CRITICAL_SOCIAL_ACTIONS.has(action);
+}
+
+function persistCriticalState() {
+  const count = persistOnlinePlayers('critical');
+  // Official and social stores already use atomic temp-file renames. Re-saving
+  // here closes the crash window after a successful cross-system mutation.
+  officialSystems.save();
+  socialSystems.save();
+  return count;
+}
+
 wss.on('connection', ws => {
   const clientId = `srv_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
   let authenticatedPlayer = null;
@@ -641,7 +678,8 @@ wss.on('connection', ws => {
         if (now - socialWindowStart >= 10_000) { socialWindowStart = now; socialActionsInWindow = 0; }
         if (++socialActionsInWindow > 30) return;
       }
-      engine.processIntent(clientId, intent);
+      const handled = engine.processIntent(clientId, intent);
+      if (handled && shouldFlushCriticalIntent(intent)) persistCriticalState();
       return;
     }
 
@@ -707,6 +745,7 @@ wss.on('connection', ws => {
 setInterval(() => engine.tick(), engine.TICK_RATE);
 setInterval(() => sessionManager.prune(), 10 * 60 * 1000);
 setInterval(() => socialSystems.prune(), 60 * 1000);
+setInterval(() => persistOnlinePlayers('autosave'), AUTOSAVE_INTERVAL_MS);
 
 setInterval(() => {
   const mapsDelivered = new Set();
@@ -733,8 +772,15 @@ function broadcastContentUpdate() {
   console.log('📡 Content update broadcast to all clients');
 }
 
-process.on('SIGTERM', () => { playerDB.save(); contentDB.save(); officialSystems.save(); socialSystems.save(); process.exit(0); });
-process.on('SIGINT', () => { playerDB.save(); contentDB.save(); officialSystems.save(); socialSystems.save(); process.exit(0); });
+function gracefulShutdown() {
+  persistOnlinePlayers('shutdown');
+  contentDB.save();
+  officialSystems.save();
+  socialSystems.save();
+  process.exit(0);
+}
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 server.listen(PORT, () => {
   console.log('');
