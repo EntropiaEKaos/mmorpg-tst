@@ -1,5 +1,5 @@
 // ===================================================================
-//  ⚔  MOR'IA MMO — AUTHORITATIVE SERVER v3.2 AUTH HARDENED
+//  ⚔  MOR'IA MMO — AUTHORITATIVE SERVER v9.0 RELEASE
 //  Everything is controlled, saved, and governed HERE.
 // ===================================================================
 
@@ -19,6 +19,7 @@ import { adventureEngine } from './engine/AdventureEngine.mjs';
 import { officialSystems } from './engine/OfficialSystems.mjs';
 import { socialSystems } from './engine/SocialSystems.mjs';
 import { validateContentReferences, findBlockingContentReferences, auditContentReferences } from './engine/ContentIntegrity.mjs';
+import { getContentStudioSchema, validateStudioRecord, collectContentDiagnostics } from './engine/ContentStudio.mjs';
 import { accountStore, sessionManager } from './engine/AuthService.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
 
@@ -479,8 +480,17 @@ function handleAdminAPI(req, res, route) {
       return json(res, 200, { items: players, fields: ['name','level','vocation','mapId','gold','hp'], readOnly: true, runtimeNote: 'Live player state is authoritative. This view is intentionally read-only; player mutation must use explicit audited admin actions.' });
     }
     if (type === 'integrity') {
-      const audit = auditContentReferences(contentDB);
-      return json(res, 200, { ...audit, onlinePlayers: engine.getOnlineCount(), runtimeMaps: WORLD.getMapIds().length, contentVersion: contentDB.data.version });
+      const referenceAudit = auditContentReferences(contentDB);
+      const semanticAudit = collectContentDiagnostics(contentDB);
+      const warnings = referenceAudit.issues.filter(issue => issue.severity === 'warning');
+      return json(res, 200, {
+        healthy: referenceAudit.healthy && semanticAudit.ok,
+        errors: semanticAudit.issues.length,
+        warnings: warnings.length,
+        issues: [...semanticAudit.issues, ...warnings],
+        counts: referenceAudit.counts,
+        onlinePlayers: engine.getOnlineCount(), runtimeMaps: WORLD.getMapIds().length, contentVersion: contentDB.data.version,
+      });
     }
     if (type === 'export') {
       return json(res, 200, { exportedAt: new Date().toISOString(), content: contentDB.getAllContent() });
@@ -488,28 +498,10 @@ function handleAdminAPI(req, res, route) {
     if (type === 'broadcast') return json(res, 200, { ok: true });
     if (!ALLOWED_ADMIN_TYPES.has(type)) return json(res, 404, { error: 'Unknown content type' });
 
-    const fieldsMap = {
-      items: ['id','name','icon','slot','attack','defense','armor','hp','mana','magic','critChance','lifesteal','thorns','moveSpeed','xpBonus','goldBonus','damageReduction','rarity','level','value','description'],
-      monsters: ['id','name','emoji','hp','attack','defense','xp','level','type','color','size','goldMin','goldMax','mapId','count','posX','posY','speed'],
-      npcs: ['id','name','emoji','color','role','posX','posY','mapId','dialogue'],
-      spells: ['id','name','icon','mana','cooldown','damage','range','color','type','vocation','levelRequired','buffType','buffDuration','buffValue','scalingCoeff'],
-      quests: ['id','name','npcId','description','target','count','rewardGold','rewardXp','levelRequired','requires'],
-      maps: ['id','name','biome','description','levelRequired','seed','spawnX','spawnY','townX','townY','townRange','portals'],
-      events: ['id','name','icon','description','target','count','rewardGold','rewardXp','rewardCoins','mapId','durationMs'],
-    };
     const readOnly = READ_ONLY_ADMIN_TYPES.has(type);
-    const runtimeNotes = {
-      maps: 'Authoritative runtime: edits regenerate deterministic terrain and synchronize the live world. Built-in maps cannot be deleted.',
-      monsters: 'Monsters with mapId are reconciled into the live authoritative world immediately. Empty mapId keeps a catalog-only template.',
-      items: 'Item edits feed the authoritative loot pool immediately; advanced combat bonuses are supported by the live derived-stat engine.',
-      spells: 'Spell edits are merged into the authoritative vocation spell lists and broadcast to connected clients.',
-      quests: 'Quest references and prerequisites are validated before save. NPC and prerequisite deletion remains reference-protected.',
-      npcs: 'NPC map references are validated and content is broadcast immediately to connected clients.',
-      events: 'World-event edits are synchronized into the authoritative event engine immediately.',
-    };
-    const runtimeNote = runtimeNotes[type] || '';
+    const studio = getContentStudioSchema(type, contentDB);
     const items = type === 'maps' ? WORLD.getDefinitions() : contentDB.get(type);
-    return json(res, 200, { items, fields: fieldsMap[type] || [], readOnly, runtimeNote });
+    return json(res, 200, { items, ...studio, readOnly });
   }
 
   if (req.method === 'POST') {
@@ -530,6 +522,8 @@ function handleAdminAPI(req, res, route) {
 
       const existing = contentDB.get(type).find(i => i.id === data.id);
       const candidate = existing ? { ...existing, ...data, id: data.id } : { ...data, id: data.id };
+      const semanticError = validateStudioRecord(type, candidate);
+      if (semanticError) return json(res, 400, { error: semanticError });
       const referenceError = validateContentReferences(contentDB, type, candidate);
       if (referenceError) return json(res, 409, { error: referenceError });
       const changed = existing ? contentDB.update(type, data.id, data) : contentDB.add(type, data);

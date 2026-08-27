@@ -164,6 +164,9 @@ export function adminPanelHTML() {
 
     const items = Array.isArray(data.items) ? data.items : [];
     const fields = Array.isArray(data.fields) ? data.fields : [];
+    const schema = Array.isArray(data.schema) ? data.schema : [];
+    const schemaByField = new Map(schema.map(entry => [entry.id, entry]));
+    const options = data.options && typeof data.options === 'object' ? data.options : {};
     const readOnly = data.readOnly === true;
     renderedItems = items;
     if (readOnly) editing = null;
@@ -187,16 +190,22 @@ export function adminPanelHTML() {
       html += '<h3>' + (editing === 'new' ? '➕ Create' : '✏ Edit') + '</h3>';
       html += '<div class="form-row">';
       for (const f of fields) {
-        html += '<div><label>' + escapeHtml(f) + '</label>';
-        if (f === 'type' || f === 'buffType' || f === 'rarity' || f === 'slot' || f === 'role' || f === 'biome' || f === 'vocation' || f === 'mapId') {
-          html += '<input value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '" list="' + f + '_list">';
-          html += '<datalist id="' + f + '_list">' + (f==='type' && currentTab==='spells'?'<option>attack<option>heal<option>aoe<option>buff':'') + (f==='buffType'?'<option>shield<option>haste<option>invisible<option>frenzy':'') + (f==='rarity'?'<option>common<option>uncommon<option>rare<option>epic<option>legendary':'') + (f==='slot'?'<option>weapon<option>armor<option>helmet<option>legs<option>boots<option>shield<option>ring<option>amulet':'') + (f==='role'?'<option>merchant<option>banker<option>innkeeper<option>trainer<option>guard':'') + (f==='biome'?'<option>plains<option>snow<option>swamp<option>desert<option>shadow':'') + (f==='vocation'?'<option>knight<option>paladin<option>sorcerer<option>druid<option>rogue<option>berserker<option>templar<option>ranger':'') + (f==='mapId'?'<option>eldoria<option>frostpeak<option>shadowfen<option>emberhold<option>voidlands':'') + '</datalist>';
-        } else if (f === 'portals' || f === 'requires') {
+        const meta = schemaByField.get(f) || { id: f, label: f, kind: 'text' };
+        html += '<div><label>' + escapeHtml(meta.label || f) + '</label>';
+        if (meta.kind === 'select') {
+          const values = Array.isArray(options[meta.optionKey]) ? options[meta.optionKey] : [];
+          html += '<select id="fld_' + f + '">';
+          if (meta.allowEmpty) html += '<option value=""></option>';
+          const current = String(item[f] ?? '');
+          if (current && !values.includes(current)) html += '<option selected value="' + escapeHtml(current) + '">' + escapeHtml(current) + '</option>';
+          for (const value of values) html += '<option ' + (String(value) === current ? 'selected ' : '') + 'value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>';
+          html += '</select>';
+        } else if (meta.kind === 'json') {
           html += '<textarea id="fld_' + f + '" rows="5">' + escapeHtml(JSON.stringify(item[f] ?? [], null, 2)) + '</textarea>';
-        } else if (f === 'description' || f === 'dialogue') {
+        } else if (meta.kind === 'textarea') {
           html += '<textarea id="fld_' + f + '" rows="2">' + escapeHtml(item[f] ?? '') + '</textarea>';
         } else {
-          html += '<input type="' + (typeof item[f] === 'number' ? 'number' : 'text') + '" value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '">';
+          html += '<input type="' + (meta.kind === 'number' ? 'number' : 'text') + '" value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '">';
         }
         html += '</div>';
       }
