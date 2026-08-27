@@ -240,6 +240,8 @@ export function drawAvatar(
   fallbackMountIcon?: string,
   appearance?: AvatarAppearance | null,
   mount?: AvatarMount | null,
+  mana = 0,
+  maxMana = 0,
 ) {
   const colors: AvatarColors = {
     head: safeColor(appearance?.colors?.head, DEFAULT_COLORS.head),
@@ -279,17 +281,43 @@ export function drawAvatar(
   ctx.fillRect(cx - 3 + eyeShiftX, faceY + eyeShiftY, 1.5, 1.5);
   ctx.fillRect(cx + 1.5 + eyeShiftX, faceY + eyeShiftY, 1.5, 1.5);
 
-  // Nameplate.
-  ctx.font = 'bold 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.lineWidth = 3; ctx.strokeText(name, cx, y - 2);
-  ctx.fillStyle = '#f4e04d'; ctx.fillText(name, cx, y - 2);
-
-  // HP bar.
-  const hpBarW = size * 0.9, hpBarH = 3, hpX = cx - hpBarW / 2, hpY = y + size - 6;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(hpX - 1, hpY - 1, hpBarW + 2, hpBarH + 2);
-  ctx.fillStyle = '#3a1a1a'; ctx.fillRect(hpX, hpY, hpBarW, hpBarH);
+  // Classic overhead status stack: name, health and mana all stay above the sprite.
   const hpPct = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
-  ctx.fillStyle = hpPct > 0.5 ? '#2ecc71' : hpPct > 0.25 ? '#f39c12' : '#e74c3c';
-  ctx.fillRect(hpX, hpY, hpBarW * hpPct, hpBarH);
+  const manaPct = Math.max(0, Math.min(1, mana / Math.max(1, maxMana)));
+  const barW = Math.max(30, size * 1.05);
+  const barH = 5;
+  const barX = Math.round(cx - barW / 2);
+  const hpBarY = Math.round(y - 14);
+  const manaBarY = Math.round(y - 8);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = 'bold 10px monospace';
+  ctx.strokeStyle = 'rgba(0,0,0,0.95)';
+  ctx.lineWidth = 3;
+  ctx.strokeText(name, cx, y - 18);
+  ctx.fillStyle = '#f4e6bd';
+  ctx.fillText(name, cx, y - 18);
+
+  ctx.fillStyle = '#080808';
+  ctx.fillRect(barX - 1, hpBarY - 1, barW + 2, barH + 2);
+  ctx.fillRect(barX - 1, manaBarY - 1, barW + 2, barH + 2);
+  ctx.fillStyle = '#4b1115';
+  ctx.fillRect(barX, hpBarY, barW, barH);
+  ctx.fillStyle = '#b91f32';
+  ctx.fillRect(barX, hpBarY, Math.round(barW * hpPct), barH);
+  ctx.fillStyle = '#10274d';
+  ctx.fillRect(barX, manaBarY, barW, barH);
+  ctx.fillStyle = '#226bc5';
+  ctx.fillRect(barX, manaBarY, Math.round(barW * manaPct), barH);
+
+  if (size >= 30) {
+    ctx.font = 'bold 6px monospace';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff7ef';
+    ctx.fillText(`${Math.max(0, Math.round(hp))}/${Math.max(0, Math.round(maxHp))}`, cx, hpBarY + 2.5);
+    ctx.fillStyle = '#dbeeff';
+    ctx.fillText(`${Math.max(0, Math.round(mana))}/${Math.max(0, Math.round(maxMana))}`, cx, manaBarY + 2.5);
+  }
   ctx.restore();
 }

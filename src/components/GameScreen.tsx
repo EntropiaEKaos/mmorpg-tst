@@ -89,8 +89,8 @@ interface Props {
   onLogout: () => void;
 }
 
-const VIEW_W = 19;
-const VIEW_H = 13;
+const VIEW_W = 31;
+const VIEW_H = 19;
 
 export default function GameScreen({ account, onLogout }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2290,7 +2290,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     const isInvisible = p.buffs.some((b) => b.type === 'invisible');
     if (isInvisible) ctx.globalAlpha = 0.4;
     drawPlayer(ctx, px, py, TILE_SIZE, p.direction, p.name, p.hp, p.maxHp, now,
-      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount);
+      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount, p.mana, p.maxMana);
     ctx.globalAlpha = 1;
 
     // Draw other players — authoritative server data takes priority
@@ -2301,7 +2301,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         const sy = (op.y - cam.y) * TILE_SIZE;
         if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
         const voc = VOCATIONS[op.vocation];
-        drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction || 'down', `${op.name} [Lv${op.level}]`, op.hp, op.maxHp, now, voc?.color || '#8b2e2e', op.mounted, op.mount?.icon, op.appearance, op.mount);
+        drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction || 'down', `${op.name} [Lv${op.level}]`, op.hp, op.maxHp, now, voc?.color || '#8b2e2e', op.mounted, op.mount?.icon, op.appearance, op.mount, Number(op.mana) || 0, Number(op.maxMana) || 0);
       }
     } else {
       // LOCAL/RELAY: draw BroadcastChannel players or simulated bots
@@ -2516,7 +2516,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   return (
     <div className="w-screen h-screen flex flex-col bg-[#05070c] text-slate-100 overflow-hidden select-none">
       {/* Top bar */}
-      <div className="moria-panel relative z-40 flex min-h-12 shrink-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-1.5 text-xs">
+      <div className="moria-panel moria-topbar-95 relative z-40 flex min-h-12 shrink-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-1.5 text-xs">
         <div className="flex shrink-0 items-center gap-3 pr-2">
           <span className="moria-title text-base font-black tracking-[0.16em] text-amber-100">MOR'IA</span>
           <span className="hidden text-slate-500 md:inline">{VOCATIONS[player.vocation]?.name} · Lv {player.level}</span>
@@ -2562,27 +2562,27 @@ export default function GameScreen({ account, onLogout }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#03060a]">
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#03060a]">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(70,100,140,0.10),transparent_44%),linear-gradient(180deg,rgba(8,12,19,0.2),rgba(0,0,0,0.72))]" />
           <div className="pointer-events-none absolute inset-x-[8%] top-0 h-px bg-gradient-to-r from-transparent via-amber-200/20 to-transparent" />
           <canvas
+            className="moria-world-canvas"
             ref={canvasRef}
             width={VIEW_W * TILE_SIZE}
             height={VIEW_H * TILE_SIZE}
             onMouseMove={handleCanvasMouseMove}
             onClick={handleCanvasClick}
             style={{
-              maxWidth: '100%',
-              maxHeight: '100%',
+              width: '100%',
+              height: '100%',
               imageRendering: 'pixelated',
               cursor: 'crosshair',
               transform: `scale(${zoom})`,
               transformOrigin: 'center center',
               transition: 'transform 0.2s ease-out',
-              borderRadius: '16px',
+              borderRadius: '0',
               background: '#05080d',
-              boxShadow: '0 28px 90px rgba(0,0,0,0.58), 0 0 0 1px rgba(164,184,216,0.10), 0 0 55px rgba(110,168,255,0.05)',
+              boxShadow: 'none',
             }}
           />
           <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
@@ -3007,9 +3007,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               onOpenWorldEventCreator={() => setShowWorldEventCreator(true)}
             />
           )}
-        </div>
-
-        <HUD player={player} tick={hudTick} spells={spells} onCastSpell={castSpell} monsters={monstersRef.current} official={serverSync.isActive() ? officialState : null} />
+          <HUD player={player} tick={hudTick} spells={spells} onCastSpell={castSpell} monsters={monstersRef.current} official={serverSync.isActive() ? officialState : null} />
       </div>
 
     </div>

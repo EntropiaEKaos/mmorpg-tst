@@ -1,5 +1,6 @@
 import type { Tile } from './types';
 import { drawAvatar, type AvatarAppearance, type AvatarMount } from './playerAvatar';
+import { drawClassicMonsterSprite, drawClassicNpcSprite } from './classicEntityPresentation';
 
 const tileCache = new Map<string, HTMLCanvasElement>();
 
@@ -360,6 +361,7 @@ function buildTileCache(size: number) {
 }
 
 export function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, size: number) {
+  ctx.imageSmoothingEnabled = false;
   buildTileCache(size);
   const cached = tileCache.get(`${tile.type}_${size}`);
   if (cached) ctx.drawImage(cached, x, y, size, size);
@@ -380,8 +382,10 @@ export function drawPlayer(
   mountIcon?: string,
   appearance?: AvatarAppearance | null,
   mount?: AvatarMount | null,
+  mana = 0,
+  maxMana = 0,
 ) {
-  drawAvatar(ctx, x, y, size, direction, name, hp, maxHp, time, vocationColor, mounted, mountIcon, appearance, mount);
+  drawAvatar(ctx, x, y, size, direction, name, hp, maxHp, time, vocationColor, mounted, mountIcon, appearance, mount, mana, maxMana);
 }
 
 export function drawMonster(
@@ -416,23 +420,7 @@ export function drawMonster(
     ctx.stroke();
   }
 
-  // Body
-  ctx.fillStyle = monster.color;
-  ctx.beginPath();
-  ctx.arc(cx, cy, entitySize * 0.35, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Highlight
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.beginPath();
-  ctx.arc(cx - entitySize * 0.12, cy - entitySize * 0.12, entitySize * 0.15, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Emoji
-  ctx.font = `${entitySize * 0.55}px system-ui`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(monster.emoji, cx, cy + 1);
+  drawClassicMonsterSprite(ctx, cx, cy, entitySize, monster, time);
 
   // Name + level
   const nameColor = monster.type === 'boss' ? '#ffd700' : monster.type === 'elite' ? '#c832ff' : '#ff9090';
@@ -477,21 +465,7 @@ export function drawNPC(
   ctx.ellipse(cx, y + size - 3, size * 0.32, size * 0.08, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = npc.color;
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.35, 0, Math.PI * 2);
-  ctx.fill();
-
-  const pulse = 0.5 + Math.sin(time / 300) * 0.3;
-  ctx.fillStyle = `rgba(255,255,255,${pulse * 0.2})`;
-  ctx.beginPath();
-  ctx.arc(cx, cy, size * 0.45, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.font = `${size * 0.5}px system-ui`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(npc.emoji, cx, cy + 1);
+  drawClassicNpcSprite(ctx, cx, cy, size, npc, time);
 
   const roleIcon =
     npc.role === 'merchant' ? '🛒' :
