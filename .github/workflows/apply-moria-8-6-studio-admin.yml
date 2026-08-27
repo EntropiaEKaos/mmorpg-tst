@@ -27,6 +27,18 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             server/package-lock.json
+      - name: Align generated-HTML migration anchor
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tools/apply-moria-8-6-studio-admin.py')
+          text = path.read_text(encoding='utf-8')
+          old = "      el.innerHTML = `'''"
+          new = "      el.innerHTML = \\`'''"
+          if old not in text:
+              raise SystemExit('8.6 template-literal patch anchor missing')
+          path.write_text(text.replace(old, new, 2), encoding='utf-8')
+          PY
       - name: Apply 8.6 Studio/Admin
         run: python3 tools/apply-moria-8-6-studio-admin.py
       - name: Install client dependencies
