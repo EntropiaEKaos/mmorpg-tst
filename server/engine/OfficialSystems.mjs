@@ -12,9 +12,10 @@ import { officialCommerceDomain } from './OfficialCommerceDomain.mjs';
 import { officialProgressionDomain } from './OfficialProgressionDomain.mjs';
 import { officialPvpDomain } from './OfficialPvpDomain.mjs';
 import { officialDungeonDomain } from './OfficialDungeonDomain.mjs';
+import { officialWorldEventDomain } from './OfficialWorldEventDomain.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
-  OFFICIAL_COIN_STORE, OFFICIAL_BOOKS, MYSTERIES, DUNGEON_WAVES, DEFAULT_EVENTS,
+  OFFICIAL_COIN_STORE, OFFICIAL_BOOKS, MYSTERIES,
   ACHIEVEMENTS, SETS,
 } from './OfficialCatalogs.mjs';
 export {
@@ -356,25 +357,7 @@ export class OfficialSystems {
   }
 
   ensureWorldEvent(now = Date.now()) {
-    const event = this.global.event;
-    if (event && !event.completed && now < event.expiresAt) return event;
-    if (event?.completed && now < (event.completedAt || 0) + 60_000) return event;
-
-    const source = this.contentEvents.length ? this.contentEvents : DEFAULT_EVENTS;
-    const raw = source[this.global.eventSequence % source.length] || DEFAULT_EVENTS[0];
-    this.global.eventSequence = (this.global.eventSequence + 1) % 1_000_000;
-    const normalized = {
-      id: cleanText(raw.id, 100) || `event_${this.global.eventSequence}`,
-      name: cleanText(raw.name, 100) || 'World Hunt', icon: cleanText(raw.icon, 8) || '🌍',
-      mapId: cleanText(raw.mapId, 50) || 'eldoria', target: slug(raw.target || raw.monster || 'rat'),
-      needed: int(raw.needed ?? raw.count, 1, 10000, 30), progress: 0,
-      rewardGold: int(raw.rewardGold, 0, 10_000_000, 300), rewardXp: int(raw.rewardXp, 0, 10_000_000, 200),
-      rewardCoins: int(raw.rewardCoins, 0, 10000, 8), participants: {}, completed: false,
-      startedAt: now, expiresAt: now + int(raw.durationMs ?? raw.duration, 60_000, 86_400_000, 15 * 60_000), completedAt: 0,
-    };
-    this.global.event = normalized;
-    this.save();
-    return normalized;
+    return officialWorldEventDomain.ensure(this, now);
   }
 
   onMonsterKill(player, monster) {
@@ -385,23 +368,7 @@ export class OfficialSystems {
     const gem = this.maybeGemDrop(player, monster);
     if (gem) result.bonusLoot.push(gem);
 
-    const event = this.ensureWorldEvent();
-    if (!event.completed && player.mapId === event.mapId && key === event.target) {
-      event.progress = Math.min(event.needed, event.progress + 1);
-      const pk = playerKey(player.name);
-      event.participants[pk] = int(event.participants[pk], 0, 1_000_000, 0) + 1;
-      result.worldEventProgress = { name: event.name, progress: event.progress, needed: event.needed };
-      if (event.progress >= event.needed) {
-        event.completed = true;
-        event.completedAt = Date.now();
-        for (const participant of Object.keys(event.participants)) {
-          const queue = Array.isArray(this.global.eventRewards[participant]) ? this.global.eventRewards[participant] : [];
-          queue.push({ id: `${event.id}_${event.completedAt}`, name: event.name, gold: event.rewardGold, xp: event.rewardXp, coins: event.rewardCoins, claimed: false });
-          this.global.eventRewards[participant] = queue.slice(-20);
-        }
-      }
-      this.save();
-    }
+    result.worldEventProgress = officialWorldEventDomain.recordKill(this, player, key);
 
     const dungeonResult = officialDungeonDomain.onMonsterKill(this, player, monster);
     result.nextDungeonWave = dungeonResult.nextDungeonWave;
@@ -643,15 +610,7 @@ export class OfficialSystems {
   }
 
   claimWorldEvent(player) {
-    const key = playerKey(player.name);
-    const queue = Array.isArray(this.global.eventRewards[key]) ? this.global.eventRewards[key] : [];
-    const reward = queue.find(r => !r.claimed);
-    if (!reward) return false;
-    reward.claimed = true;
-    player.gold += reward.gold; player.xp += reward.xp; this.ensurePlayer(player).coins += reward.coins;
-    player.stats.goldEarned = (player.stats.goldEarned || 0) + reward.gold;
-    this.awardReputation(player, 100);
-    this.save(); return reward;
+    return officialWorldEventDomain.claim(this, player);
   }
 
   pvpToggle(player) {
@@ -670,7 +629,7 @@ export class OfficialSystems {
     const s = this.ensurePlayer(player);
     const event = this.ensureWorldEvent();
     const inbox = this.global.mail.filter(m => m.to === playerKey(player.name)).slice(-50).map(m => ({ ...m, body: cleanText(m.body, 500) }));
-    const pendingRewards = (this.global.eventRewards[playerKey(player.name)] || []).filter(r => !r.claimed);
+    const pendingRewards = officialWorldEventDomain.pendingRewards(this, player);
     return {
       state: {
         depot: s.depot, pets: s.pets, coins: s.coins, training: s.training, professions: s.professions,
