@@ -64,6 +64,7 @@ jobs:
           git add server/engine/ContentIntegrity.mjs server/server.js server/adminPanel.mjs server/test/studio-8-6.test.mjs docs/MORIA_8_6_STUDIO_ADMIN.md
           git diff --cached --quiet && exit 0
           git commit -m "feat(8.6): turn Studio into authoritative content operations"
+          git checkout -- tools/apply-moria-8-6-studio-admin.py
           git fetch origin moria-8.6-studio-admin
           git rebase origin/moria-8.6-studio-admin
           git push origin HEAD:moria-8.6-studio-admin
