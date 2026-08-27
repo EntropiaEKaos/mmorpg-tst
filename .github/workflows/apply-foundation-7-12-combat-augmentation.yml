@@ -22,6 +22,8 @@ jobs:
           node-version: 22
       - name: Apply combat augmentation domain extraction
         run: python3 tools/apply-foundation-7-12-combat-augmentation.py
+      - name: Harden combat augmentation precision tests
+        run: python3 tools/harden-foundation-7-12-combat-augmentation.py
       - name: Validate combat augmentation boundaries
         run: |
           test -f server/engine/OfficialCombatAugmentationDomain.mjs
@@ -33,6 +35,7 @@ jobs:
           ! grep -q "for (const set of SETS)" server/engine/OfficialSystems.mjs
           ! grep -q "const chance = monster.type === 'boss'" server/engine/OfficialSystems.mjs
           grep -q "set bonuses count unique equipped pieces" server/test/official-combat-augmentation-domain.test.mjs
+          grep -q "Math.abs(result.totalAttack - 110)" server/test/official-combat-augmentation-domain.test.mjs
           grep -q "bestiary uses canonical content ID" server/test/official-combat-augmentation-domain.test.mjs
       - name: Validate all gates
         run: |
