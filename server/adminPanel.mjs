@@ -12,7 +12,7 @@ export function adminPanelHTML() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>⚔ Mor'ia — Server Admin Panel</title>
+<title>⚒ Mor'ia — Content Studio</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:#0a0503; color:#f4e04d; font-family:system-ui,sans-serif; min-height:100vh; }
@@ -42,11 +42,17 @@ export function adminPanelHTML() {
   .stat .lbl { font-size:.8rem; color:#f4e04d80; }
   .catalog-note { margin:0 0 1rem; padding:.8rem 1rem; border:1px solid #e6a81755; border-radius:6px; background:#e6a81712; color:#f7dda0; font-size:.8rem; line-height:1.45; }
   .readonly-label { color:#f4e04d80; font-size:.75rem; font-weight:700; letter-spacing:.06em; }
+  .toolbar { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem; }
+  .toolbar input { max-width:320px; }
+  .notice { margin:.6rem 0; padding:.65rem .8rem; border-radius:6px; font-size:.8rem; }
+  .notice-ok { border:1px solid #2ecc7166; background:#2ecc7112; color:#a8f0c5; }
+  .notice-error { border:1px solid #e74c3c66; background:#e74c3c12; color:#ffc1b8; }
+  .diag-error { color:#ff8b80; } .diag-warning { color:#ffd87b; }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>⚔ MOR'IA — SERVER ADMIN</h1>
+  <h1>⚒ MOR'IA — CONTENT STUDIO</h1>
   <div>
     <span id="online-count" style="color:#2ecc71;font-weight:bold">0 online</span>
     &nbsp; <a href="/">← Back to Game</a>
@@ -55,6 +61,7 @@ export function adminPanelHTML() {
 <div class="container">
   <div class="sidebar">
     <button class="active" onclick="showTab('dashboard', this)">📊 Dashboard</button>
+    <button onclick="showTab('diagnostics', this)">🩺 Diagnostics</button>
     <button onclick="showTab('items', this)">⚔ Items</button>
     <button onclick="showTab('monsters', this)">👹 Monsters</button>
     <button onclick="showTab('npcs', this)">🧙 NPCs</button>
@@ -72,6 +79,10 @@ export function adminPanelHTML() {
   let currentTab = 'dashboard';
   let editing = null;
   let renderedItems = [];
+  let currentSchema = [];
+  let currentOptions = {};
+  let searchTerm = '';
+  let saving = false;
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, ch => ({
@@ -86,6 +97,42 @@ export function adminPanelHTML() {
     return String(value ?? '');
   }
 
+
+  function optionList(key) {
+    const values = Array.isArray(currentOptions?.[key]) ? currentOptions[key] : [];
+    return values.map(value => '<option value="' + escapeHtml(value) + '"></option>').join('');
+  }
+
+  function cloneRow(index) {
+    const item = renderedItems[index];
+    if (!item || typeof item !== 'object') return;
+    const copy = JSON.parse(JSON.stringify(item));
+    copy.id = String(copy.id || 'content') + '_copy';
+    copy.name = String(copy.name || copy.id || 'Copy') + ' Copy';
+    editing = 'new';
+    window.__moriaDraft = copy;
+    render();
+  }
+
+  function setNotice(message, ok = true) {
+    const host = document.getElementById('studio-notice');
+    if (!host) return;
+    host.className = 'notice ' + (ok ? 'notice-ok' : 'notice-error');
+    host.textContent = message;
+    host.hidden = !message;
+  }
+
+  async function exportContent() {
+    try {
+      const payload = await api('GET', '/export');
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'moria-content-export.json'; a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) { alert(error instanceof Error ? error.message : 'Export failed'); }
+  }
+
   async function api(method, path, body) {
     const res = await fetch('/admin/api' + path, {
       method, headers: {'Content-Type':'application/json'},
@@ -98,7 +145,7 @@ export function adminPanelHTML() {
   }
 
   function showTab(tab, button) {
-    currentTab = tab; editing = null;
+    currentTab = tab; editing = null; window.__moriaDraft = null; searchTerm = '';
     document.querySelectorAll('.sidebar button').forEach(b => b.classList.remove('active'));
     if (button instanceof HTMLElement) button.classList.add('active');
     render();
@@ -137,14 +184,24 @@ export function adminPanelHTML() {
         </div>
         <div class="card"><h2>⚡ Quick Actions</h2>
           <button class="btn btn-red" onclick="if(confirm('Kick all players?')) api('POST','/broadcast',{text:'Server restarting...'})">📢 Broadcast Alert</button>
-        </div>\`;
+        <div class="card"><h2>🩺 Content Health</h2><p>Issues: <strong class="\${data.diagnostics?.total ? 'diag-error' : ''}">\${data.diagnostics?.total || 0}</strong></p><div style="margin-top:.7rem"><button class="btn btn-blue" onclick="showTab('diagnostics', document.querySelector('[onclick*=diagnostics]'))">Open diagnostics</button> <button class="btn btn-green" onclick="exportContent()">⬇ Export Content</button></div></div>\`;
+      return;
+    }
+
+    if (currentTab === 'diagnostics') {
+      const issues = Array.isArray(data.issues) ? data.issues : [];
+      el.innerHTML = '<div class="card"><h2>🩺 CONTENT DIAGNOSTICS (' + issues.length + ')</h2>' +
+        (issues.length ? '<table><thead><tr><th>Severity</th><th>Type</th><th>ID</th><th>Problem</th></tr></thead><tbody>' + issues.map(issue => '<tr><td class="diag-' + escapeHtml(issue.severity) + '">' + escapeHtml(issue.severity) + '</td><td>' + escapeHtml(issue.type) + '</td><td>' + escapeHtml(issue.id) + '</td><td>' + escapeHtml(issue.message) + '</td></tr>').join('') + '</tbody></table>' : '<div class="notice notice-ok">All published content passed semantic and reference diagnostics.</div>') + '</div>';
       return;
     }
 
     const items = Array.isArray(data.items) ? data.items : [];
     const fields = Array.isArray(data.fields) ? data.fields : [];
+    currentSchema = Array.isArray(data.schema) ? data.schema : fields.map(id => ({ id, label: id, kind: 'text' }));
+    currentOptions = data.options && typeof data.options === 'object' ? data.options : {};
     const readOnly = data.readOnly === true;
-    renderedItems = items;
+    const filteredItems = searchTerm ? items.filter(item => JSON.stringify(item).toLowerCase().includes(searchTerm.toLowerCase())) : items;
+    renderedItems = filteredItems;
     if (readOnly) editing = null;
     
     let html = '<div class="card"><h2>' + currentTab.toUpperCase() + ' (' + items.length + ')</h2>';
@@ -154,28 +211,30 @@ export function adminPanelHTML() {
     
     // Edit/Create form
     if (!readOnly && editing !== null) {
-      const item = editing === 'new'
-        ? (currentTab === 'maps'
-          ? { biome: 'plains', levelRequired: 1, seed: Date.now() % 2147483646, spawnX: 40, spawnY: 40, townX: 40, townY: 40, townRange: 8, portals: [] }
-          : currentTab === 'monsters'
-            ? { mapId: 'eldoria', count: 1, speed: 1200 }
-            : currentTab === 'spells'
-              ? { type: 'attack', vocation: 'knight', levelRequired: 1, mana: 10, cooldown: 1500, damage: 10, range: 1 }
-              : {})
-        : items.find(i => i.id === editing) || {};
+      const defaults = currentTab === 'maps'
+        ? { biome: 'plains', levelRequired: 1, seed: Date.now() % 2147483646, spawnX: 40, spawnY: 40, townX: 40, townY: 40, townRange: 8, portals: [] }
+        : currentTab === 'monsters' ? { type: 'normal', mapId: '', count: 1, speed: 1200, hp: 20, attack: 4, defense: 1, xp: 10, level: 1 }
+        : currentTab === 'spells' ? { type: 'attack', vocation: 'knight', levelRequired: 1, mana: 10, cooldown: 1500, damage: 10, range: 1 }
+        : currentTab === 'items' ? { slot: 'weapon', rarity: 'common', level: 1, value: 0 }
+        : currentTab === 'quests' ? { count: 1, rewardGold: 0, rewardXp: 0, levelRequired: 1, requires: [] }
+        : currentTab === 'events' ? { count: 1, rewardGold: 0, rewardXp: 0, rewardCoins: 0, durationMs: 900000 }
+        : {};
+      const item = editing === 'new' ? (window.__moriaDraft || defaults) : items.find(i => i.id === editing) || {};
       html += '<h3>' + (editing === 'new' ? '➕ Create' : '✏ Edit') + '</h3>';
       html += '<div class="form-row">';
-      for (const f of fields) {
-        html += '<div><label>' + escapeHtml(f) + '</label>';
-        if (f === 'type' || f === 'buffType' || f === 'rarity' || f === 'slot' || f === 'role' || f === 'biome' || f === 'vocation' || f === 'mapId') {
-          html += '<input value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '" list="' + f + '_list">';
-          html += '<datalist id="' + f + '_list">' + (f==='type' && currentTab==='spells'?'<option>attack<option>heal<option>aoe<option>buff':'') + (f==='buffType'?'<option>shield<option>haste<option>invisible<option>frenzy':'') + (f==='rarity'?'<option>common<option>uncommon<option>rare<option>epic<option>legendary':'') + (f==='slot'?'<option>weapon<option>armor<option>helmet<option>legs<option>boots<option>shield<option>ring<option>amulet':'') + (f==='mapId'?'<option>eldoria<option>frostpeak<option>shadowfen<option>emberhold<option>voidlands':'') + '</datalist>';
-        } else if (f === 'portals') {
+      for (const descriptor of currentSchema) {
+        const f = descriptor.id;
+        html += '<div><label>' + escapeHtml(descriptor.label || f) + '</label>';
+        if (descriptor.kind === 'select') {
+          const listId = 'opt_' + f;
+          html += '<input value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '" list="' + listId + '">';
+          html += '<datalist id="' + listId + '">' + optionList(descriptor.optionKey) + '</datalist>';
+        } else if (descriptor.kind === 'json') {
           html += '<textarea id="fld_' + f + '" rows="5">' + escapeHtml(JSON.stringify(item[f] ?? [], null, 2)) + '</textarea>';
-        } else if (f === 'description' || f === 'dialogue') {
-          html += '<textarea id="fld_' + f + '" rows="2">' + escapeHtml(item[f] ?? '') + '</textarea>';
+        } else if (descriptor.kind === 'textarea') {
+          html += '<textarea id="fld_' + f + '" rows="3">' + escapeHtml(item[f] ?? '') + '</textarea>';
         } else {
-          html += '<input type="' + (typeof item[f] === 'number' ? 'number' : 'text') + '" value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '">';
+          html += '<input type="' + (descriptor.kind === 'number' ? 'number' : 'text') + '" value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '">';
         }
         html += '</div>';
       }
@@ -186,12 +245,13 @@ export function adminPanelHTML() {
     }
 
     // Items list
+    html += '<div class="toolbar"><input id="studio-search" value="' + escapeHtml(searchTerm) + '" placeholder="Search this catalog..." oninput="searchTerm=this.value;render()"><button class="btn btn-green" onclick="exportContent()">⬇ Export</button></div><div id="studio-notice" hidden></div>';
     if (!readOnly) html += '<button class="btn btn-amber" onclick="editing=\\'new\\';render()">➕ New ' + currentTab.replace(/s$/,'') + '</button>';
     html += '<table><thead><tr>';
     for (const f of fields.slice(0, 6)) html += '<th>' + escapeHtml(f) + '</th>';
     html += '<th>Actions</th></tr></thead><tbody>';
-    for (let index = 0; index < items.length; index++) {
-      const item = items[index];
+    for (let index = 0; index < renderedItems.length; index++) {
+      const item = renderedItems[index];
       html += '<tr>';
       for (const f of fields.slice(0, 6)) {
         html += '<td>' + escapeHtml(displayValue(item?.[f])) + '</td>';
@@ -199,6 +259,7 @@ export function adminPanelHTML() {
       if (readOnly) html += '<td><span class="readonly-label">Catalog only</span></td></tr>';
       else {
         html += '<td><button class="btn btn-blue" onclick="editRow(' + index + ')">Edit</button> ';
+        html += '<button class="btn btn-amber" onclick="cloneRow(' + index + ')">Clone</button> ';
         html += '<button class="btn btn-red" onclick="deleteRow(' + index + ')">🗑</button></td></tr>';
       }
     }
@@ -211,30 +272,34 @@ export function adminPanelHTML() {
   }
 
   async function saveItem() {
+    if (saving) return;
     const data = await api('GET','/' + currentTab);
-    const fields = data.fields;
+    currentSchema = Array.isArray(data.schema) ? data.schema : [];
     const body = {};
-    for (const f of fields) {
+    for (const descriptor of currentSchema) {
+      const f = descriptor.id;
       const el = document.getElementById('fld_' + f);
-      if (el) {
-        let v = el.value;
-        const numericFields = new Set(['hp','attack','defense','armor','mana','magic','level','value','xp','size','goldMin','goldMax','count','posX','posY','speed','cooldown','damage','range','levelRequired','buffDuration','buffValue','scalingCoeff','rewardGold','rewardXp','rewardCoins','durationMs','seed','spawnX','spawnY','townX','townY','townRange']);
-        if (f === 'portals') {
-          try { body[f] = JSON.parse(v || '[]'); } catch { alert('Portals must be valid JSON.'); return; }
-          continue;
-        }
-        if (numericFields.has(f)) v = parseFloat(v) || 0;
-        body[f] = v;
-      }
+      if (!el) continue;
+      let v = el.value;
+      if (descriptor.kind === 'json') {
+        try { body[f] = JSON.parse(v || '[]'); } catch { alert(f + ' must be valid JSON.'); return; }
+      } else if (descriptor.kind === 'number') {
+        body[f] = v === '' ? undefined : Number(v);
+      } else body[f] = v;
     }
     if (editing !== 'new') body.id = editing;
+    saving = true;
     try {
+      await api('POST', '/validate/' + currentTab, body);
       await api('POST', '/' + currentTab, body);
-      editing = null;
-      render();
+      editing = null; window.__moriaDraft = null;
+      await render();
+      setNotice('Published successfully. Runtime sync completed.', true);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Save failed');
-    }
+      const message = error instanceof Error ? error.message : 'Publish failed';
+      alert(message);
+      setNotice(message, false);
+    } finally { saving = false; }
   }
 
   async function del(id) {

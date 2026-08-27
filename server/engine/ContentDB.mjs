@@ -113,7 +113,7 @@ export class ContentDB {
     const tempFile = `${this.dbFile}.tmp`;
     try {
       fs.mkdirSync(path.dirname(this.dbFile), { recursive: true });
-      fs.writeFileSync(tempFile, JSON.stringify(this.data, null, 2));
+      fs.writeFileSync(tempFile, JSON.stringify(this.data, null, 2), { mode: 0o600 });
       fs.renameSync(tempFile, this.dbFile);
       return true;
     } catch (e) {
@@ -228,7 +228,10 @@ export class ContentDB {
 
     const record = { ...item, id };
     this.data[key].push(record);
-    this.save();
+    if (!this.save()) {
+      this.data[key].pop();
+      return null;
+    }
     return record;
   }
 
@@ -239,8 +242,12 @@ export class ContentDB {
     const arr = this.data[key];
     const idx = arr.findIndex(i => i.id === canonicalId);
     if (idx < 0) return false;
+    const previous = arr[idx];
     arr[idx] = { ...arr[idx], ...updates, id: canonicalId };
-    this.save();
+    if (!this.save()) {
+      arr[idx] = previous;
+      return false;
+    }
     return true;
   }
 
@@ -248,16 +255,20 @@ export class ContentDB {
     const key = canonicalContentType(type);
     if (!key || typeof id !== 'string') return false;
     const canonicalId = id.trim().slice(0, 100);
-    const before = this.data[key].length;
-    this.data[key] = this.data[key].filter(i => i.id !== canonicalId);
-    if (this.data[key].length === before) return false;
-    this.save();
+    const previous = this.data[key];
+    const next = previous.filter(i => i.id !== canonicalId);
+    if (next.length === previous.length) return false;
+    this.data[key] = next;
+    if (!this.save()) {
+      this.data[key] = previous;
+      return false;
+    }
     return true;
   }
 
   // Get all content for client sync
   getAllContent() {
-    return this.data;
+    return JSON.parse(JSON.stringify(this.data));
   }
 
   // Find a monster template by name

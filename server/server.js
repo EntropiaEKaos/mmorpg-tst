@@ -19,6 +19,7 @@ import { adventureEngine } from './engine/AdventureEngine.mjs';
 import { officialSystems } from './engine/OfficialSystems.mjs';
 import { socialSystems } from './engine/SocialSystems.mjs';
 import { validateContentReferences, findBlockingContentReferences } from './engine/ContentIntegrity.mjs';
+import { getContentStudioSchema, validateStudioRecord, collectContentDiagnostics } from './engine/ContentStudio.mjs';
 import { accountStore, sessionManager } from './engine/AuthService.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
 
@@ -461,17 +462,43 @@ const server = http.createServer((req, res) => {
 });
 
 // ===================================================================
-//  ADMIN API — Full CRUD for all content types
+//  ADMIN API — Authoritative Content Studio
 // ===================================================================
+function syncContentRuntime(type) {
+  if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }
+  else if (type === 'items') engine.syncContentItems(contentDB.get('items'));
+  else if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
+  else if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
+  else if (type === 'events') officialSystems.syncWorldEvents(contentDB.get('events'));
+}
+
 function handleAdminAPI(req, res, route) {
   const parts = route.split('/').filter(Boolean);
   const type = parts[0];
   const id = parts[1];
 
+  if (req.method === 'GET' && type === 'diagnostics') return json(res, 200, collectContentDiagnostics(contentDB));
+  if (req.method === 'GET' && type === 'export') {
+    return json(res, 200, { generatedAt: new Date().toISOString(), diagnostics: collectContentDiagnostics(contentDB), content: contentDB.getAllContent() });
+  }
+  if (req.method === 'POST' && type === 'validate' && id) {
+    if (!ALLOWED_ADMIN_TYPES.has(id)) return json(res, 404, { error: 'Unknown content type' });
+    return readJsonBody(req, res, data => {
+      const canonicalId = typeof data.id === 'string' ? data.id.trim() : '';
+      const existing = canonicalId ? contentDB.get(id).find(item => item.id === canonicalId) : null;
+      const candidate = existing ? { ...existing, ...data, id: canonicalId } : { ...data, id: canonicalId };
+      const semanticError = validateStudioRecord(id, candidate);
+      if (semanticError) return json(res, 409, { ok: false, error: semanticError });
+      const referenceError = validateContentReferences(contentDB, id, candidate);
+      if (referenceError) return json(res, 409, { ok: false, error: referenceError });
+      return json(res, 200, { ok: true, candidate });
+    });
+  }
+
   if (req.method === 'GET') {
     if (type === 'dashboard') {
       const c = contentDB.data;
-      return json(res, 200, { content: { items: c.items.length, monsters: c.monsters.length, npcs: c.npcs.length, quests: c.quests.length, spells: c.spells.length, maps: c.maps.length, events: c.worldEvents.length }, uptime: process.uptime(), tick: engine.getTickCount(), version: c.version });
+      return json(res, 200, { content: { items: c.items.length, monsters: c.monsters.length, npcs: c.npcs.length, quests: c.quests.length, spells: c.spells.length, maps: c.maps.length, events: c.worldEvents.length }, uptime: process.uptime(), tick: engine.getTickCount(), version: c.version, diagnostics: collectContentDiagnostics(contentDB) });
     }
     if (type === 'players') {
       const players = [];
@@ -481,21 +508,10 @@ function handleAdminAPI(req, res, route) {
     if (type === 'broadcast') return json(res, 200, { ok: true });
     if (!ALLOWED_ADMIN_TYPES.has(type)) return json(res, 404, { error: 'Unknown content type' });
 
-    const fieldsMap = {
-      items: ['id','name','icon','slot','attack','defense','armor','hp','mana','magic','rarity','level','value','description'],
-      monsters: ['id','name','emoji','hp','attack','defense','xp','level','type','color','size','goldMin','goldMax','mapId','count','posX','posY','speed'],
-      npcs: ['id','name','emoji','color','role','posX','posY','mapId','dialogue'],
-      spells: ['id','name','icon','mana','cooldown','damage','range','color','type','vocation','levelRequired','buffType','buffDuration','buffValue','scalingCoeff'],
-      quests: ['id','name','npcId','description','target','count','rewardGold','rewardXp','levelRequired'],
-      maps: ['id','name','biome','description','levelRequired','seed','spawnX','spawnY','townX','townY','townRange','portals'],
-      events: ['id','name','icon','description','target','count','rewardGold','rewardXp','rewardCoins','mapId','durationMs'],
-    };
     const readOnly = READ_ONLY_ADMIN_TYPES.has(type);
-    const runtimeNote = type === 'maps'
-      ? 'Authoritative runtime: edits regenerate deterministic terrain and synchronize the live world. Built-in maps cannot be deleted.'
-      : '';
+    const studio = getContentStudioSchema(type, contentDB);
     const items = type === 'maps' ? WORLD.getDefinitions() : contentDB.get(type);
-    return json(res, 200, { items, fields: fieldsMap[type] || [], readOnly, runtimeNote });
+    return json(res, 200, { items, fields: studio.fields, schema: studio.schema, options: studio.options, readOnly, runtimeNote: studio.runtimeNote });
   }
 
   if (req.method === 'POST') {
@@ -514,17 +530,16 @@ function handleAdminAPI(req, res, route) {
       if (!ALLOWED_ADMIN_TYPES.has(type)) return json(res, 404, { error: 'Unknown content type' });
       if (typeof data.id !== 'string' || !data.id.trim() || data.id.length > 100) return json(res, 400, { error: 'Valid id is required' });
 
+      data.id = data.id.trim();
       const existing = contentDB.get(type).find(i => i.id === data.id);
       const candidate = existing ? { ...existing, ...data, id: data.id } : { ...data, id: data.id };
+      const semanticError = validateStudioRecord(type, candidate);
+      if (semanticError) return json(res, 409, { error: semanticError });
       const referenceError = validateContentReferences(contentDB, type, candidate);
       if (referenceError) return json(res, 409, { error: referenceError });
       const changed = existing ? contentDB.update(type, data.id, data) : contentDB.add(type, data);
       if (!changed) return json(res, 409, { error: 'Content write was rejected' });
-      if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }
-      if (type === 'items') engine.syncContentItems(contentDB.get('items'));
-      if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
-      if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
-      if (type === 'events') officialSystems.syncWorldEvents(contentDB.get('events'));
+      syncContentRuntime(type);
       broadcastContentUpdate();
       return json(res, 200, { ok: true });
     });
@@ -543,11 +558,7 @@ function handleAdminAPI(req, res, route) {
       return json(res, 409, { error: 'Content is still referenced and cannot be deleted', references: blockers });
     }
     if (!contentDB.remove(type, id)) return json(res, 404, { error: 'Content not found' });
-    if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }
-    if (type === 'items') engine.syncContentItems(contentDB.get('items'));
-    if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
-    if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
-    if (type === 'events') officialSystems.syncWorldEvents(contentDB.get('events'));
+    syncContentRuntime(type);
     broadcastContentUpdate();
     return json(res, 200, { ok: true });
   }
