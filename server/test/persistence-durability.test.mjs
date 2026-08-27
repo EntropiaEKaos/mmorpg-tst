@@ -120,13 +120,10 @@ test('autosave persists authoritative live movement without client save or disco
   const token = await createCharacter(port, 'move', name);
   const client = await connectClient(port, token, name);
   t.after(() => { try { client.ws.close(); } catch {} });
-  const beforeX = client.initial.payload.player.x;
-  const beforeY = client.initial.payload.player.y;
-  client.send('intent', { type: 'move', payload: { dx: 1, dy: 0 }, timestamp: Date.now() });
-  const moved = await client.waitFor(message => message.kind === 'snapshot' && message.payload?.player?.x === beforeX + 1 && message.payload?.player?.y === beforeY);
-  assert.equal(moved.payload.player.x, beforeX + 1);
-  const persisted = await waitForPersisted(files.players, data => data[name]?.x === beforeX + 1 && data[name]?.y === beforeY, 4000);
-  assert.equal(persisted[name].x, beforeX + 1);
+  const moved = await moveToAnyAdjacentTile(client);
+  const persisted = await waitForPersisted(files.players, data => data[name]?.x === moved.x && data[name]?.y === moved.y, 4000);
+  assert.equal(persisted[name].x, moved.x);
+  assert.equal(persisted[name].y, moved.y);
 });
 
 test('completed direct trade is durably flushed before autosave or disconnect', async t => {
@@ -174,14 +171,11 @@ test('load_request returns current authoritative memory instead of autosave-old 
   const token = await createCharacter(port, 'live', name);
   const client = await connectClient(port, token, name);
   t.after(() => { try { client.ws.close(); } catch {} });
-  const beforeX = client.initial.payload.player.x;
-  const beforeY = client.initial.payload.player.y;
-  client.send('intent', { type: 'move', payload: { dx: 1, dy: 0 }, timestamp: Date.now() });
-  await client.waitFor(message => message.kind === 'snapshot' && message.payload?.player?.x === beforeX + 1 && message.payload?.player?.y === beforeY);
+  const moved = await moveToAnyAdjacentTile(client);
   client.send('load_request', {});
   const loaded = await client.waitFor(message => message.kind === 'load_response');
-  assert.equal(loaded.payload.x, beforeX + 1);
-  assert.equal(loaded.payload.y, beforeY);
+  assert.equal(loaded.payload.x, moved.x);
+  assert.equal(loaded.payload.y, moved.y);
 });
 
 async function moveToAnyAdjacentTile(client) {
