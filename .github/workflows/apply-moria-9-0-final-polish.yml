@@ -1,0 +1,69 @@
+name: Apply Mor'ia 9.0 Final Polish
+
+on:
+  push:
+    branches: [moria-9.0-final-polish-validated]
+    paths:
+      - tools/apply-moria-9-0-final-polish.py
+      - .github/workflows/apply-moria-9-0-final-polish.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.0-final-polish-validated
+          fetch-depth: 16
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Apply 9.0 final polish
+        run: python3 tools/apply-moria-9-0-final-polish.py
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Audit client dependencies
+        run: npm audit
+
+      - name: Typecheck client
+        run: npm run typecheck
+
+      - name: Build client
+        run: npm run build
+
+      - name: Install server dependencies
+        run: npm ci --prefix server --no-fund
+
+      - name: Audit server dependencies
+        run: npm audit --prefix server
+
+      - name: Check server syntax
+        run: npm run check --prefix server
+
+      - name: Run full server suite
+        run: npm test --prefix server
+
+      - name: Commit validated 9.0 release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git reset -- tools/apply-moria-9-0-final-polish.py .github/workflows/apply-moria-9-0-final-polish.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(9.0): finalize validated Mor'ia release line"
+          git fetch origin moria-9.0-final-polish-validated
+          git rebase origin/moria-9.0-final-polish-validated
+          git push origin HEAD:moria-9.0-final-polish-validated
