@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: moria-9.2-alpha-housing-outfits-mounts
-          fetch-depth: 16
+          fetch-depth: 32
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -56,26 +56,14 @@ jobs:
       - name: Check server syntax
         run: npm run check --prefix server
       - name: Run full server suite
-        shell: bash
-        run: |
-          set +e
-          npm test --prefix server 2>&1 | tee moria-9-2-server-test-failure.txt
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -f moria-9-2-server-test-failure.txt
-            git commit -m "chore(9.2): capture failing server gate" || true
-            git push origin HEAD:moria-9.2-alpha-housing-outfits-mounts || true
-          else
-            rm -f moria-9-2-server-test-failure.txt
-          fi
-          exit "$status"
+        run: npm test --prefix server
       - name: Commit validated 9.2 client systems
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/game/types.ts src/game/network.ts src/game/ServerSync.ts src/game/serverContentAdapters.ts src/game/playerAvatar.ts src/game/housingPresentation.ts src/game/render.ts src/components/LifeStylePanel.tsx src/components/ActiveQuestTracker.tsx src/components/GameScreen.tsx server/test/client-alpha-systems-9-2.test.mjs docs/MORIA_9_2_ALPHA_SYSTEMS.md
+          git rm -f --ignore-unmatch moria-9-2-server-test-failure.txt
+          git add -A -- src docs/MORIA_9_2_ALPHA_SYSTEMS.md server/test/client-alpha-systems-9-2.test.mjs
           git diff --cached --quiet && exit 0
           git commit -m "feat(9.2): render outfits housing and complete mount UX"
           git fetch origin moria-9.2-alpha-housing-outfits-mounts
