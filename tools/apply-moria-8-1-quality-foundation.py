@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / 'src/components/GameScreen.tsx'
@@ -23,6 +22,7 @@ exports = {
     'function customMonsterToRuntime': 'export function customMonsterToRuntime',
     'const customContentOnMap': 'export const customContentOnMap',
     'function serverNpcToClient': 'export function serverNpcToClient',
+    'function spellContentSlug': 'export function spellContentSlug',
     'function mergeServerSpells': 'export function mergeServerSpells',
     'function serverQuestToClient': 'export function serverQuestToClient',
 }
@@ -39,12 +39,11 @@ import type { CustomMonster, CustomNPC } from './content';
 ADAPTERS.write_text(adapter_source, encoding='utf-8')
 
 screen = screen[:start] + screen[end:]
-screen = re.sub(r',\s*type CustomNPC,\s*type CustomMonster', '', screen, count=1)
 anchor = "from '../game/content';"
 if anchor not in screen:
     raise SystemExit('Content import anchor not found')
 insert_at = screen.index(anchor) + len(anchor)
-adapter_import = "\nimport { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeServerSpells, serverNpcToClient, serverQuestToClient } from '../game/serverContentAdapters';"
+adapter_import = "\nimport { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeServerSpells, serverNpcToClient, serverQuestToClient, spellContentSlug } from '../game/serverContentAdapters';"
 screen = screen[:insert_at] + adapter_import + screen[insert_at:]
 SCREEN.write_text(screen, encoding='utf-8')
 
