@@ -22,6 +22,8 @@ jobs:
           node-version: 22
       - name: Apply 6.1 finalization
         run: python3 tools/apply-mvp-complete-6-1.py
+      - name: Normalize 6.1 fixture
+        run: python3 tools/fix-mvp-complete-6-1.py
       - name: Validate finalization invariants
         run: |
           grep -q "getReputationDiscount(player)" server/engine/OfficialSystems.mjs
@@ -34,6 +36,7 @@ jobs:
           grep -q "shop prices honor authoritative town reputation discounts" server/test/official-systems.test.mjs
           grep -q "official fishing gathering progresses" server/test/hardening.test.mjs
           ! grep -q "skills: _serverSkills" src/components/GameScreen.tsx
+          ! grep -q "player.official.lastGatherAt = 0" server/test/hardening.test.mjs
       - name: Validate all gates
         run: |
           npm ci
