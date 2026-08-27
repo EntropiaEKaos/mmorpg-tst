@@ -1,0 +1,32 @@
+name: Bump Mor'ia 9.6 Version
+
+on:
+  push:
+    branches: [moria-9.6-world-identity-city-editor]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Align client and server package metadata
+        run: |
+          npm version 9.6.0 --no-git-tag-version
+          cd server
+          npm version 9.6.0 --no-git-tag-version
+          cd ..
+      - name: Commit version metadata and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/bump-moria-9-6-version.yml
+          git add package.json package-lock.json server/package.json server/package-lock.json
+          git commit -m "chore(9.6): align package metadata to 9.6.0"
+          git push origin HEAD:moria-9.6-world-identity-city-editor
