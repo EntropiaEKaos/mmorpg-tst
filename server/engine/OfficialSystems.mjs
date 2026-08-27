@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { buildEquipmentLootPool } from './Items.mjs';
 import { executeOfficialAction, getOfficialActionService, hasOfficialAction } from './OfficialActionRegistry.mjs';
+import { officialCommerceDomain } from './OfficialCommerceDomain.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -829,98 +830,23 @@ export class OfficialSystems {
   }
 
   listAuction(player, itemId, rawPrice) {
-    const price = int(rawPrice, 1, 10_000_000, 0);
-    const index = player.inventory.findIndex(item => item.id === itemId);
-    const seller = playerKey(player.name);
-    if (!price || index < 0 || this.global.auctions.filter(a => a.sellerKey === seller).length >= 10) return false;
-    const [item] = player.inventory.splice(index, 1);
-    this.global.auctions.push({ id: `auction_${Date.now()}_${Math.random()}`, seller: player.name, sellerKey: seller, price, item: { ...item }, createdAt: Date.now() });
-    this.save();
-    return true;
+    return officialCommerceDomain.listAuction(this, player, itemId, rawPrice);
   }
 
   buyAuction(player, listingId, findOnlinePlayer = null) {
-    const index = this.global.auctions.findIndex(a => a.id === listingId);
-    const listing = index >= 0 ? this.global.auctions[index] : null;
-    if (!listing || listing.sellerKey === playerKey(player.name) || player.gold < listing.price) return false;
-    player.gold -= listing.price;
-    const onlineSeller = typeof findOnlinePlayer === 'function' ? findOnlinePlayer(listing.sellerKey) : null;
-    if (onlineSeller) {
-      onlineSeller.gold += listing.price;
-      onlineSeller.stats.goldEarned = (onlineSeller.stats.goldEarned || 0) + listing.price;
-    } else {
-      this.global.credits[listing.sellerKey] = int(this.global.credits[listing.sellerKey], 0, 1_000_000_000, 0) + listing.price;
-    }
-    addItem(player, { ...listing.item, id: `auction_buy_${Date.now()}_${Math.random()}` });
-    this.global.auctions.splice(index, 1);
-    this.save();
-    return true;
+    return officialCommerceDomain.buyAuction(this, player, listingId, findOnlinePlayer);
   }
 
   cancelAuction(player, listingId) {
-    const index = this.global.auctions.findIndex(a => a.id === listingId && a.sellerKey === playerKey(player.name));
-    if (index < 0) return false;
-    const [listing] = this.global.auctions.splice(index, 1);
-    addItem(player, { ...listing.item, id: `auction_cancel_${Date.now()}_${Math.random()}` });
-    this.save(); return true;
+    return officialCommerceDomain.cancelAuction(this, player, listingId);
   }
 
   sendMail(player, payload, characterExists = null) {
-    const s = this.ensurePlayer(player);
-    const now = Date.now();
-    if (now - s.lastMailAt < 30_000) return false;
-    const target = cleanText(payload.target, 24);
-    const targetKey = playerKey(target);
-    const subject = cleanText(payload.subject, 80);
-    const body = cleanText(payload.body, 500);
-    const gold = int(payload.gold, 0, 1_000_000, 0);
-    const itemId = cleanText(payload.itemId, 120);
-    if (!targetKey || targetKey === playerKey(player.name) || !subject || !body || player.gold < gold + 5) return false;
-    if (typeof characterExists === 'function' && !characterExists(target)) return false;
-
-    let item = null;
-    let itemIndex = -1;
-    if (itemId) {
-      itemIndex = player.inventory.findIndex(entry => entry.id === itemId);
-      if (itemIndex < 0) return false;
-      const source = player.inventory[itemIndex];
-      item = { ...source, quantity: 1, id: `mail_item_${now}_${Math.random()}` };
-      if (source.equipment) item.equipment = { ...source.equipment };
-    }
-
-    player.gold -= gold + 5;
-    if (itemIndex >= 0) {
-      const source = player.inventory[itemIndex];
-      if (int(source.quantity, 1, 999999, 1) > 1 && source.type !== 'equipment') source.quantity -= 1;
-      else player.inventory.splice(itemIndex, 1);
-    }
-    s.lastMailAt = now;
-    this.global.mail.push({
-      id: `mail_${now}_${Math.random()}`, from: player.name, to: targetKey, subject, body, gold, item,
-      claimed: gold === 0 && !item, read: false, sentAt: now, system: false,
-    });
-    this.global.mail = this.global.mail.slice(-5000);
-    this.save(); return true;
+    return officialCommerceDomain.sendMail(this, player, payload, characterExists);
   }
 
   markMail(player, mailId, action) {
-    const key = playerKey(player.name);
-    const index = this.global.mail.findIndex(m => m.id === mailId && m.to === key);
-    const mail = index >= 0 ? this.global.mail[index] : null;
-    if (!mail) return false;
-    if (action === 'read') mail.read = true;
-    else if (action === 'claim') {
-      if (mail.claimed) return false;
-      const gold = int(mail.gold, 0, 1_000_000, 0);
-      player.gold += gold;
-      player.stats.goldEarned = (player.stats.goldEarned || 0) + gold;
-      if (mail.item) addItem(player, { ...mail.item, id: `mail_claim_${Date.now()}_${Math.random()}` });
-      mail.claimed = true; mail.read = true;
-    } else if (action === 'delete') {
-      if (!mail.claimed && (Number(mail.gold) > 0 || mail.item)) return false;
-      this.global.mail.splice(index, 1);
-    } else return false;
-    this.save(); return true;
+    return officialCommerceDomain.markMail(this, player, mailId, action);
   }
 
   claimWorldEvent(player) {
