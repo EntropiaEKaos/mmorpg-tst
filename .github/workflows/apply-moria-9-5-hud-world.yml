@@ -1,0 +1,52 @@
+name: Apply Mor'ia 9.5 HUD World Polish
+
+on:
+  push:
+    branches: [moria-9.5-hud-world-polish]
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: ${{ !startsWith(github.event.head_commit.message, 'materialize(9.5)') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply guarded 9.5 presentation patch
+        run: python tools/apply-moria-9-5-hud-world.py
+      - name: Install client dependencies
+        run: npm ci
+      - name: Audit client dependencies
+        run: npm audit --audit-level=high
+      - name: Typecheck client
+        run: npm run typecheck
+      - name: Build client
+        run: npm run build
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+      - name: Audit server dependencies
+        working-directory: server
+        run: npm audit --audit-level=high
+      - name: Check server syntax
+        working-directory: server
+        run: npm run check
+      - name: Run complete server suite
+        working-directory: server
+        run: npm test
+      - name: Materialize validated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/GameScreen.tsx src/game/playerAvatar.ts src/game/render.ts src/index.css
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "materialize(9.5): expanded world and classic movable HUD"
+          git push origin HEAD:moria-9.5-hud-world-polish
