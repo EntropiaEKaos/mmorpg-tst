@@ -1,10 +1,12 @@
 from pathlib import Path
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREEN = ROOT / 'src/components/GameScreen.tsx'
 ADAPTERS = ROOT / 'src/game/serverContentAdapters.ts'
 ARCH_TEST = ROOT / 'server/test/client-architecture.test.mjs'
 DOC = ROOT / 'docs/MORIA_8_1_QUALITY_FOUNDATION.md'
+TX_MANAGER = ROOT / 'server/engine/OfficialTransactionManager.mjs'
 
 screen = SCREEN.read_text(encoding='utf-8')
 start_marker = 'function customNpcToRuntime'
@@ -75,6 +77,31 @@ test('GameScreen monolith cannot silently grow past the 8.1 decomposition budget
 """
 ARCH_TEST.write_text(architecture_test, encoding='utf-8')
 
+tx = TX_MANAGER.read_text(encoding='utf-8')
+old_tx_catch = """    } catch (error) {
+      rollbackRuntime();
+      throw error;
+    } finally {
+"""
+new_tx_catch = """    } catch (error) {
+      rollbackRuntime();
+      // prepareCommit runs after the domain operation has returned ok=true. If
+      // that hook throws, `result.ok` is still true, so the finally block alone
+      // cannot distinguish the failed prepare phase from a valid commit path.
+      // Release the unit-of-work lock explicitly before propagating the error.
+      this.active = false;
+      this.saveRequested = false;
+      throw error;
+    } finally {
+"""
+if old_tx_catch not in tx:
+    raise SystemExit('OfficialTransactionManager exception path marker was not found')
+tx = tx.replace(old_tx_catch, new_tx_catch, 1)
+TX_MANAGER.write_text(tx, encoding='utf-8')
+# The migration workflow stages an explicit allowlist. Stage this pre-existing
+# 8.0 correctness fix here so it is committed only after all validation gates pass.
+subprocess.run(['git', 'add', 'server/engine/OfficialTransactionManager.mjs'], cwd=ROOT, check=True)
+
 doc = """# Mor'ia 8.1 — Quality Foundation
 
 ## Objective
@@ -87,6 +114,7 @@ Version 8.1 starts the quality-first evolution of the 8.x line. The goal is to m
 - Server-content normalization has been extracted from `GameScreen.tsx` into `src/game/serverContentAdapters.ts`.
 - A regression test prevents those adapters from leaking back into the UI orchestrator.
 - A size budget prevents `GameScreen.tsx` from silently returning to its pre-8.1 size while further decomposition is underway.
+- The 8.0 transaction manager now releases its unit-of-work lock if `prepareCommit` throws after a successful domain operation, preventing subsequent official transactions from being blocked.
 - Existing server-authoritative domains, transaction boundaries and runtime coordinator remain the source of truth for online systems.
 
 ## Quality rule for 8.x
@@ -107,4 +135,5 @@ DOC.write_text(doc, encoding='utf-8')
 
 print(f'GameScreen: {len(screen.encode("utf-8"))} bytes')
 print(f'Adapters: {len(adapter_source.encode("utf-8"))} bytes')
+print('Transaction prepare-exception lock fix prepared')
 print('8.1 quality-foundation migration prepared')
