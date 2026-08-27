@@ -21,6 +21,8 @@ import { mountSystem } from './MountSystem.mjs';
 import { housingSystem } from './HousingSystem.mjs';
 import { createWorldClockSnapshot } from './WorldClock.mjs';
 import { contextualizeSpell, effectForRelation, multiplierForRelation } from './ContextualSkillEngine.mjs';
+import { applyClassDerivedStats, classBasicAttackRules, classSpellMultiplier, applyClassKillSustain } from './ClassIdentity.mjs';
+import { buildBossDefeatEvent, buildLootRewardEvent } from './RewardFeedback.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -474,8 +476,8 @@ class GameEngine {
       stats.healBonus += (rule.healBonus || 0) * rank;
     }
 
-    if (player.vocation === 'rogue' || player.vocation === 'berserker') stats.critChance += 10;
-    if (player.vocation === 'knight' || player.vocation === 'templar') stats.damageReduction += 5;
+    // 9.3: class identity is data-driven and authoritative.
+    applyClassDerivedStats(player, stats);
 
     for (const buff of this.getActiveBuffs(player)) {
       if (buff.type === 'shield') stats.damageReduction += boundedNumber(buff.value, 0, 80, 25);
@@ -491,32 +493,42 @@ class GameEngine {
 
   handleAttack(player, payload) {
     const now = Date.now();
-    if (now - player.lastAttack < 700) return false;
-
     const monsterId = typeof payload.monsterId === 'string' ? payload.monsterId : player.targetId;
     const monsters = this.monstersByMap.get(player.mapId) || [];
     const monster = monsters.find(m => m.id === monsterId && !m.dead);
     if (!monster || (monster.dungeonOwnerId && monster.dungeonOwnerId !== player.id)) return false;
 
-    const dist = Math.abs(monster.x - player.x) + Math.abs(monster.y - player.y);
-    if (dist > 2) return false;
+    const derived = this.computeDerivedStats(player);
+    const classRules = classBasicAttackRules(player, monster, derived);
+    if (now - player.lastAttack < classRules.cooldownMs) return false;
+    const dist = Math.hypot(monster.x - player.x, monster.y - player.y);
+    if (dist > classRules.range) return false;
     player.targetId = monster.id;
     player.lastAttack = now;
 
-    const derived = this.computeDerivedStats(player);
     const masteryMultiplier = 1 + officialSystems.getMasteryBonus(player);
     const baseAttack = Math.floor(derived.totalAttack * masteryMultiplier) + Math.floor(Math.random() * 8);
     const crit = Math.random() < (derived.critChance / 100);
-    let dmg = Math.max(1, baseAttack - monster.defense);
-    if (crit) dmg = Math.floor(dmg * 2);
-    if (player.vocation === 'berserker' && player.hp < derived.totalMaxHp * 0.3) dmg = Math.floor(dmg * 1.5);
+    let dmg = Math.max(1, Math.floor(baseAttack * classRules.damageMultiplier) - monster.defense);
+    if (crit) dmg = Math.floor(dmg * classRules.critMultiplier);
 
     monster.hp -= dmg;
     player.stats.damageDealt += dmg;
     const attackSkill = (player.vocation === 'paladin' || player.vocation === 'ranger') ? 'distance' : (player.equipment?.weapon ? 'sword' : 'fist');
     this.progressSkill(player, attackSkill, 1);
     officialSystems.recordWeaponHit(player);
-    this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: dmg, pos: { x: monster.x, y: monster.y }, color: crit ? '#ff4444' : '#ffdddd' });
+    this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: dmg, pos: { x: monster.x, y: monster.y }, color: crit ? '#ff4444' : '#ffdddd', critical: crit, vocation: player.vocation });
+
+    if (derived.lifesteal > 0 && dmg > 0) {
+      const before = player.hp;
+      const amount = Math.max(1, Math.floor(dmg * Math.min(50, derived.lifesteal) / 100));
+      player.hp = Math.min(derived.totalMaxHp, player.hp + amount);
+      const actual = Math.max(0, player.hp - before);
+      if (actual > 0) {
+        player.stats.healingDone += actual;
+        this.emitEvent(player.mapId, { kind: 'heal', targetId: player.id, amount: actual, text: 'Lifesteal', pos: { x: player.x, y: player.y }, color: '#c084fc', vocation: player.vocation });
+      }
+    }
 
     if (monster.hp > 0) {
       const assist = officialSystems.getPetDamage(player, monster);
@@ -535,12 +547,19 @@ class GameEngine {
     monster.respawnAt = monster.noRespawn ? Number.MAX_SAFE_INTEGER : Date.now() + (monster.type === 'boss' ? 60000 : 15000);
     player.stats.monstersKilled++;
     if (monster.type === 'boss') player.stats.bossesKilled = (player.stats.bossesKilled || 0) + 1;
+    const bossRewardEvent = buildBossDefeatEvent(player, monster);
+    if (bossRewardEvent) this.emitEvent(player.mapId, bossRewardEvent);
 
     const derived = this.computeDerivedStats(player);
+    const classSustain = applyClassKillSustain(player, monster, derived);
+    if (classSustain.hp > 0 || classSustain.mana > 0) {
+      const sustainParts = [classSustain.hp > 0 ? `+${classSustain.hp} HP` : '', classSustain.mana > 0 ? `+${classSustain.mana} MP` : ''].filter(Boolean);
+      this.emitEvent(player.mapId, { kind: 'class_sustain', targetId: player.id, text: `${classSustain.signature} · ${sustainParts.join(' · ')}`, color: classSustain.color, pos: { x: player.x, y: player.y }, vocation: player.vocation, hp: classSustain.hp, mana: classSustain.mana });
+    }
     const adventureKill = adventureEngine.onMonsterKill(player, monster);
     const taskUpdates = tibiaTaskEngine.onMonsterKill(player, monster, contentDB);
     for (const update of taskUpdates) {
-      this.emitEvent(player.mapId, { kind:update.ready ? 'task_ready' : 'task_progress', targetId:player.id, text:`${update.name}: ${update.current}/${update.needed}${update.ready ? ' · return to task master' : ''}`, color:update.ready ? '#f4e04d' : '#9bd4ff' });
+      this.emitEvent(player.mapId, { kind:update.ready ? 'task_ready' : 'task_progress', targetId:player.id, text:`${update.name}: ${update.current}/${update.needed}${update.ready ? ' · return to task master' : ''}`, color:update.ready ? '#f4e04d' : '#9bd4ff', pos:{ x:player.x, y:player.y }, vocation:player.vocation });
     }
     const officialKill = officialSystems.onMonsterKill(player, monster);
     const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100) * adventureKill.xpMultiplier * officialKill.xpMultiplier);
@@ -552,7 +571,7 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind: 'quest_progress', targetId: player.id, text: `${prog.name}: ${prog.current}/${prog.needed}`, color: '#9bd4ff', pos: { x: player.x, y: player.y } });
     }
     for (const comp of questResult.completed) {
-      this.emitEvent(player.mapId, { kind: 'quest_complete', targetId: player.id, text: `✅ ${comp.quest.name} COMPLETE!`, color: '#2ecc71', pos: { x: player.x, y: player.y } });
+      this.emitEvent(player.mapId, { kind: 'quest_complete', targetId: player.id, text: `✅ ${comp.quest.name} COMPLETE!`, color: '#2ecc71', pos: { x: player.x, y: player.y }, vocation: player.vocation });
     }
 
     if (adventureKill.comboCount > 1) {
@@ -563,7 +582,7 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind: 'adventure_progress', targetId: player.id, text: `⚔ ${p.title}: ${p.current}/${p.needed}`, color: '#7dd3fc', pos: { x: player.x, y: player.y } });
     }
     if (adventureKill.becameReady) {
-      this.emitEvent(player.mapId, { kind: 'adventure_ready', targetId: player.id, text: '🏆 Hunt complete! Open Hunts (H) to claim your reward.', color: '#ffd87b', pos: { x: player.x, y: player.y } });
+      this.emitEvent(player.mapId, { kind: 'adventure_ready', targetId: player.id, text: '🏆 Hunt complete! Open Hunts (H) to claim your reward.', color: '#ffd87b', pos: { x: player.x, y: player.y }, vocation: player.vocation });
     }
 
 
@@ -585,6 +604,8 @@ class GameEngine {
     }
 
     const loot = [...rollLoot(monster, derived.goldBonus, this.contentItems, player.mapId, contentDB.get('lootTables')), ...(officialKill.bonusLoot || [])];
+    const lootRewardEvent = buildLootRewardEvent(player, loot, { x: monster.x, y: monster.y });
+    if (lootRewardEvent) this.emitEvent(player.mapId, lootRewardEvent);
     if (loot.length > 0) {
       const groundItems = this.groundItemsByMap.get(player.mapId) || [];
       groundItems.push({ id: `ground_${Date.now()}_${Math.random()}`, x: monster.x, y: monster.y, items: loot, expireAt: Date.now() + 120000 });
@@ -600,7 +621,7 @@ class GameEngine {
       player.maxMana += voc.manaPerLevel; player.mana = player.maxMana;
       player.attack += voc.atkPerLevel; player.defense += voc.defPerLevel; player.magic += voc.magPerLevel;
       player.stats.levelUps++;
-      this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y } });
+      this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y }, vocation: player.vocation });
     }
   }
 
@@ -659,11 +680,11 @@ class GameEngine {
     const casterDerived = this.computeDerivedStats(player);
     const clock = createWorldClockSnapshot(now);
     const basePower = Math.max(0, Number(spell.damage) || 0) + Math.floor(casterDerived.totalMagic * (Number(spell.scalingCoeff) || 1) * 0.5);
-    this.emitEvent(player.mapId, { kind: 'spell', targetId: player.id, text: spell.name, color: spell.color, pos: { x: player.x, y: player.y } });
+    this.emitEvent(player.mapId, { kind: 'spell', targetId: player.id, text: spell.name, color: spell.color, pos: { x: player.x, y: player.y }, vocation: player.vocation });
 
     for (const target of actionableTargets) {
       const effect = effectForRelation(spell, target.relation);
-      const multiplier = multiplierForRelation(spell, target.relation, clock);
+      const multiplier = multiplierForRelation(spell, target.relation, clock) * classSpellMultiplier(player, spell, effect);
       if (multiplier <= 0) continue;
 
       if (target.kind === 'player' && effect === 'heal') {
@@ -674,7 +695,7 @@ class GameEngine {
         receiver.hp = Math.min(receiverDerived.totalMaxHp, receiver.hp + healAmount);
         const actual = Math.max(0, receiver.hp - before);
         player.stats.healingDone += actual;
-        this.emitEvent(player.mapId, { kind: 'heal', targetId: receiver.id, amount: actual, text: `${spell.name} x${multiplier.toFixed(2)}`, pos: { x: receiver.x, y: receiver.y }, color: '#2ecc71' });
+        this.emitEvent(player.mapId, { kind: 'heal', targetId: receiver.id, amount: actual, text: `${spell.name} x${multiplier.toFixed(2)}`, pos: { x: receiver.x, y: receiver.y }, color: '#2ecc71', vocation: player.vocation });
         continue;
       }
 
@@ -688,7 +709,7 @@ class GameEngine {
         const value = boundedNumber(rawValue * multiplier, 0, 100, rawValue);
         receiver.buffs = this.getActiveBuffs(receiver, now).filter(buff => buff.type !== buffType);
         receiver.buffs.push({ id: `${buffType}_${now}_${player.id}`, type: buffType, name: spell.name, value, startTime: now, expiresAt: now + duration });
-        this.emitEvent(player.mapId, { kind: 'buff', targetId: receiver.id, text: `${spell.name} x${multiplier.toFixed(2)}`, color: spell.color, pos: { x: receiver.x, y: receiver.y } });
+        this.emitEvent(player.mapId, { kind: 'buff', targetId: receiver.id, text: `${spell.name} x${multiplier.toFixed(2)}`, color: spell.color, pos: { x: receiver.x, y: receiver.y }, vocation: player.vocation });
         continue;
       }
 
@@ -698,7 +719,7 @@ class GameEngine {
         const damage = Math.max(1, rawDamage - Math.max(0, Number(monster.defense) || 0));
         monster.hp -= damage;
         player.stats.damageDealt += damage;
-        this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: damage, text: `${spell.name} x${multiplier.toFixed(2)}`, pos: { x: monster.x, y: monster.y }, color: spell.color });
+        this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: damage, text: `${spell.name} x${multiplier.toFixed(2)}`, pos: { x: monster.x, y: monster.y }, color: spell.color, vocation: player.vocation });
         if (effect === 'drain' && spell.drainPercent > 0) {
           const derivedNow = this.computeDerivedStats(player);
           const drained = Math.max(1, Math.floor(damage * spell.drainPercent / 100));
@@ -706,7 +727,7 @@ class GameEngine {
           player.hp = Math.min(derivedNow.totalMaxHp, player.hp + drained);
           const actual = Math.max(0, player.hp - before);
           player.stats.healingDone += actual;
-          this.emitEvent(player.mapId, { kind: 'heal', targetId: player.id, amount: actual, text: `${spell.name} drain`, pos: { x: player.x, y: player.y }, color: '#c084fc' });
+          this.emitEvent(player.mapId, { kind: 'heal', targetId: player.id, amount: actual, text: `${spell.name} drain`, pos: { x: player.x, y: player.y }, color: '#c084fc', vocation: player.vocation });
         }
         if (monster.hp <= 0) this.killMonster(player, monster);
       }
@@ -1005,7 +1026,7 @@ class GameEngine {
       player.maxMana += voc.manaPerLevel; player.mana = player.maxMana;
       player.attack += voc.atkPerLevel; player.defense += voc.defPerLevel; player.magic += voc.magPerLevel;
       player.stats.levelUps++;
-      this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y } });
+      this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y }, vocation: player.vocation });
     }
 
     const cacheText = cacheItem ? ` · 🎁 Cache: ${cacheItem}` : result.cache ? ' · 🎁 Equipment cache earned' : '';
@@ -1027,7 +1048,7 @@ class GameEngine {
       player.maxMana += voc.manaPerLevel; player.mana = player.maxMana;
       player.attack += voc.atkPerLevel; player.defense += voc.defPerLevel; player.magic += voc.magPerLevel;
       player.stats.levelUps++;
-      this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y } });
+      this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y }, vocation: player.vocation });
     }
   }
 
@@ -1108,7 +1129,7 @@ class GameEngine {
         this.emitEvent(player.mapId, { kind: 'quest_progress', targetId: player.id, text: `${prog.name}: ${prog.current}/${prog.needed}`, color: '#9bd4ff', pos: { x: player.x, y: player.y } });
       }
       for (const comp of questEngine.checkCompletion(player.id)) {
-        this.emitEvent(player.mapId, { kind: 'quest_complete', targetId: player.id, text: `✅ ${comp.quest.name} COMPLETE!`, color: '#2ecc71', pos: { x: player.x, y: player.y } });
+        this.emitEvent(player.mapId, { kind: 'quest_complete', targetId: player.id, text: `✅ ${comp.quest.name} COMPLETE!`, color: '#2ecc71', pos: { x: player.x, y: player.y }, vocation: player.vocation });
       }
     }
     if (action === 'mystery_answer' && result.detail?.completed) text += ' · mystery completed!';
@@ -1209,7 +1230,7 @@ class GameEngine {
         player.hp = player.maxHp;
         player.mana = player.maxMana;
         player.stats.levelUps++;
-        this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y } });
+        this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y }, vocation: player.vocation });
       }
       this.emitEvent(player.mapId, { kind: 'quest_complete', targetId: player.id, text: `✅ ${result.quest.name}: +${result.rewards.gold}g, +${result.rewards.xp}XP`, color: '#2ecc71' });
     } else {

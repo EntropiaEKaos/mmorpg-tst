@@ -248,7 +248,7 @@ class ServerSyncManager {
           if (event.text) addMessage('Quest', event.text, event.color || '#9bd4ff', 'quest');
           break;
         case 'quest_complete':
-          if (event.text) addMessage('Quest', event.text, event.color || '#58d6a8', 'quest');
+          if (event.text) { addMessage('Quest', event.text, event.color || '#58d6a8', 'quest'); addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#58d6a8', true); }
           break;
         case 'adventure_combo':
           if (event.text) addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#ffb84d', true);
@@ -257,17 +257,28 @@ class ServerSyncManager {
           if (event.text) addMessage('Hunt', event.text, event.color || '#7dd3fc', 'battle');
           break;
         case 'adventure_ready':
-          if (event.text) addMessage('Hunt', event.text, event.color || '#ffd87b', 'system');
+          if (event.text) { addMessage('Hunt', event.text, event.color || '#ffd87b', 'system'); addFloatingText('HUNT COMPLETE!', event.pos || { x: 0, y: 0 }, event.color || '#ffd87b', true); }
           break;
         case 'adventure_claimed':
-          if (event.text) addMessage('Hunt', event.text, event.color || '#ffd87b', 'loot');
+          if (event.text) { addMessage('Hunt', event.text, event.color || '#ffd87b', 'loot'); addFloatingText('REWARD CLAIMED!', event.pos || { x: 0, y: 0 }, event.color || '#ffd87b', true); }
           break;
         case 'task_progress':
           if (event.text) addMessage('Task', event.text, event.color || '#7dd3fc', 'quest');
           break;
         case 'task_ready':
+          if (event.text) { addMessage('Task', event.text, event.color || '#ffd87b', 'quest'); addFloatingText('TASK COMPLETE!', event.pos || { x: 0, y: 0 }, event.color || '#ffd87b', true); }
+          break;
         case 'task_update':
           if (event.text) addMessage('Task', event.text, event.color || '#ffd87b', 'quest');
+          break;
+        case 'loot_reward':
+          if (event.text) { addMessage('Loot', event.text, event.color || '#f4e04d', 'loot'); if ((Number(event.rewardTier) || 0) >= 2) addFloatingText(`${String(event.rarity || 'rare').toUpperCase()} DROP!`, event.pos || { x: 0, y: 0 }, event.color || '#f4e04d', true); }
+          break;
+        case 'boss_defeated':
+          if (event.text) { addMessage('Victory', event.text, event.color || '#ffbf5f', 'system'); addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#ffbf5f', true); }
+          break;
+        case 'class_sustain':
+          if (event.text) addFloatingText(event.text, event.pos || { x: 0, y: 0 }, event.color || '#c084fc', false);
           break;
         case 'housing_update':
           if (event.text) addMessage('Housing', event.text, event.color || '#d9bd7a', 'system');

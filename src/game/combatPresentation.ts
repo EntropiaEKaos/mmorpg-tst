@@ -1,4 +1,5 @@
 import { audio } from './audio';
+import { classCombatFx, rewardFxForEvent } from './rewardPresentation';
 
 export interface CombatTargetCandidate {
   id: string;
@@ -41,6 +42,33 @@ export function applyAuthoritativeCombatFeedback(
   const pos = event.pos && Number.isFinite(event.pos.x) && Number.isFinite(event.pos.y)
     ? event.pos as Position
     : fallbackPos;
+
+  const rewardFx = rewardFxForEvent(event);
+  if (rewardFx) {
+    spawnParticles(pos, rewardFx.color, rewardFx.particles);
+    if (rewardFx.secondary && rewardFx.secondary !== rewardFx.color) {
+      spawnParticles(pos, rewardFx.secondary, Math.max(4, Math.floor(rewardFx.particles * 0.45)));
+    }
+    if (rewardFx.shake > 0) applyShake(rewardFx.shake);
+    if (event.kind === 'levelup') audio.levelUp();
+    else if (event.kind === 'boss_defeated' || event.kind === 'loot_reward') audio.hitCrit();
+    else if (event.kind === 'quest_complete' || event.kind === 'task_ready' || event.kind === 'adventure_claimed') audio.heal();
+    return;
+  }
+
+  const classFx = classCombatFx(event);
+  if (classFx) {
+    spawnParticles(pos, classFx.color, classFx.particles);
+    spawnParticles(pos, classFx.secondary, Math.max(3, Math.floor(classFx.particles * 0.35)));
+    if (classFx.shake > 0) applyShake(classFx.shake);
+    if (event.kind === 'damage') {
+      const amount = Math.max(0, Number(event.amount) || 0);
+      if (event.critical || amount >= 100) audio.hitCrit(); else audio.hit();
+    } else if (event.kind === 'heal') {
+      audio.heal();
+    }
+    return;
+  }
 
   switch (event.kind) {
     case 'damage': {
