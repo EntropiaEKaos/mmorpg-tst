@@ -25,8 +25,18 @@ export function rewardFxForEvent(event: any): RewardFxRecipe | null {
         big: tier >= 2,
       };
     }
+    case 'boss_intro':
+      return { color: event.color || '#ffbf5f', secondary: '#fff0bd', particles: 34, shake: 9, floating: event.subtitle || event.text || 'BOSS APPROACHES', big: true };
     case 'boss_defeated':
       return { color: '#ffbf5f', secondary: identity.accent, particles: 52, shake: 12, floating: event.text || 'BOSS DEFEATED!', big: true };
+    case 'region_discovered':
+      return { color: event.color || '#7dd3fc', secondary: '#d9f6ff', particles: 24, shake: 2, floating: event.subtitle || 'REGION DISCOVERED', big: true };
+    case 'achievement_unlocked':
+      return { color: event.color || '#c084fc', secondary: '#f1dcff', particles: 34, shake: 4, floating: event.subtitle || 'ACHIEVEMENT!', big: true };
+    case 'cosmetic_unlocked':
+      return { color: event.color || '#d49bc8', secondary: '#ffe3f8', particles: 32, shake: 3, floating: event.subtitle || 'UNLOCKED!', big: true };
+    case 'reward_chest_opened':
+      return { color: event.color || '#ffb347', secondary: '#fff0bd', particles: 42, shake: 6, floating: event.subtitle || 'TREASURE!', big: true };
     case 'levelup':
       return { color: '#ffe36b', secondary: identity.accent, particles: 38, shake: 5, floating: event.text || 'LEVEL UP!', big: true };
     case 'quest_complete':
