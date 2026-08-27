@@ -9,6 +9,7 @@ import { VOCATIONS } from './Vocations.mjs';
 import { rollLoot, getStarterInventory, buildEquipmentLootPool } from './Items.mjs';
 import { questEngine } from './QuestEngine.mjs';
 import { adventureEngine, createAdventureState } from './AdventureEngine.mjs';
+import { officialSystems } from './OfficialSystems.mjs';
 import { contentDB } from './ContentDB.mjs';
 
 
@@ -87,6 +88,7 @@ class GameEngine {
       lastAttack: 0, lastMove: 0, lastRegen: 0, cooldowns: {},
       mounted: false, professions: {}, reputation: { town: 0 }, talents: {},
       adventure: createAdventureState(),
+      official: null,
       stats: { monstersKilled: 0, damageDealt: 0, damageTaken: 0, healingDone: 0, goldEarned: 0, deaths: 0, levelUps: 0, spellsCast: 0, adventuresCompleted: 0 },
       ws, lastActivity: Date.now(),
     };
@@ -259,6 +261,7 @@ class GameEngine {
       case 'adventure_start': return this.handleAdventureStart(player, payload);
       case 'adventure_abandon': return this.handleAdventureAbandon(player);
       case 'adventure_claim': return this.handleAdventureClaim(player);
+      case 'official': return this.handleOfficial(player, payload);
       case 'quest_accept': return this.handleQuestAccept(player, payload);
       case 'quest_complete': return this.handleQuestComplete(player, payload);
       case 'travel': return this.handleTravel(player, payload);
@@ -272,10 +275,9 @@ class GameEngine {
     if (Math.abs(dx) + Math.abs(dy) !== 1) return false;
 
     const now = Date.now();
-    const activeBuffs = this.getActiveBuffs(player, now);
-    const haste = activeBuffs.find(buff => buff.type === 'haste');
-    const hasteValue = haste ? boundedNumber(haste.value, 0, 50, 35) : 0;
-    const moveCooldown = Math.max(50, Math.floor(100 * (1 - hasteValue / 100)));
+    const movementStats = this.computeDerivedStats(player);
+    const moveBonus = boundedNumber(movementStats.moveSpeed, 0, 50, 0);
+    const moveCooldown = Math.max(50, Math.floor(100 * (1 - moveBonus / 100)));
     if (now - player.lastMove < moveCooldown) return false;
 
     const nx = player.x + dx, ny = player.y + dy;
@@ -321,6 +323,7 @@ class GameEngine {
       if (!eq) continue;
       stats.totalAttack += Number(eq.attack) || 0;
       stats.totalDefense += Number(eq.defense) || 0;
+      stats.totalDefense += Number(eq.armor) || 0;
       stats.totalMagic += Number(eq.magic) || 0;
       stats.totalMaxHp += Number(eq.hp) || 0;
       stats.totalMaxMana += Number(eq.mana) || 0;
@@ -330,6 +333,7 @@ class GameEngine {
       stats.xpBonus += Number(eq.xpBonus) || 0;
       stats.goldBonus += Number(eq.goldBonus) || 0;
       stats.damageReduction += Number(eq.damageReduction) || 0;
+      stats.moveSpeed += Number(eq.moveSpeed) || 0;
     }
 
     // Attribute-changing talents are applied to base stats at purchase time;
@@ -353,6 +357,7 @@ class GameEngine {
       else if (buff.type === 'frenzy') stats.totalAttack *= 1 + boundedNumber(buff.value, 0, 100, 25) / 100;
       else if (buff.type === 'haste') stats.moveSpeed += boundedNumber(buff.value, 0, 100, 35);
     }
+    officialSystems.applyDerivedBonuses(player, stats);
     stats.totalAttack = Math.max(0, Math.floor(stats.totalAttack));
     stats.critChance = Math.max(0, Math.min(100, stats.critChance));
     stats.damageReduction = Math.max(0, Math.min(80, stats.damageReduction));
@@ -366,7 +371,7 @@ class GameEngine {
     const monsterId = typeof payload.monsterId === 'string' ? payload.monsterId : player.targetId;
     const monsters = this.monstersByMap.get(player.mapId) || [];
     const monster = monsters.find(m => m.id === monsterId && !m.dead);
-    if (!monster) return false;
+    if (!monster || (monster.dungeonOwnerId && monster.dungeonOwnerId !== player.id)) return false;
 
     const dist = Math.abs(monster.x - player.x) + Math.abs(monster.y - player.y);
     if (dist > 2) return false;
@@ -374,7 +379,8 @@ class GameEngine {
     player.lastAttack = now;
 
     const derived = this.computeDerivedStats(player);
-    const baseAttack = derived.totalAttack + Math.floor(Math.random() * 8);
+    const masteryMultiplier = 1 + officialSystems.getMasteryBonus(player);
+    const baseAttack = Math.floor(derived.totalAttack * masteryMultiplier) + Math.floor(Math.random() * 8);
     const crit = Math.random() < (derived.critChance / 100);
     let dmg = Math.max(1, baseAttack - monster.defense);
     if (crit) dmg = Math.floor(dmg * 2);
@@ -382,19 +388,30 @@ class GameEngine {
 
     monster.hp -= dmg;
     player.stats.damageDealt += dmg;
+    officialSystems.recordWeaponHit(player);
     this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: dmg, pos: { x: monster.x, y: monster.y }, color: crit ? '#ff4444' : '#ffdddd' });
+
+    if (monster.hp > 0) {
+      const assist = officialSystems.getPetDamage(player, monster);
+      if (assist) {
+        monster.hp -= assist.damage;
+        player.stats.damageDealt += assist.damage;
+        this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: assist.damage, pos: { x: monster.x, y: monster.y }, color: assist.pet.color, text: `${assist.pet.icon} ${assist.damage}` });
+      }
+    }
     if (monster.hp <= 0) this.killMonster(player, monster);
     return true;
   }
 
   killMonster(player, monster) {
     monster.dead = true;
-    monster.respawnAt = Date.now() + (monster.type === 'boss' ? 60000 : 15000);
+    monster.respawnAt = monster.noRespawn ? Number.MAX_SAFE_INTEGER : Date.now() + (monster.type === 'boss' ? 60000 : 15000);
     player.stats.monstersKilled++;
 
     const derived = this.computeDerivedStats(player);
     const adventureKill = adventureEngine.onMonsterKill(player, monster);
-    const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100) * adventureKill.xpMultiplier);
+    const officialKill = officialSystems.onMonsterKill(player, monster);
+    const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100) * adventureKill.xpMultiplier * officialKill.xpMultiplier);
     player.xp += xpGain;
     this.emitEvent(player.mapId, { kind: 'xp', targetId: player.id, amount: xpGain, pos: { x: monster.x, y: monster.y }, color: '#f4e04d', text: `+${xpGain} XP` });
 
@@ -417,7 +434,25 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind: 'adventure_ready', targetId: player.id, text: '🏆 Hunt complete! Open Hunts (H) to claim your reward.', color: '#ffd87b', pos: { x: player.x, y: player.y } });
     }
 
-    const loot = rollLoot(monster, derived.goldBonus, this.contentItems);
+
+    if (officialKill.worldEventProgress) {
+      const event = officialKill.worldEventProgress;
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🌍 ${event.name}: ${event.progress}/${event.needed}`, color: '#ff9b4d', pos: { x: player.x, y: player.y } });
+    }
+    for (const achievement of officialKill.achievements || []) {
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🏆 Achievement: ${achievement.icon} ${achievement.name} · +${achievement.coins} coins`, color: '#c084fc', pos: { x: player.x, y: player.y } });
+    }
+    if (officialKill.nextDungeonWave) {
+      this.spawnOfficialDungeonWave(player);
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🌀 Dungeon wave ${officialKill.nextDungeonWave} begins!`, color: '#c084fc', pos: { x: player.x, y: player.y } });
+    }
+    if (officialKill.dungeonComplete) {
+      this.clearOfficialDungeon(player);
+      const reward = officialKill.dungeonComplete;
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🏆 Dungeon cleared: +${reward.gold}g +${reward.xp}XP +${reward.coins} coins`, color: '#ffd87b', pos: { x: player.x, y: player.y } });
+    }
+
+    const loot = [...rollLoot(monster, derived.goldBonus, this.contentItems), ...(officialKill.bonusLoot || [])];
     if (loot.length > 0) {
       const groundItems = this.groundItemsByMap.get(player.mapId) || [];
       groundItems.push({ id: `ground_${Date.now()}_${Math.random()}`, x: monster.x, y: monster.y, items: loot, expireAt: Date.now() + 120000 });
@@ -476,7 +511,7 @@ class GameEngine {
     } else {
       const monsters = this.monstersByMap.get(player.mapId) || [];
       for (const m of monsters) {
-        if (m.dead) continue;
+        if (m.dead || (m.dungeonOwnerId && m.dungeonOwnerId !== player.id)) continue;
         const dist = Math.hypot(m.x - player.x, m.y - player.y);
         if (dist <= spell.range) {
           const baseDmg = spell.damage + Math.floor(derived.totalMagic * (spell.scalingCoeff || 1) * 0.5);
@@ -744,6 +779,95 @@ class GameEngine {
     return true;
   }
 
+  applyLevelUps(player) {
+    const voc = VOCATIONS[player.vocation];
+    while (voc && player.xp >= player.xpNext) {
+      player.xp -= player.xpNext;
+      player.level++;
+      player.xpNext = Math.floor(player.xpNext * 1.4);
+      player.maxHp += voc.hpPerLevel; player.hp = player.maxHp;
+      player.maxMana += voc.manaPerLevel; player.mana = player.maxMana;
+      player.attack += voc.atkPerLevel; player.defense += voc.defPerLevel; player.magic += voc.magPerLevel;
+      player.stats.levelUps++;
+      this.emitEvent(player.mapId, { kind: 'levelup', targetId: player.id, text: `LEVEL ${player.level}!`, color: '#f4e04d', pos: { x: player.x, y: player.y } });
+    }
+  }
+
+  clearOfficialDungeon(player) {
+    for (const [mapId, monsters] of this.monstersByMap) {
+      this.monstersByMap.set(mapId, monsters.filter(monster => monster.dungeonOwnerId !== player.id));
+    }
+  }
+
+  spawnOfficialDungeonWave(player) {
+    const state = player.official?.dungeon;
+    if (!state?.active || !state.runId) return false;
+    const map = WORLD.getMap(player.mapId);
+    if (!map) return false;
+    this.clearOfficialDungeon(player);
+    const wave = officialSystems.getDungeonWave(state.wave, player.level);
+    const monsters = this.monstersByMap.get(player.mapId) || [];
+    const occupied = new Set(monsters.filter(m => !m.dead).map(m => `${m.x},${m.y}`));
+    occupied.add(`${player.x},${player.y}`);
+    const spawned = [];
+    for (let index = 0; index < wave.count; index++) {
+      let pos = null;
+      for (let attempt = 0; attempt < 120; attempt++) {
+        const x = player.x + (Math.floor(Math.random() * 11) - 5);
+        const y = player.y + (Math.floor(Math.random() * 11) - 5);
+        if (map.tiles?.[y]?.[x]?.walkable && !occupied.has(`${x},${y}`)) { pos = { x, y }; break; }
+      }
+      if (!pos) pos = WORLD.findWalkableSpawn(map);
+      occupied.add(`${pos.x},${pos.y}`);
+      spawned.push({
+        id: `${state.runId}_${state.wave}_${index}`, dungeonOwnerId: player.id, dungeonRunId: state.runId, noRespawn: true,
+        name: wave.name, emoji: wave.emoji, color: wave.color, x: pos.x, y: pos.y, spawnX: pos.x, spawnY: pos.y,
+        hp: wave.hp, maxHp: wave.hp, attack: wave.attack, defense: wave.defense, xp: wave.xp,
+        level: Math.max(1, player.level + state.wave - 1), size: wave.boss ? 1.6 : 1, type: wave.boss ? 'boss' : state.wave >= 7 ? 'elite' : 'normal',
+        dead: false, respawnAt: 0, lastMove: 0, lastAttack: 0, speed: 900,
+      });
+    }
+    this.monstersByMap.set(player.mapId, [...monsters, ...spawned]);
+    return true;
+  }
+
+  handleOfficial(player, payload) {
+    const action = typeof payload.action === 'string' ? payload.action : '';
+    const result = officialSystems.handle(player, payload, {
+      world: WORLD,
+      contentItems: this.contentItems,
+      getPlayer: id => this.players.get(id),
+      startDungeon: () => this.spawnOfficialDungeonWave(player),
+      clearDungeon: () => this.clearOfficialDungeon(player),
+    });
+    if (!result.ok) {
+      this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `❌ ${result.error || 'Official action rejected.'}`, color: '#ff6060', pos: { x: player.x, y: player.y } });
+      return false;
+    }
+    this.applyLevelUps(player);
+    const labels = {
+      pet_buy: '🐾 Companion acquired', pet_toggle: '🐾 Companion updated', depot_put: '🗄 Item stored', depot_take: '🗄 Item withdrawn',
+      bank_deposit: '🏦 Deposit complete', bank_withdraw: '🏦 Withdrawal complete', rest: '💚 Rested and restored', train: '📚 Training complete',
+      food_buy: '🍲 Food buff active', shop_buy: '🛒 Purchase complete', craft: '⚒ Craft complete', socket_gem: '💎 Gem socketed',
+      daily_claim: '🎁 Daily reward claimed', gather: '⛏ Resource gathered', book_read: '📚 Book marked read', mystery_answer: '✦ Mystery answer accepted',
+      coin_buy: '💎 Coin purchase complete', auction_list: '🏛 Auction listed', auction_buy: '🏛 Auction purchase complete', auction_cancel: '🏛 Auction cancelled',
+      mail_send: '📮 Mail sent', mail_read: '📮 Mail read', mail_claim: '📮 Attachment claimed', mail_delete: '📮 Mail deleted',
+      world_event_claim: '🌍 World event reward claimed', pvp_toggle: '⚔ PvP status updated', pvp_attack: '⚔ PvP attack',
+      dungeon_start: '🌀 Dungeon started', dungeon_abandon: '🌀 Dungeon abandoned',
+    };
+    let text = labels[action] || '✓ Official action complete';
+    if (action === 'daily_claim' && result.detail) text += ` · +${result.detail.gold}g +${result.detail.xp}XP +${result.detail.coins} coins`;
+    if (action === 'gather' && result.detail) text += ` · +${result.detail.quantity} ${result.detail.name}`;
+    if (action === 'mystery_answer' && result.detail?.completed) text += ' · mystery completed!';
+    if (action === 'pvp_attack' && result.detail) {
+      text += ` · ${result.detail.damage} damage · skull ${result.detail.skull}`;
+      const target = this.players.get(payload.targetId);
+      if (target) this.emitEvent(target.mapId, { kind: 'system', targetId: target.id, text: `${player.name} hit you for ${result.detail.damage}${result.detail.killed ? ' · DEFEATED' : ''}`, color: '#ff6060', pos: { x: target.x, y: target.y } });
+    }
+    this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text, color: '#7dd3fc', pos: { x: player.x, y: player.y } });
+    return true;
+  }
+
   getQuestNpcRequirement(questId) {
     const quest = contentDB.get('quests').find(entry => entry?.id === questId);
     if (!quest || typeof quest.npcId !== 'string' || !quest.npcId.trim()) return null;
@@ -829,11 +953,12 @@ class GameEngine {
     const monsters = this.monstersByMap.get(mapId) || [];
     const players = this.getPlayersOnMap(mapId);
     for (const m of monsters) {
-      if (m.dead) { if (now >= m.respawnAt) { m.dead = false; m.hp = m.maxHp; m.x = m.spawnX; m.y = m.spawnY; } continue; }
+      if (m.dead) { if (!m.noRespawn && now >= m.respawnAt) { m.dead = false; m.hp = m.maxHp; m.x = m.spawnX; m.y = m.spawnY; } continue; }
       if (players.length === 0) continue;
 
       let nearest = null, minDist = 8;
       for (const p of players) {
+        if (m.dungeonOwnerId && p.id !== m.dungeonOwnerId) continue;
         if (this.getActiveBuffs(p, now).some(buff => buff.type === 'invisible')) continue;
         const d = Math.abs(p.x - m.x) + Math.abs(p.y - m.y);
         if (d < minDist) { minDist = d; nearest = p; }
@@ -848,8 +973,10 @@ class GameEngine {
         this.emitEvent(mapId, { kind: 'damage', targetId: nearest.id, amount: dmg, pos: { x: nearest.x, y: nearest.y }, color: '#ff6060' });
         if (nearest.hp <= 0) {
           nearest.hp = derived.totalMaxHp; nearest.mana = derived.totalMaxMana;
+          const deathLoss = officialSystems.getDeathLossMultiplier(nearest);
+          nearest.xp = Math.max(0, nearest.xp - Math.floor(nearest.xpNext * 0.1 * deathLoss));
+          if (nearest.official?.dungeon?.active) { officialSystems.failDungeon(nearest); this.clearOfficialDungeon(nearest); }
           nearest.x = 40; nearest.y = 40; nearest.mapId = 'eldoria';
-          nearest.xp = Math.max(0, nearest.xp - Math.floor(nearest.xpNext * 0.1));
           nearest.stats.deaths++;
           this.emitEvent(nearest.mapId, { kind: 'death', targetId: nearest.id, text: 'You died!', color: '#ff0000', pos: { x: nearest.x, y: nearest.y } });
         }
@@ -875,6 +1002,7 @@ class GameEngine {
     const now = Date.now();
     this.tickCount++;
     for (const p of this.players.values()) {
+      officialSystems.tickPlayer(p, now);
       if (now - p.lastRegen > 2000) {
         const derived = this.computeDerivedStats(p);
         if (p.hp < derived.totalMaxHp) p.hp = Math.min(derived.totalMaxHp, p.hp + 2);
@@ -898,6 +1026,7 @@ class GameEngine {
     const playerData = {
       ...player,
       ws: undefined,
+      official: undefined,
       attack: derived.totalAttack,
       defense: derived.totalDefense,
       magic: derived.totalMagic,
@@ -920,12 +1049,12 @@ class GameEngine {
       if (p.id !== playerId && p.mapId === player.mapId && Math.abs(p.x - player.x) + Math.abs(p.y - player.y) < 25) {
         const voc = VOCATIONS[p.vocation];
         const pDerived = this.computeDerivedStats(p);
-        nearbyPlayers.push({ id: p.id, name: p.name, vocation: p.vocation, level: p.level, x: p.x, y: p.y, direction: p.direction, hp: p.hp, maxHp: pDerived.totalMaxHp, mounted: p.mounted, icon: voc?.icon, color: voc?.color });
+        nearbyPlayers.push({ id: p.id, name: p.name, vocation: p.vocation, level: p.level, x: p.x, y: p.y, direction: p.direction, hp: p.hp, maxHp: pDerived.totalMaxHp, mounted: p.mounted, icon: voc?.icon, color: voc?.color, ...officialSystems.publicPvp(p) });
       }
     }
 
     const allMonsters = this.monstersByMap.get(player.mapId) || [];
-    const monsters = allMonsters.filter(m => !m.dead && Math.abs(m.x - player.x) < 15 && Math.abs(m.y - player.y) < 15)
+    const monsters = allMonsters.filter(m => !m.dead && (!m.dungeonOwnerId || m.dungeonOwnerId === playerId) && Math.abs(m.x - player.x) < 15 && Math.abs(m.y - player.y) < 15)
       .map(m => ({ id: m.id, name: m.name, emoji: m.emoji, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp, level: m.level, type: m.type, color: m.color, size: m.size }));
 
     const allGround = this.groundItemsByMap.get(player.mapId) || [];
@@ -935,7 +1064,8 @@ class GameEngine {
     const events = (this.pendingEvents.get(player.mapId) || []).filter(event =>
       !privateKinds.has(event.kind) || event.targetId === playerId
     );
-    return { player: playerData, nearbyPlayers, monsters, groundItems, events };
+    const official = officialSystems.snapshot(player, this.getPlayersOnMap(player.mapId).filter(p => p.id !== playerId && Math.abs(p.x - player.x) + Math.abs(p.y - player.y) < 25));
+    return { player: playerData, nearbyPlayers, monsters, groundItems, events, official };
   }
 
   consumeEvents(mapId) { this.pendingEvents.set(mapId, []); }

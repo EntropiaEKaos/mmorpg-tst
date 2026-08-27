@@ -109,7 +109,7 @@ export default function OfficialSystemsHub({ player, inventory, official, nearby
               </div>
               <div className={`${card} lg:col-span-2`}>
                 <div className="moria-eyebrow text-sky-300">BESTIARY · SERVER KILLS</div>
-                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">{bestiaryRows.length ? bestiaryRows.map(([name, kills]: any) => <div key={name} className="rounded-lg bg-slate-900/60 p-2"><div className="font-bold capitalize text-slate-200">{String(name).replaceAll('_', ' ')}</div><div className="text-xs text-sky-300">{String(kills)} kills</div></div>) : <div className="text-slate-500">No kills recorded yet.</div>}</div>
+                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">{bestiaryRows.length ? bestiaryRows.map(([name, kills]: any) => <div key={name} className="rounded-lg bg-slate-900/60 p-2"><div className="font-bold capitalize text-slate-200">{String(name).replace(/_/g, ' ')}</div><div className="text-xs text-sky-300">{String(kills)} kills</div></div>) : <div className="text-slate-500">No kills recorded yet.</div>}</div>
               </div>
               <div className={card}>
                 <div className="moria-eyebrow text-orange-300">PROFESSIONS</div>

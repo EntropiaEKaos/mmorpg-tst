@@ -499,8 +499,6 @@ export class OfficialSystems {
     const s = this.ensurePlayer(player);
     const key = slug(monster.contentSourceId || monster.name);
     s.bestiary[key] = int(s.bestiary[key], 0, 1_000_000, 0) + 1;
-    this.recordWeaponHit(player);
-
     const result = { xpMultiplier: this.getXpMultiplier(player), bonusLoot: [], nextDungeonWave: null, dungeonComplete: null, worldEventProgress: null, achievements: [] };
     const gem = this.maybeGemDrop(player, monster);
     if (gem) result.bonusLoot.push(gem);
@@ -903,7 +901,6 @@ export class OfficialSystems {
   }
 
   snapshot(player, nearbyPlayers = []) {
-    this.onLogin(player);
     const s = this.ensurePlayer(player);
     const event = this.ensureWorldEvent();
     const inbox = this.global.mail.filter(m => m.to === playerKey(player.name)).slice(-50).map(m => ({ ...m, body: cleanText(m.body, 500) }));

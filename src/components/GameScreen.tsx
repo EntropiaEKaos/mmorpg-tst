@@ -60,6 +60,7 @@ import TalentTree from './TalentTree';
 import Bestiary from './Bestiary';
 import DPSMeter from './DPSMeter';
 import AdventureBoard, { type AdventureSnapshot } from './AdventureBoard';
+import OfficialSystemsHub, { type OfficialTab } from './OfficialSystemsHub';
 import { dpsMeter } from '../game/dpsMeter';
 import { recordKill } from '../game/bestiary';
 import {
@@ -238,6 +239,11 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [showAdventure, setShowAdventure] = useState(false);
   const [adventureState, setAdventureState] = useState<AdventureSnapshot | null>(null);
   const lastAdventureSignatureRef = useRef('');
+  const [showOfficialHub, setShowOfficialHub] = useState(false);
+  const [officialTab, setOfficialTab] = useState<OfficialTab>('progress');
+  const [officialState, setOfficialState] = useState<any>(null);
+  const lastOfficialSignatureRef = useRef('');
+  const openOfficial = useCallback((tab: OfficialTab) => { setOfficialTab(tab); setShowOfficialHub(true); }, []);
   const serverQuestsRef = useRef<{ active: any[]; completed: string[] } | null>(null);
   const [serverQuestCatalog, setServerQuestCatalog] = useState<Quest[]>([]);
   const serverNpcCatalogRef = useRef<Array<{ mapId: string; npc: NPC }>>([]);
@@ -424,7 +430,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     { id: 't9', sender: 'System', text: '🔒 Spells, items, and regions unlock by level! Watch for 🔴 red portals (locked zones) and 🔒 spells. Level up to unlock more!', color: '#ff6060', time: Date.now(), channel: 'system' },
     { id: 't10', sender: 'System', text: '🏛 Visit the Auction House (top bar) to buy/sell items! Drag items in your inventory to drop them on the ground.', color: '#f4e04d', time: Date.now(), channel: 'system' },
     { id: 't11', sender: 'System', text: '⚔ Enable PvP (top-right) for skull system like Tibia. Aggression raises your skull: White→Yellow→Orange→Red→Black.', color: '#ff6060', time: Date.now(), channel: 'system' },
-    { id: 't12', sender: 'System', text: '💎 Check the Coin Shop (top bar) for premium mounts, boosts, and cosmetics! Claim free coins to start.', color: '#c8a0ff', time: Date.now(), channel: 'system' },
+    { id: 't12', sender: 'System', text: '💎 Earn Moria Coins from hunts, dungeons, events and achievements, then spend them in the official Coin Shop.', color: '#c8a0ff', time: Date.now(), channel: 'system' },
     { id: 't13', sender: 'System', text: '🌍 World Events happen automatically! Check the World button to join global missions for big rewards.', color: '#ff6a00', time: Date.now(), channel: 'system' },
     { id: 't14', sender: 'System', text: '✨ Other adventurers roam the world. Loot is auto-collected when you walk near corpses!', color: '#9bd4ff', time: Date.now(), channel: 'system' },
   ]);
@@ -492,6 +498,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   // Seed local-only starter content exactly once per character.
   useEffect(() => {
+    if (onlineAccount) return;
     seedAuctionHouse();
 
     const welcomeCoinsKey = `moria_welcome_coins_${account.characterName}`;
@@ -721,8 +728,9 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (e.key.toLowerCase() === 'h') setShowAdventure((s) => !s);
       if (e.key.toLowerCase() === 't') setShowTalents((s) => !s);
       if (e.key.toLowerCase() === 'r') setAutoAttack((s) => { autoAttackRef.current = !s; return !s; });
-      if (e.key.toLowerCase() === 'b') setShowBestiary((s) => !s);
+      if (e.key.toLowerCase() === 'b') onlineAccount ? openOfficial('progress') : setShowBestiary((s) => !s);
       if (e.key.toLowerCase() === 'd') setShowDPS((s) => !s);
+      if (e.key.toLowerCase() === 'o' && onlineAccount) openOfficial('progress');
       if (e.key.toLowerCase() === 'p') usePotion('hp');
       if (e.key.toLowerCase() === 'm') usePotion('mp');
       if (e.key.toLowerCase() === 'e') interactNPC();
@@ -1059,7 +1067,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
       // Check completion
       if (aq.objectives.every((o) => o.current >= o.count)) {
-        const quest = QUESTS.find((q) => q.id === aq.questId);
+        const quest = questCatalog.find((q) => q.id === aq.questId);
         if (quest) {
           p.quests.push(aq.questId);
           p.activeQuests = p.activeQuests.filter((x) => x.questId !== aq.questId);
@@ -1240,10 +1248,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   const handleMysteryComplete = (gold: number, xp: number, itemName?: string, itemIcon?: string) => {
     if (onlineAccount && !serverSync.isActive()) return;
-    if (serverSync.isActive()) {
-      addMessage('System', 'Mystery rewards are disabled in authoritative online mode until server support is available.', '#ff9090', 'system');
-      return;
-    }
+    if (serverSync.isActive()) { openOfficial('library'); return; }
     const p = playerRef.current;
     p.gold += gold;
     p.xp += xp;
@@ -1264,11 +1269,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   const enterDungeon = (totalWaves: number) => {
     if (onlineAccount && !serverSync.isActive()) return;
-    if (serverSync.isActive()) {
-      addMessage('System', 'Dungeons are disabled in authoritative online mode until server support is available.', '#ff9090', 'system');
-      setShowDungeon(false);
-      return;
-    }
+    if (serverSync.isActive()) { serverSync.sendOfficial('dungeon_start', { waves: totalWaves }); setShowDungeon(false); return; }
     const p = playerRef.current;
     dungeonTotalWavesRef.current = totalWaves;
     dungeonWaveRef.current = 1;
@@ -1398,6 +1399,8 @@ export default function GameScreen({ account, onLogout }: Props) {
         setActiveDialog(npc);
         return;
       }
+      const otherPlayer = serverPlayersRef.current.find((candidate: any) => candidate.x === tile.x && candidate.y === tile.y);
+      if (otherPlayer && officialState?.state?.pvp?.enabled) { serverSync.sendOfficial('pvp_attack', { targetId: otherPlayer.id }); return; }
       p.targetId = undefined;
       return;
     }
@@ -1430,7 +1433,10 @@ export default function GameScreen({ account, onLogout }: Props) {
     if (onlineAccount && !serverSync.isActive()) return;
     if (serverSync.isActive()) {
       if (action === 'quest' && questId) serverSync.sendQuestAccept(questId);
-      else if (action !== 'bye') addMessage('System', `${action} is not available in authoritative online mode yet.`, '#ff9090', 'system');
+      else if (action === 'bank' || action === 'depot') openOfficial('depot');
+      else if (action === 'mail') openOfficial('mail');
+      else if (action === 'books') openOfficial('library');
+      else if (action === 'food' || action === 'heal' || action === 'train' || action === 'shop') openOfficial('services');
       setActiveDialog(null);
       return;
     }
@@ -1518,7 +1524,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   const buyItem = (shopItem: { name: string; icon: string; type: Item['type']; price: number; description?: string; equipment?: Equipment }) => {
     if (onlineAccount && !serverSync.isActive()) return;
-    if (serverSync.isActive()) { addMessage('System', 'Server-authoritative shops are not enabled yet.', '#ff9090', 'system'); return; }
+    if (serverSync.isActive()) { const itemId = shopItem.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); serverSync.sendOfficial('shop_buy', { itemId, quantity: 1 }); return; }
     const p = playerRef.current;
     const discount = getShopDiscountFromRep(p);
     const finalPrice = Math.floor(shopItem.price * (1 - discount));
@@ -1579,7 +1585,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   const socketGem = (itemId: string, gemId: string) => {
     if (onlineAccount && !serverSync.isActive()) return;
-    if (serverSync.isActive()) { addMessage('System', 'Gem socketing is disabled online until it is server-authoritative.', '#ff9090', 'system'); return; }
+    if (serverSync.isActive()) { const targetGem = inventoryRef.current.find((i: any) => i.gemId === gemId || i.name === GEMS.find((g) => g.id === gemId)?.name); if (targetGem) serverSync.sendOfficial('socket_gem', { itemId, gemItemId: targetGem.id }); return; }
     const inv = inventoryRef.current;
     const item = inv.find((i) => i.id === itemId);
     if (!item?.equipment) return;
@@ -1615,7 +1621,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   const craftItem = (name: string, icon: string, value: number, description?: string) => {
     if (onlineAccount && !serverSync.isActive()) return;
-    if (serverSync.isActive()) { addMessage('System', 'Crafting is disabled online until it is server-authoritative.', '#ff9090', 'system'); return; }
+    if (serverSync.isActive()) { const onlineRecipe = RECIPES.find((r) => r.result.name === name || r.name === name); if (onlineRecipe) serverSync.sendOfficial('craft', { recipeId: onlineRecipe.id }); return; }
     const recipe = RECIPES.find((r) => r.result.name === name);
     if (!recipe) return;
     if (!canCraft(recipe, inventoryRef.current, playerRef.current.level)) {
@@ -1739,6 +1745,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         if (renderState) {
           const sp = renderState.player || {};
           const { x, y, inventory: serverInventory, quests: serverQuestState, adventure: serverAdventure, skills: _serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
+          const serverOfficial = renderState.official;
           Object.assign(p, compatibleServerPlayer);
           if (Number.isFinite(x) && Number.isFinite(y)) p.pos = { x, y };
           if (serverStats && typeof serverStats === 'object') p.stats = { ...p.stats, ...serverStats };
@@ -1747,6 +1754,13 @@ export default function GameScreen({ account, onLogout }: Props) {
             if (signature !== lastAdventureSignatureRef.current) {
               lastAdventureSignatureRef.current = signature;
               setAdventureState(serverAdventure as AdventureSnapshot);
+            }
+          }
+          if (serverOfficial && typeof serverOfficial === 'object') {
+            const signature = JSON.stringify(serverOfficial);
+            if (signature !== lastOfficialSignatureRef.current) {
+              lastOfficialSignatureRef.current = signature;
+              setOfficialState(serverOfficial);
             }
           }
           if (serverQuestState && typeof serverQuestState === 'object') {
@@ -2416,8 +2430,15 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
     }
 
-    // Draw active pet
-    if (petStateRef.current) {
+    // Draw active pet (server-owned online, local state in Quick Play).
+    if (serverSync.isActive() && officialState?.state?.pets?.active) {
+      const petData = officialState?.catalogs?.pets?.find((pet: any) => pet.id === officialState.state.pets.active);
+      if (petData) {
+        const petX = (p.pos.x + 1 - cam.x) * TILE_SIZE;
+        const petY = (p.pos.y - cam.y) * TILE_SIZE;
+        drawMonster(ctx, petX, petY, TILE_SIZE, { name: petData.name, hp: 1, maxHp: 1, color: petData.color, emoji: petData.icon, msSize: 0.7 }, now);
+      }
+    } else if (petStateRef.current) {
       const pet = petStateRef.current;
       const petData = PETS.find((pd) => pd.id === pet.petId);
       if (petData) {
@@ -2589,17 +2610,17 @@ export default function GameScreen({ account, onLogout }: Props) {
     quests: { icon: '📜', label: 'Quests', hotkey: 'Q', onClick: () => setShowQuestLog((v) => !v) },
     char: { icon: '👤', label: 'Char', hotkey: 'C', onClick: () => setShowCharacter((v) => !v) },
     talents: { icon: '🌟', label: 'Talents', hotkey: 'T', onClick: () => setShowTalents((v) => !v) },
-    bestiary: { icon: '📖', label: 'Bestiary', hotkey: 'B', onClick: () => setShowBestiary((v) => !v) },
+    bestiary: { icon: '📖', label: 'Bestiary', hotkey: 'B', onClick: () => onlineAccount ? openOfficial('progress') : setShowBestiary((v) => !v) },
     dps: { icon: '📊', label: 'DPS', hotkey: 'D', onClick: () => setShowDPS((v) => !v) },
-    dungeon: { icon: '🌀', label: 'Dungeon', hotkey: '', onClick: () => setShowDungeon(true) },
-    pet: { icon: '🐾', label: 'Pet', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Companions are local-only until server support lands.', '#ff9090', 'system') : setShowPetShop(true) },
-    mystery: { icon: '✦', label: 'Mystery', hotkey: '', onClick: () => setShowMysteryBook(true) },
-    depot: { icon: '🗄', label: 'Depot', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Depot is local-only until server support lands.', '#ff9090', 'system') : setShowDepot(true) },
-    books: { icon: '📚', label: 'Books', hotkey: '', onClick: () => setShowBooks(true) },
-    auction: { icon: '🏛', label: 'AH', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Auction House is local-only until server support lands.', '#ff9090', 'system') : setShowAuction(true) },
-    coins: { icon: '💎', label: 'Coins', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Coin Shop is local-only until server support lands.', '#ff9090', 'system') : setShowCoinShop(true) },
-    world: { icon: '🌍', label: 'World', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Browser world events are disabled in authoritative mode.', '#ff9090', 'system') : setShowWorldEvents(true) },
-    mail: { icon: '📮', label: 'Mail', hotkey: '', onClick: () => onlineAccount ? addMessage('System', 'Mail is local-only until server support lands.', '#ff9090', 'system') : setShowMail(true) },
+    dungeon: { icon: '🌀', label: 'Dungeon', hotkey: '', onClick: () => onlineAccount ? openOfficial('dungeon') : setShowDungeon(true) },
+    pet: { icon: '🐾', label: 'Pet', hotkey: '', onClick: () => onlineAccount ? openOfficial('pets') : setShowPetShop(true) },
+    mystery: { icon: '✦', label: 'Mystery', hotkey: '', onClick: () => onlineAccount ? openOfficial('library') : setShowMysteryBook(true) },
+    depot: { icon: '🗄', label: 'Depot', hotkey: '', onClick: () => onlineAccount ? openOfficial('depot') : setShowDepot(true) },
+    books: { icon: '📚', label: 'Books', hotkey: '', onClick: () => onlineAccount ? openOfficial('library') : setShowBooks(true) },
+    auction: { icon: '🏛', label: 'AH', hotkey: '', onClick: () => onlineAccount ? openOfficial('auction') : setShowAuction(true) },
+    coins: { icon: '💎', label: 'Coins', hotkey: '', onClick: () => onlineAccount ? openOfficial('coins') : setShowCoinShop(true) },
+    world: { icon: '🌍', label: 'World', hotkey: '', onClick: () => onlineAccount ? openOfficial('world') : setShowWorldEvents(true) },
+    mail: { icon: '📮', label: 'Mail', hotkey: '', onClick: () => onlineAccount ? openOfficial('mail') : setShowMail(true) },
     inv: { icon: '📦', label: 'Inv', hotkey: 'I', onClick: () => setShowInventory((v) => !v) },
   };
   const orderedQuickActions = uiLayout.panelOrder.map((id) => ({ id, action: quickActions[id] })).filter((entry) => Boolean(entry.action));
@@ -2617,6 +2638,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           {orderedQuickActions.map(({ id, action }) => (
             <TopButton key={id} icon={action.icon} label={action.label} hotkey={action.hotkey} onClick={action.onClick} />
           ))}
+          {onlineAccount && <TopButton icon="🌐" label="Hub" hotkey="O" onClick={() => openOfficial('progress')} />}
           <TopButton icon="⚙" label="UI" hotkey="" onClick={() => setShowUIEditor(true)} />
           <TopButton icon="🐎" label="Mount" hotkey="SPACE" onClick={toggleMount} />
           {allowLocalAdmin && (
@@ -2966,16 +2988,18 @@ export default function GameScreen({ account, onLogout }: Props) {
 
           {/* Skull / PvP indicator */}
           {(() => {
-            const skull = getSkullState(player.name);
-            const info = SKULLS[skull.type];
+            const onlinePvp = serverSync.isActive() ? officialState?.state?.pvp : null;
+            const skullType = (onlinePvp?.skull || getSkullState(player.name).type) as keyof typeof SKULLS;
+            const info = SKULLS[skullType] || SKULLS.none;
+            const enabled = onlinePvp ? Boolean(onlinePvp.enabled) : pvpEnabled;
             return (
               <div className="absolute top-14 right-2 flex flex-col items-end gap-1 z-10 pointer-events-auto">
                 <button
-                  onClick={() => { const en = togglePvp(player.name); setPvpEnabled(en); addMessage('System', `PvP ${en ? 'ENABLED ⚔' : 'disabled'}.`, en ? '#ff6060' : '#9bd4ff', 'system'); }}
-                  className={`px-2 py-1 rounded text-[10px] font-bold border ${pvpEnabled ? 'bg-red-900/50 text-red-300 border-red-600' : 'bg-black/50 text-gray-400 border-gray-700'}`}>
-                  ⚔ PvP {pvpEnabled ? 'ON' : 'OFF'}
+                  onClick={() => { if (serverSync.isActive()) serverSync.sendOfficial('pvp_toggle'); else { const en = togglePvp(player.name); setPvpEnabled(en); addMessage('System', `PvP ${en ? 'ENABLED ⚔' : 'disabled'}.`, en ? '#ff6060' : '#9bd4ff', 'system'); } }}
+                  className={`px-2 py-1 rounded text-[10px] font-bold border ${enabled ? 'bg-red-900/50 text-red-300 border-red-600' : 'bg-black/50 text-gray-400 border-gray-700'}`}>
+                  ⚔ PvP {enabled ? 'ON' : 'OFF'}
                 </button>
-                {skull.type !== 'none' && (
+                {skullType !== 'none' && (
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded border" style={{ background: info.color + '30', borderColor: info.color }}>
                     <span style={{ color: info.color }}>{info.icon}</span>
                     <span className="text-[10px] font-bold" style={{ color: info.color }}>{info.name}</span>
@@ -2987,6 +3011,18 @@ export default function GameScreen({ account, onLogout }: Props) {
 
           {/* Chat - WoW style bottom-left */}
           <Chat messages={messages} onSendMessage={(text) => { addMessage(player.name, text, '#ffffff', 'world'); broadcastChat(player.name, text, '#ffffff', 'world'); }} />
+
+          {showOfficialHub && serverSync.isActive() && officialState && (
+            <OfficialSystemsHub
+              player={player}
+              inventory={inventory}
+              official={officialState}
+              nearbyPlayers={serverPlayersRef.current}
+              initialTab={officialTab}
+              onAction={(action, payload) => serverSync.sendOfficial(action, payload)}
+              onClose={() => setShowOfficialHub(false)}
+            />
+          )}
 
           {showAdventure && (
             <AdventureBoard

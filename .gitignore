@@ -19,6 +19,8 @@ server/moria-db.json
 server/moria-players.json
 server/moria-content.json
 server/moria-accounts.json
+server/moria-official.json
+server/moria-official.json.tmp
 
 # Dependency directories
 node_modules/

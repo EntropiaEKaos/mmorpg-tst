@@ -16,6 +16,7 @@ import { VOCATIONS } from './engine/Vocations.mjs';
 import { WORLD } from './engine/World.mjs';
 import { questEngine } from './engine/QuestEngine.mjs';
 import { adventureEngine } from './engine/AdventureEngine.mjs';
+import { officialSystems } from './engine/OfficialSystems.mjs';
 import { validateContentReferences, findBlockingContentReferences } from './engine/ContentIntegrity.mjs';
 import { accountStore, sessionManager } from './engine/AuthService.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
@@ -28,7 +29,7 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const MAX_HTTP_BODY = 256 * 1024;
 const MAX_WS_PAYLOAD = 64 * 1024;
 const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
-const READ_ONLY_ADMIN_TYPES = new Set(['maps', 'events']);
+const READ_ONLY_ADMIN_TYPES = new Set(['maps']);
 const ACTIVE_NAMES = new Map();
 const AUTH_RATE_LIMITS = new Map();
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
@@ -39,6 +40,7 @@ const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || '')
 engine.syncContentItems(contentDB.get('items'));
 engine.syncContentSpells(contentDB.get('spells'));
 engine.syncContentMonsters(contentDB.get('monsters'));
+officialSystems.syncWorldEvents(contentDB.get('events'));
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -188,6 +190,7 @@ function buildAuthoritativeSave(p) {
     stats: p.stats || {},
     quests: questEngine.exportState(p.id),
     adventure: adventureEngine.exportState(p),
+    official: officialSystems.exportPlayer(p),
     mapId: p.mapId,
     x: p.x,
     y: p.y,
@@ -197,6 +200,7 @@ function buildAuthoritativeSave(p) {
 
 function restorePlayer(p, saved, expectedVocation) {
   if (typeof expectedVocation === 'string' && VOCATIONS[expectedVocation]) p.vocation = expectedVocation;
+  officialSystems.restorePlayer(p, saved?.official);
   if (!saved || typeof saved !== 'object') return;
 
   if (Number.isInteger(saved.level) && saved.level > 0) p.level = saved.level;
@@ -460,14 +464,12 @@ function handleAdminAPI(req, res, route) {
       spells: ['id','name','icon','mana','cooldown','damage','range','color','type','vocation','levelRequired','buffType','buffDuration','buffValue','scalingCoeff'],
       quests: ['id','name','npcId','description','target','count','rewardGold','rewardXp','levelRequired'],
       maps: ['id','name','biome','description','levelRequired'],
-      events: ['id','name','icon','description','type','target','count','rewardGold','rewardXp','duration'],
+      events: ['id','name','icon','description','target','count','rewardGold','rewardXp','rewardCoins','mapId','durationMs'],
     };
     const readOnly = READ_ONLY_ADMIN_TYPES.has(type);
     const runtimeNote = type === 'maps'
       ? 'Reference catalog only: authoritative terrain, portals and map lifecycle are still defined by World.mjs.'
-      : type === 'events'
-        ? 'Reference catalog only: online world-event runtime is not connected to ContentDB yet.'
-        : '';
+      : '';
     return json(res, 200, { items: contentDB.get(type), fields: fieldsMap[type] || [], readOnly, runtimeNote });
   }
 
@@ -496,6 +498,7 @@ function handleAdminAPI(req, res, route) {
       if (type === 'items') engine.syncContentItems(contentDB.get('items'));
       if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
       if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
+      if (type === 'events') officialSystems.syncWorldEvents(contentDB.get('events'));
       broadcastContentUpdate();
       return json(res, 200, { ok: true });
     });
@@ -514,6 +517,7 @@ function handleAdminAPI(req, res, route) {
     if (type === 'items') engine.syncContentItems(contentDB.get('items'));
     if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
     if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
+    if (type === 'events') officialSystems.syncWorldEvents(contentDB.get('events'));
     broadcastContentUpdate();
     return json(res, 200, { ok: true });
   }
@@ -579,6 +583,7 @@ wss.on('connection', ws => {
       const savedPlayer = saveKey ? playerDB.get(saveKey) : null;
       restorePlayer(player, savedPlayer, vocation);
       questEngine.restorePlayer(clientId, savedPlayer?.quests);
+      officialSystems.onLogin(player);
       authenticatedPlayer = name;
       authenticatedKey = nameKey;
       authenticatedAccountId = session.accountId;
@@ -669,7 +674,7 @@ setInterval(() => {
     const snapshot = engine.getSnapshot(clientId);
     if (snapshot) {
       const vocData = VOCATIONS[snapshot.player.vocation];
-      if (vocData) snapshot.player.spells = vocData.spells;
+      if (vocData) snapshot.player.spells = engine.getSpellList(snapshot.player.vocation);
       entry.ws.send(JSON.stringify({ kind: 'snapshot', payload: snapshot, time: Date.now() }));
       mapsDelivered.add(snapshot.player.mapId);
     }
@@ -683,8 +688,8 @@ function broadcastContentUpdate() {
   console.log('📡 Content update broadcast to all clients');
 }
 
-process.on('SIGTERM', () => { playerDB.save(); contentDB.save(); process.exit(0); });
-process.on('SIGINT', () => { playerDB.save(); contentDB.save(); process.exit(0); });
+process.on('SIGTERM', () => { playerDB.save(); contentDB.save(); officialSystems.save(); process.exit(0); });
+process.on('SIGINT', () => { playerDB.save(); contentDB.save(); officialSystems.save(); process.exit(0); });
 
 server.listen(PORT, () => {
   console.log('');

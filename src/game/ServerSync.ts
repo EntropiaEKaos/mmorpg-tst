@@ -15,6 +15,7 @@ export interface RenderState {
   monsters: any[];
   groundItems: any[];
   events: any[];
+  official: any;
 }
 
 class ServerSyncManager {
@@ -160,6 +161,11 @@ class ServerSyncManager {
     sendIntent({ type: 'adventure_claim', payload: {} });
   }
 
+  sendOfficial(action: string, payload: Record<string, unknown> = {}) {
+    if (!this.isActive() || !action) return;
+    sendIntent({ type: 'official', payload: { action, ...payload } });
+  }
+
   updateSnapshot(snap: ServerSnapshot) {
     this.authed = true;
     setSnapshot(snap);
@@ -175,6 +181,7 @@ class ServerSyncManager {
       monsters: snap.monsters,
       groundItems: snap.groundItems,
       events: snap.events || [],
+      official: snap.official || null,
     };
   }
 
