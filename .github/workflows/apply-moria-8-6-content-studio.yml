@@ -6,6 +6,7 @@ on:
     paths:
       - tools/apply-moria-8-6-content-studio.py
       - tools/fix-moria-8-6-content-studio-compat.py
+      - tools/run-moria-8-6-content-studio.py
       - .github/workflows/apply-moria-8-6-content-studio.yml
 
 permissions:
@@ -32,7 +33,7 @@ jobs:
 
       - name: Apply 8.6 Content Studio
         run: |
-          python3 tools/apply-moria-8-6-content-studio.py
+          python3 tools/run-moria-8-6-content-studio.py
           python3 tools/fix-moria-8-6-content-studio-compat.py
 
       - name: Install client dependencies
