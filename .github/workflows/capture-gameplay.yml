@@ -21,7 +21,9 @@ jobs:
       - name: Build client
         run: npm run build
       - name: Install browser
-        run: npx -y playwright@1.55.0 install --with-deps chromium
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
       - name: Start preview
         run: |
           nohup npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/moria-preview.log 2>&1 &
@@ -33,24 +35,25 @@ jobs:
           exit 1
       - name: Capture login and gameplay
         run: |
-          cat > /tmp/capture.mjs <<'EOF'
+          cat > capture.mjs <<'EOF'
           import { chromium } from 'playwright';
-          const browser = await chromium.launch({headless:true});
+          const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1 });
           await page.goto('http://127.0.0.1:4173', { waitUntil: 'networkidle' });
           await page.screenshot({ path: 'moria-login-9-4.png', fullPage: true });
           await page.getByRole('button', { name: /OFFLINE QUICK PLAY/i }).click();
-          await page.waitForTimeout(4500);
+          await page.waitForTimeout(5000);
           await page.screenshot({ path: 'moria-gameplay-9-4.png', fullPage: true });
           console.log('TITLE', await page.title());
           console.log('BODY', (await page.locator('body').innerText()).slice(0, 2000));
           await browser.close();
           EOF
-          npx -y -p playwright@1.55.0 node /tmp/capture.mjs
+          node capture.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: moria-9-4-screenshots
           path: |
             moria-login-9-4.png
             moria-gameplay-9-4.png
-          if-no-files-found: error
+          if-no-files-found: warn
