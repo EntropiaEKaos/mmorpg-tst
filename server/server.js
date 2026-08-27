@@ -693,7 +693,10 @@ wss.on('connection', ws => {
     }
 
     if (msg.kind === 'load_request') {
-      const saved = playerDB.get(authenticatedPlayer);
+      // While a character is online the in-memory engine is canonical; returning
+      // PlayerDB here could expose an autosave-old snapshot to the same client.
+      const livePlayer = engine.getPlayer(clientId);
+      const saved = livePlayer ? buildAuthoritativeSave(livePlayer) : playerDB.get(authenticatedPlayer);
       ws.send(JSON.stringify({ kind: 'load_response', payload: saved, time: Date.now() }));
       return;
     }

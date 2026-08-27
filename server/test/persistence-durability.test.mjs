@@ -164,3 +164,52 @@ test('completed direct trade is durably flushed before autosave or disconnect', 
   assert.equal(persisted[nameA].gold, 75);
   assert.equal(persisted[nameB].gold, 125);
 });
+
+
+test('load_request returns current authoritative memory instead of autosave-old disk state', async t => {
+  const { port, ready } = startServer(t, 300000);
+  await ready;
+  const stamp = Date.now().toString(36);
+  const name = `LiveLoad${stamp}`;
+  const token = await createCharacter(port, 'live', name);
+  const client = await connectClient(port, token, name);
+  t.after(() => { try { client.ws.close(); } catch {} });
+  const beforeX = client.initial.payload.player.x;
+  const beforeY = client.initial.payload.player.y;
+  client.send('intent', { type: 'move', payload: { dx: 1, dy: 0 }, timestamp: Date.now() });
+  await client.waitFor(message => message.kind === 'snapshot' && message.payload?.player?.x === beforeX + 1 && message.payload?.player?.y === beforeY);
+  client.send('load_request', {});
+  const loaded = await client.waitFor(message => message.kind === 'load_response');
+  assert.equal(loaded.payload.x, beforeX + 1);
+  assert.equal(loaded.payload.y, beforeY);
+});
+
+async function moveToAnyAdjacentTile(client) {
+  const start = client.initial.payload.player;
+  const directions = [{ dx: 1, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: -1 }];
+  for (const direction of directions) {
+    client.send('intent', { type: 'move', payload: direction, timestamp: Date.now() });
+    await sleep(220);
+    const moved = [...client.messages].reverse().find(message => message.kind === 'snapshot'
+      && message.payload?.player?.name === start.name
+      && (message.payload.player.x !== start.x || message.payload.player.y !== start.y));
+    if (moved) return moved.payload.player;
+  }
+  throw new Error(`Could not move ${start.name} to any adjacent tile`);
+}
+
+test('SIGTERM flushes current online player state before process exit', async t => {
+  const { port, ready, files, child } = startServer(t, 300000);
+  await ready;
+  const stamp = Date.now().toString(36);
+  const name = `Shutdown${stamp}`;
+  const token = await createCharacter(port, 'shutdown', name);
+  const client = await connectClient(port, token, name);
+  const moved = await moveToAnyAdjacentTile(client);
+  const exited = new Promise(resolve => child.once('exit', resolve));
+  child.kill('SIGTERM');
+  await exited;
+  const persisted = readPlayers(files.players);
+  assert.equal(persisted[name]?.x, moved.x);
+  assert.equal(persisted[name]?.y, moved.y);
+});
