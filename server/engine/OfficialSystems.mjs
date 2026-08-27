@@ -14,6 +14,7 @@ import { officialExplorationKnowledgeDomain } from './OfficialExplorationKnowled
 import { officialCombatAugmentationDomain } from './OfficialCombatAugmentationDomain.mjs';
 import { exportPlayerState, freshGlobalState, freshPlayerState, normalizePlayerState } from './OfficialStateSchema.mjs';
 import { DEFAULT_OFFICIAL_STATE_FILE, OfficialStateRepository } from './OfficialStateRepository.mjs';
+import { officialPlayerLifecycleDomain } from './OfficialPlayerLifecycleDomain.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
@@ -77,24 +78,7 @@ export class OfficialSystems {
   }
 
   onLogin(player) {
-    const s = this.ensurePlayer(player);
-    const key = playerKey(player.name);
-    const credit = int(this.global.credits[key], 0, 1_000_000_000, 0);
-    if (credit > 0) {
-      player.gold += credit;
-      player.stats.goldEarned = (player.stats.goldEarned || 0) + credit;
-      delete this.global.credits[key];
-      this.save();
-    }
-    if (!s.welcomeMailSent) {
-      this.global.mail.push({
-        id: `welcome_${Date.now()}_${Math.random()}`, from: 'Postmaster Edwin', to: key,
-        subject: 'Welcome to Mor\'ia!', body: `Welcome, ${player.name}. Your official online journey begins here.`,
-        gold: 100, claimed: false, read: false, sentAt: Date.now(), system: true,
-      });
-      s.welcomeMailSent = true;
-      this.save();
-    }
+    return officialPlayerLifecycleDomain.onLogin(this, player);
   }
 
   getXpMultiplier(player) {
