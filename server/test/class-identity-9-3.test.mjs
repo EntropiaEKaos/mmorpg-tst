@@ -48,14 +48,17 @@ test('caster and support specializations use different authoritative spell multi
   assert.ok(classSpellMultiplier({ vocation:'sorcerer' }, {}, 'damage') > classSpellMultiplier({ vocation:'knight' }, {}, 'damage'));
   assert.ok(classSpellMultiplier({ vocation:'priest' }, {}, 'heal') > classSpellMultiplier({ vocation:'sorcerer' }, {}, 'heal'));
   assert.ok(classSpellMultiplier({ vocation:'warlock' }, {}, 'drain') > classSpellMultiplier({ vocation:'warlock' }, {}, 'damage'));
+  assert.equal(classSpellMultiplier({ vocation:'priest' }, {}, 'buff'), 1);
 });
 
-test('derived class defenses and mobility are data-driven', () => {
+test('derived class mitigation, magic and mobility are data-driven without rewriting equipment defense', () => {
   const source = () => ({ totalDefense:100, totalMagic:100, totalMaxHp:100, totalMaxMana:100, critChance:0, damageReduction:0, moveSpeed:0, lifesteal:0, healBonus:0 });
   const knight = applyClassDerivedStats({ vocation:'knight', hp:100 }, source());
   const rogue = applyClassDerivedStats({ vocation:'rogue', hp:100 }, source());
   const sorcerer = applyClassDerivedStats({ vocation:'sorcerer', hp:100 }, source());
-  assert.ok(knight.totalDefense > rogue.totalDefense);
+  assert.equal(knight.totalDefense, 100);
+  assert.equal(rogue.totalDefense, 100);
+  assert.ok(knight.damageReduction > rogue.damageReduction);
   assert.ok(rogue.moveSpeed > knight.moveSpeed);
   assert.ok(sorcerer.totalMagic > knight.totalMagic);
   assert.ok(getClassIdentity('templar').damageReduction > 0);
