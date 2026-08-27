@@ -25,5 +25,12 @@ This phase adds four server-authoritative MMORPG systems inspired by classic Tib
 - Nearby-player snapshots expose the selected public mount.
 - Mount catalog is editable in Content Studio.
 
+## Client presentation and UX
+- `LifeStylePanel` provides four player-facing tabs: Tasks, Housing, Outfits and Mounts.
+- `playerAvatar.ts` replaces the fixed generic avatar with layered procedural silhouettes, four outfit colors, two addon layers and mount-specific bodies.
+- Nearby authoritative players carry their public outfit/addon/color and selected mount projection, so appearance is consistent for every observer.
+- `housingPresentation.ts` renders current-map house footprints, ownership/for-sale labels, doors and placed decoration without moving any authority into the renderer.
+- Life-system UI sends intents only; prices, ownership, rewards, speed and access remain server-owned.
+
 ## Persistence
 ContentDB schema advances to v3. Populated v2 installs receive missing 9.2 defaults without overwriting admin-edited records; intentionally empty databases remain empty. Player task/outfit/mount state lives in the authoritative character save. Housing ownership is global and stored independently so two player saves cannot claim the same property.

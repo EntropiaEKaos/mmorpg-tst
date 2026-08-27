@@ -55,6 +55,7 @@ import { drawBuilding, type Building } from '../game/render';
 import Weather from './Weather';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
+import { drawHousing } from '../game/housingPresentation';
 import CastBar from './CastBar';
 import RaidWarning from './RaidWarning';
 import { triggerCast } from './CastBar';
@@ -65,7 +66,9 @@ import DPSMeter from './DPSMeter';
 import AdventureBoard, { type AdventureSnapshot } from './AdventureBoard';
 import OfficialSystemsHub, { type OfficialTab } from './OfficialSystemsHub';
 import SocialHub from './SocialHub';
+import LifeStylePanel from './LifeStylePanel';
 import CombatTargetFrame from './CombatTargetFrame';
+import ActiveQuestTracker from './ActiveQuestTracker';
 import { applyAuthoritativeCombatFeedback, resolveCombatTarget } from '../game/combatPresentation';
 import { dpsMeter } from '../game/dpsMeter';
 import { recordKill } from '../game/bestiary';
@@ -103,6 +106,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [officialState, setOfficialState] = useState<any>(null);
   const lastOfficialSignatureRef = useRef('');
   const [showSocialHub, setShowSocialHub] = useState(false);
+  const [showLifeStyle, setShowLifeStyle] = useState(false);
   const [socialState, setSocialState] = useState<any>(null);
   const lastSocialSignatureRef = useRef('');
   const openOfficial = useCallback((tab: OfficialTab) => { setOfficialTab(tab); setShowOfficialHub(true); }, []);
@@ -606,6 +610,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (e.key.toLowerCase() === 'c') setShowCharacter((s) => !s);
       if (e.key.toLowerCase() === 'q') setShowQuestLog((s) => !s);
       if (e.key.toLowerCase() === 'h') setShowAdventure((s) => !s);
+      if (e.key.toLowerCase() === 'l') { if (serverSync.isActive()) setShowLifeStyle((s) => !s); else addMessage('System', 'Life & Style requires the authoritative alpha server.', '#ffb86b', 'system'); }
       if (e.key.toLowerCase() === 't') setShowTalents((s) => !s);
       if (e.key.toLowerCase() === 'r') setAutoAttack((s) => { autoAttackRef.current = !s; return !s; });
       if (e.key.toLowerCase() === 'b') onlineAccount ? openOfficial('progress') : setShowBestiary((s) => !s);
@@ -630,7 +635,7 @@ export default function GameScreen({ account, onLogout }: Props) {
 
   const toggleMount = () => {
     if (onlineAccount && !serverSync.isActive()) return;
-    if (serverSync.isActive()) { serverSync.sendMount(); return; }
+    if (serverSync.isActive()) { serverSync.sendMount('toggle'); return; }
     const p = playerRef.current;
     const ownedMounts = MOUNTS.filter((m) => m.levelRequired <= p.level);
     if (ownedMounts.length === 0) {
@@ -1319,6 +1324,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       else if (action === 'mail') openOfficial('mail');
       else if (action === 'books') openOfficial('library');
       else if (action === 'food' || action === 'heal' || action === 'train' || action === 'shop') openOfficial('services');
+      else if (action === 'life') setShowLifeStyle(true);
       setActiveDialog(null);
       return;
     }
@@ -2077,7 +2083,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (net.mode === 'local' && now - lastBroadcastRef.current > 150) {
         lastBroadcastRef.current = now;
         const voc = VOCATIONS[p.vocation];
-        const mount = p.mountId ? MOUNTS.find((m) => m.id === p.mountId) : null;
+        const mount = serverSync.isActive() ? p.mounts?.catalog?.find((m) => m.id === p.mountId) : (p.mountId ? MOUNTS.find((m) => m.id === p.mountId) : null);
         broadcastPlayer({
           id: net.id,
           name: p.name,
@@ -2182,6 +2188,9 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (sx > canvas.width || sy > canvas.height || sx + b.w * TILE_SIZE < 0 || sy + b.h * TILE_SIZE < 0) continue;
       drawBuilding(ctx, sx, sy, b, TILE_SIZE, now);
     }
+
+    // Houses and decoration are presentation-only projections of global server state.
+    if (serverSync.isActive()) drawHousing(ctx, p.housing, cam, TILE_SIZE, now);
 
     // NPCs
     for (const n of npcsRef.current) {
@@ -2305,7 +2314,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     const isInvisible = p.buffs.some((b) => b.type === 'invisible');
     if (isInvisible) ctx.globalAlpha = 0.4;
     drawPlayer(ctx, px, py, TILE_SIZE, p.direction, p.name, p.hp, p.maxHp, now,
-      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon);
+      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount);
     ctx.globalAlpha = 1;
 
     // Draw other players — authoritative server data takes priority
@@ -2316,7 +2325,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         const sy = (op.y - cam.y) * TILE_SIZE;
         if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
         const voc = VOCATIONS[op.vocation];
-        drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction || 'down', `${op.name} [Lv${op.level}]`, op.hp, op.maxHp, now, voc?.color || '#8b2e2e', op.mounted, undefined);
+        drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction || 'down', `${op.name} [Lv${op.level}]`, op.hp, op.maxHp, now, voc?.color || '#8b2e2e', op.mounted, op.mount?.icon, op.appearance, op.mount);
       }
     } else {
       // LOCAL/RELAY: draw BroadcastChannel players or simulated bots
@@ -2543,6 +2552,7 @@ export default function GameScreen({ account, onLogout }: Props) {
             <TopButton key={id} icon={action.icon} label={action.label} hotkey={action.hotkey} onClick={action.onClick} />
           ))}
           {onlineAccount && <TopButton icon="🌐" label="Hub" hotkey="O" onClick={() => openOfficial('progress')} />}
+          <TopButton icon="🏠" label="Life" hotkey="L" onClick={() => serverSync.isActive() ? setShowLifeStyle((v) => !v) : addMessage('System', 'Life & Style requires the authoritative alpha server.', '#ffb86b', 'system')} />
           <TopButton icon="⚙" label="UI" hotkey="" onClick={() => setShowUIEditor(true)} />
           <TopButton icon="🐎" label="Mount" hotkey="SPACE" onClick={toggleMount} />
           {allowLocalAdmin && (
@@ -2634,26 +2644,8 @@ export default function GameScreen({ account, onLogout }: Props) {
             </div>
           )}
 
-          {/* Active Quest Tracker */}
-          {player.activeQuests.length > 0 && (
-            <div className="moria-panel absolute right-3 top-3 max-w-[270px] rounded-2xl border border-amber-200/20 p-3">
-              <div className="moria-eyebrow mb-2 text-[9px] text-amber-200/80">📜 ACTIVE QUESTS</div>
-              {player.activeQuests.slice(0, 3).map((aq) => {
-                const quest = questCatalog.find((q) => q.id === aq.questId);
-                if (!quest) return null;
-                return (
-                  <div key={aq.questId} className="mb-1 last:mb-0">
-                    <div className="text-xs font-bold text-slate-100">{quest.name}</div>
-                    {aq.objectives.map((o, i) => (
-                      <div key={i} className="text-[10px] text-slate-400">
-                        {o.current >= o.count ? '✅' : '○'} {o.targetName}: {o.current}/{o.count}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {/* Active Quest Tracker is extracted to keep GameScreen an orchestrator. */}
+          <ActiveQuestTracker activeQuests={player.activeQuests} questCatalog={questCatalog} />
 
           {/* Overlays */}
           {showInventory && (
@@ -2903,6 +2895,17 @@ export default function GameScreen({ account, onLogout }: Props) {
             if (serverSync.isActive()) broadcastChat(player.name, text, '#ffffff', channel);
             else { addMessage(player.name, text, '#ffffff', 'world'); broadcastChat(player.name, text, '#ffffff', 'world'); }
           }} />
+
+          {showLifeStyle && serverSync.isActive() && (
+            <LifeStylePanel
+              player={player}
+              onTask={(action, payload) => serverSync.sendTask(action, payload)}
+              onHousing={(action, payload) => serverSync.sendHousing(action, payload)}
+              onAppearance={(action, payload) => serverSync.sendAppearance(action, payload)}
+              onMount={(action, payload) => serverSync.sendMount(action, payload)}
+              onClose={() => setShowLifeStyle(false)}
+            />
+          )}
 
           {showSocialHub && serverSync.isActive() && socialState && (
             <SocialHub player={player} inventory={inventory} social={socialState} onAction={(action, payload) => serverSync.sendSocial(action, payload)} onClose={() => setShowSocialHub(false)} />

@@ -117,9 +117,24 @@ class ServerSyncManager {
     sendIntent({ type: 'drop', payload: { itemId } });
   }
 
-  sendMount() {
+  sendMount(action = 'toggle', payload: Record<string, unknown> = {}) {
     if (!this.isActive()) return;
-    sendIntent({ type: 'mount', payload: {} });
+    sendIntent({ type: 'mount', payload: { action, ...payload } });
+  }
+
+  sendAppearance(action: string, payload: Record<string, unknown> = {}) {
+    if (!this.isActive() || !action) return;
+    sendIntent({ type: 'appearance', payload: { action, ...payload } });
+  }
+
+  sendTask(action: string, payload: Record<string, unknown> = {}) {
+    if (!this.isActive() || !action) return;
+    sendIntent({ type: 'task', payload: { action, ...payload } });
+  }
+
+  sendHousing(action: string, payload: Record<string, unknown> = {}) {
+    if (!this.isActive() || !action) return;
+    sendIntent({ type: 'housing', payload: { action, ...payload } });
   }
 
   sendTravel(targetMap: string, _spawnX?: number, _spawnY?: number) {
@@ -245,6 +260,22 @@ class ServerSyncManager {
           break;
         case 'adventure_claimed':
           if (event.text) addMessage('Hunt', event.text, event.color || '#ffd87b', 'loot');
+          break;
+        case 'task_progress':
+          if (event.text) addMessage('Task', event.text, event.color || '#7dd3fc', 'quest');
+          break;
+        case 'task_ready':
+        case 'task_update':
+          if (event.text) addMessage('Task', event.text, event.color || '#ffd87b', 'quest');
+          break;
+        case 'housing_update':
+          if (event.text) addMessage('Housing', event.text, event.color || '#d9bd7a', 'system');
+          break;
+        case 'appearance_update':
+          if (event.text) addMessage('Outfit', event.text, event.color || '#d49bc8', 'system');
+          break;
+        case 'mount_update':
+          if (event.text) addMessage('Mount', event.text, event.color || '#d9bd7a', 'system');
           break;
         case 'death':
           if (event.text) addMessage('System', event.text, event.color || '#ff0000', 'system');
