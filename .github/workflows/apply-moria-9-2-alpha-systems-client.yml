@@ -66,7 +66,5 @@ jobs:
           git add -A -- src docs/MORIA_9_2_ALPHA_SYSTEMS.md server/test/client-alpha-systems-9-2.test.mjs
           git diff --cached --quiet && exit 0
           git commit -m "feat(9.2): render outfits housing and complete mount UX"
-          git restore --worktree tools/apply-moria-9-2-alpha-systems-client.py
-          git fetch origin moria-9.2-alpha-housing-outfits-mounts
-          git rebase origin/moria-9.2-alpha-housing-outfits-mounts
+          git restore --worktree tools/apply-moria-9-2-alpha-systems-client.py || true
           git push origin HEAD:moria-9.2-alpha-housing-outfits-mounts
