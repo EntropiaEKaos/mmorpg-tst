@@ -1,1 +1,1 @@
-day/night overlay block missing
+worldAtmosphere vignette anchor missing
