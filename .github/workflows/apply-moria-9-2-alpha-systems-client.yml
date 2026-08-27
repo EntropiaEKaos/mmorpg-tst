@@ -1,0 +1,57 @@
+name: Apply Mor'ia 9.2 Alpha Systems Client
+
+on:
+  push:
+    branches: [moria-9.2-alpha-housing-outfits-mounts]
+    paths:
+      - tools/apply-moria-9-2-alpha-systems-client.py
+      - .github/workflows/apply-moria-9-2-alpha-systems-client.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.2-alpha-housing-outfits-mounts
+          fetch-depth: 16
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - name: Apply 9.2 client systems
+        run: python3 tools/apply-moria-9-2-alpha-systems-client.py
+      - name: Install client dependencies
+        run: npm ci
+      - name: Audit client dependencies
+        run: npm audit
+      - name: Typecheck client
+        run: npm run typecheck
+      - name: Build client
+        run: npm run build
+      - name: Install server dependencies
+        run: npm ci --prefix server --no-fund
+      - name: Audit server dependencies
+        run: npm audit --prefix server
+      - name: Check server syntax
+        run: npm run check --prefix server
+      - name: Run full server suite
+        run: npm test --prefix server
+      - name: Commit validated 9.2 client systems
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/game/types.ts src/game/ServerSync.ts src/game/serverContentAdapters.ts src/game/playerAvatar.ts src/game/housingPresentation.ts src/game/render.ts src/components/LifeStylePanel.tsx src/components/GameScreen.tsx server/test/client-alpha-systems-9-2.test.mjs docs/MORIA_9_2_ALPHA_SYSTEMS.md
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(9.2): render outfits housing and complete mount UX"
+          git fetch origin moria-9.2-alpha-housing-outfits-mounts
+          git rebase origin/moria-9.2-alpha-housing-outfits-mounts
+          git push origin HEAD:moria-9.2-alpha-housing-outfits-mounts
