@@ -27,33 +27,25 @@ jobs:
           test -f server/engine/ContentPacks.mjs
           test -f server/engine/ExpansionCatalogs8.mjs
           test -f server/test/content-expansion-8.test.mjs
-          grep -q "SHATTERED_FRONTIER_PACK_ID" server/engine/ContentPacks.mjs
-          grep -q "applyBundledPacks" server/engine/ContentDB.mjs
-          grep -q "EXPANSION_8_PETS" server/engine/OfficialCatalogs.mjs
-      - name: Install client dependencies
-        run: npm ci
-      - name: Audit client dependencies
-        run: npm audit
-      - name: Typecheck and build client
-        run: npm run typecheck && npm run build
-      - name: Install and audit server
-        run: npm ci --prefix server --no-fund && npm audit --prefix server && npm run check --prefix server
+      - name: Install dependencies and compile
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm ci --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
       - name: Test expansion and ContentDB
         run: node --test server/test/content-expansion-8.test.mjs server/test/content-db.test.mjs
-      - name: Test state and snapshot group
-        run: node --test server/test/official-state-schema.test.mjs server/test/official-snapshot-read-model.test.mjs server/test/official-state-repository.test.mjs
-      - name: Test catalog economy combat group
-        run: node --test server/test/official-catalogs.test.mjs server/test/official-inventory-economy-domain.test.mjs server/test/official-combat-augmentation-domain.test.mjs
-      - name: Test systems progression exploration group
-        run: node --test server/test/official-systems.test.mjs server/test/official-progression-domain.test.mjs server/test/official-exploration-knowledge-domain.test.mjs
-      - name: Test runtime action transaction group
-        run: node --test server/test/official-action-gateway.test.mjs server/test/official-action-registry.test.mjs server/test/official-runtime-coordinator.test.mjs server/test/official-transaction-manager.test.mjs
-      - name: Test hardening map integrity group
-        run: node --test server/test/hardening.test.mjs server/test/map-runtime.test.mjs server/test/content-integrity.test.mjs
-      - name: Test persistence social auth group
-        run: node --test server/test/persistence-durability.test.mjs server/test/social-systems.test.mjs server/test/social-ws.test.mjs server/test/auth-http.test.mjs server/test/auth-session-policy.test.mjs server/test/auth.test.mjs
-      - name: Test remaining official domains
-        run: node --test server/test/official-commerce-domain.test.mjs server/test/official-dungeon-domain.test.mjs server/test/official-player-lifecycle-domain.test.mjs server/test/official-pvp-domain.test.mjs server/test/official-world-event-domain.test.mjs
+      - name: Test action gateway
+        run: node --test server/test/official-action-gateway.test.mjs
+      - name: Test action registry
+        run: node --test server/test/official-action-registry.test.mjs
+      - name: Test runtime coordinator
+        run: node --test server/test/official-runtime-coordinator.test.mjs
+      - name: Test transaction manager
+        run: node --test server/test/official-transaction-manager.test.mjs
       - name: Run full server tests
         run: npm test --prefix server
       - name: Commit validated Content Expansion 8.0
