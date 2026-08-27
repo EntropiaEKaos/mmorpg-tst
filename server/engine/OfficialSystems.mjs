@@ -11,6 +11,7 @@ import { executeOfficialAction, getOfficialActionService, hasOfficialAction } fr
 import { officialCommerceDomain } from './OfficialCommerceDomain.mjs';
 import { officialProgressionDomain } from './OfficialProgressionDomain.mjs';
 import { officialPvpDomain } from './OfficialPvpDomain.mjs';
+import { officialDungeonDomain } from './OfficialDungeonDomain.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS, MYSTERIES, DUNGEON_WAVES, DEFAULT_EVENTS,
@@ -402,57 +403,29 @@ export class OfficialSystems {
       this.save();
     }
 
-    if (monster.dungeonOwnerId === player.id && s.dungeon.active && monster.dungeonRunId === s.dungeon.runId) {
-      s.dungeon.killsRemaining = Math.max(0, s.dungeon.killsRemaining - 1);
-      if (s.dungeon.killsRemaining === 0) {
-        if (s.dungeon.wave < s.dungeon.maxWaves) {
-          s.dungeon.wave++;
-          s.dungeon.killsRemaining = this.getDungeonWave(s.dungeon.wave, player.level).count;
-          result.nextDungeonWave = s.dungeon.wave;
-        } else {
-          const waves = s.dungeon.maxWaves;
-          const reward = { gold: waves * 150 + player.level * 20, xp: waves * 200 + player.level * 25, coins: waves * 2 };
-          player.gold += reward.gold;
-          player.xp += reward.xp;
-          player.stats.goldEarned = (player.stats.goldEarned || 0) + reward.gold;
-          s.coins += reward.coins;
-          s.dungeon.highestWave = Math.max(s.dungeon.highestWave, waves);
-          s.dungeon.clears++;
-          this.awardReputation(player, 150);
-          s.dungeon.active = false; s.dungeon.runId = null; s.dungeon.killsRemaining = 0;
-          result.dungeonComplete = reward;
-        }
-      }
-    }
+    const dungeonResult = officialDungeonDomain.onMonsterKill(this, player, monster);
+    result.nextDungeonWave = dungeonResult.nextDungeonWave;
+    result.dungeonComplete = dungeonResult.dungeonComplete;
 
     result.achievements = this.refreshAchievements(player);
     return result;
   }
 
   getDungeonWave(wave, playerLevel) {
-    const base = DUNGEON_WAVES[Math.max(0, Math.min(DUNGEON_WAVES.length - 1, wave - 1))];
-    const scale = 1 + Math.max(0, playerLevel - 1) * 0.025;
-    return { ...base, hp: Math.floor(base.hp * scale), attack: Math.floor(base.attack * scale), defense: Math.floor(base.defense * (0.8 + scale * 0.2)), xp: Math.floor(base.xp * scale), wave };
+    return officialDungeonDomain.getWave(wave, playerLevel);
   }
 
   startDungeon(player, maxWaves) {
-    const s = this.ensurePlayer(player);
-    const waves = [3, 5, 10].includes(Number(maxWaves)) ? Number(maxWaves) : 3;
-    if (s.dungeon.active) return { ok: false, error: 'A dungeon run is already active.' };
-    if (player.level < Math.max(1, waves - 2)) return { ok: false, error: `Level ${Math.max(1, waves - 2)} required.` };
-    const runId = `dungeon_${player.id}_${Date.now()}`;
-    s.dungeon = { ...s.dungeon, active: true, runId, wave: 1, maxWaves: waves, killsRemaining: this.getDungeonWave(1, player.level).count };
-    return { ok: true, runId, wave: 1, maxWaves: waves };
+    return officialDungeonDomain.start(this, player, maxWaves);
   }
 
   abandonDungeon(player) {
-    const s = this.ensurePlayer(player);
-    if (!s.dungeon.active) return false;
-    s.dungeon.active = false; s.dungeon.runId = null; s.dungeon.killsRemaining = 0;
-    return true;
+    return officialDungeonDomain.abandon(this, player);
   }
 
-  failDungeon(player) { return this.abandonDungeon(player); }
+  failDungeon(player) {
+    return officialDungeonDomain.fail(this, player);
+  }
 
   tickPlayer(player, now = Date.now()) {
     officialProgressionDomain.tickStamina(this, player, now);
