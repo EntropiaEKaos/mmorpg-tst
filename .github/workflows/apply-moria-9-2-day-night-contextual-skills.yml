@@ -5,6 +5,7 @@ on:
     branches: [moria-9.2-alpha-housing-outfits-mounts]
     paths:
       - tools/apply-moria-9-2-day-night-contextual-skills.py
+      - tools/fix-moria-9-2-contextual-applicator.py
       - .github/workflows/apply-moria-9-2-day-night-contextual-skills.yml
 
 permissions:
@@ -27,6 +28,8 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             server/package-lock.json
+      - name: Align contextual applicator with current 9.2 client
+        run: python3 tools/fix-moria-9-2-contextual-applicator.py
       - name: Apply authoritative world clock and contextual skills
         shell: bash
         run: |
@@ -66,4 +69,5 @@ jobs:
           git add server/engine/GameState.mjs server/engine/ContentStudio.mjs src/game/network.ts src/game/ServerSync.ts src/game/types.ts src/game/serverContentAdapters.ts src/components/GameScreen.tsx src/game/worldAtmosphere.ts src/components/Tooltip.tsx
           git diff --cached --quiet && exit 0
           git commit -m "feat(9.2): add authoritative day night and contextual skills"
+          git restore --worktree tools/apply-moria-9-2-day-night-contextual-skills.py
           git push origin HEAD:moria-9.2-alpha-housing-outfits-mounts
