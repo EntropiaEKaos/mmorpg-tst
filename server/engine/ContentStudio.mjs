@@ -10,7 +10,9 @@ import { validateContentReferences } from './ContentIntegrity.mjs';
 const ID_RE = /^[A-Za-z0-9_-]{2,100}$/;
 const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
 const RARITIES = Object.freeze(['common', 'uncommon', 'rare', 'epic', 'legendary']);
-const ITEM_SLOTS = Object.freeze(['weapon', 'armor', 'helmet', 'legs', 'boots', 'shield', 'ring', 'amulet']);
+const ITEM_SLOTS = Object.freeze(['weapon', 'armor', 'helmet', 'legs', 'boots', 'shield', 'ring', 'ring2', 'amulet', 'cloak', 'belt', 'gloves', 'relic']);
+const MAP_ACCESS = Object.freeze(['public', 'gm']);
+const EVENT_TYPES = Object.freeze(['invasion', 'boss', 'hunt', 'defense']);
 const MONSTER_TYPES = Object.freeze(['normal', 'elite', 'boss']);
 const NPC_ROLES = Object.freeze(['merchant', 'banker', 'innkeeper', 'trainer', 'guard', 'healer', 'quest']);
 const SPELL_TYPES = Object.freeze(['attack', 'heal', 'aoe', 'buff']);
@@ -35,6 +37,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('size', 'Size', 'number'), field('goldMin', 'Gold min', 'number'), field('goldMax', 'Gold max', 'number'),
     field('mapId', 'Runtime map', 'select', { optionKey: 'maps', allowEmpty: true }), field('count', 'Spawn count', 'number'),
     field('posX', 'Spawn X', 'number'), field('posY', 'Spawn Y', 'number'), field('speed', 'Move delay', 'number'),
+    field('lootTableId', 'Loot table', 'select', { optionKey: 'lootTables', allowEmpty: true }),
   ]),
   npcs: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('emoji', 'Emoji'), field('color', 'Color'),
@@ -53,18 +56,30 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('id', 'ID'), field('name', 'Name'), field('npcId', 'Quest NPC', 'select', { optionKey: 'npcs', allowEmpty: true }),
     field('description', 'Description', 'textarea'), field('target', 'Target'), field('count', 'Count', 'number'),
     field('rewardGold', 'Reward gold', 'number'), field('rewardXp', 'Reward XP', 'number'), field('levelRequired', 'Required level', 'number'),
-    field('requires', 'Prerequisite quest IDs', 'json'),
+    field('requires', 'Prerequisite quest IDs', 'json'), field('rewardItem', 'Reward item', 'json'),
   ]),
   maps: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('biome', 'Biome', 'select', { optionKey: 'biomes' }), field('description', 'Description', 'textarea'),
     field('levelRequired', 'Required level', 'number'), field('seed', 'Seed', 'number'), field('spawnX', 'Spawn X', 'number'), field('spawnY', 'Spawn Y', 'number'),
-    field('townX', 'Town X', 'number'), field('townY', 'Town Y', 'number'), field('townRange', 'Town range', 'number'), field('portals', 'Portals', 'json'),
+    field('townX', 'Town X', 'number'), field('townY', 'Town Y', 'number'), field('townRange', 'Town range', 'number'),
+    field('access', 'Access', 'select', { optionKey: 'mapAccess' }), field('portals', 'Portals', 'json'),
   ]),
   events: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('icon', 'Icon'), field('description', 'Description', 'textarea'),
-    field('target', 'Monster target'), field('count', 'Required kills', 'number'), field('rewardGold', 'Reward gold', 'number'),
+    field('type', 'Event type', 'select', { optionKey: 'eventTypes' }), field('target', 'Monster target'), field('count', 'Required kills', 'number'), field('rewardGold', 'Reward gold', 'number'),
     field('rewardXp', 'Reward XP', 'number'), field('rewardCoins', 'Reward coins', 'number'),
     field('mapId', 'Map', 'select', { optionKey: 'maps', allowEmpty: true }), field('durationMs', 'Duration ms', 'number'),
+  ]),
+  shops: Object.freeze([
+    field('id', 'ID'), field('name', 'Name'), field('npcId', 'Merchant NPC', 'select', { optionKey: 'npcs' }),
+    field('description', 'Description', 'textarea'), field('entries', 'Shop entries', 'json'),
+  ]),
+  lootTables: Object.freeze([
+    field('id', 'ID'), field('name', 'Name'), field('rolls', 'Rolls', 'number'),
+    field('description', 'Description', 'textarea'), field('entries', 'Loot entries', 'json'),
+  ]),
+  gmRoster: Object.freeze([
+    field('id', 'ID'), field('name', 'Character name'), field('note', 'GM note', 'textarea'),
   ]),
 });
 
@@ -163,6 +178,7 @@ export function validateStudioRecord(type, record) {
     error = numberIn(record, 'seed', 1, 2_147_483_646, { required: true, integer: true }); if (error) return error;
     error = numberIn(record, 'townRange', 0, 20, { required: true, integer: true }); if (error) return error;
     if (record.portals !== undefined && !Array.isArray(record.portals)) return 'portals must be a JSON array';
+    if (!MAP_ACCESS.includes(String(record.access || 'public'))) return 'map access is not supported';
     return null;
   }
 
@@ -175,6 +191,34 @@ export function validateStudioRecord(type, record) {
       ? Number(record.durationMs)
       : Number(record.duration) * 1000;
     if (!Number.isInteger(durationMs) || durationMs < 1_000 || durationMs > 604_800_000) return 'durationMs must be from 1000 to 604800000';
+  }
+
+  if (type === 'shops') {
+    if (!String(record.npcId || '').trim()) return 'npcId is required';
+    if (!Array.isArray(record.entries) || record.entries.length < 1 || record.entries.length > 100) return 'entries must contain 1-100 shop entries';
+    for (const entry of record.entries) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry) || !String(entry.itemId || '').trim()) return 'shop entries require itemId';
+      const error = numberIn(entry, 'price', 1, 100_000_000, { required: true, integer: true }); if (error) return error;
+    }
+    return null;
+  }
+
+  if (type === 'lootTables') {
+    let error = numberIn(record, 'rolls', 1, 10, { required: true, integer: true }); if (error) return error;
+    if (!Array.isArray(record.entries) || record.entries.length < 1 || record.entries.length > 100) return 'entries must contain 1-100 loot entries';
+    for (const entry of record.entries) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'loot entries must be objects';
+      if (!String(entry.itemId || entry.name || '').trim()) return 'loot entries require itemId or name';
+      const chance = Number(entry.chance); if (!Number.isFinite(chance) || chance <= 0 || chance > 1) return 'loot chance must be > 0 and <= 1';
+      const min = Number(entry.min ?? 1), max = Number(entry.max ?? min);
+      if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max < min || max > 9999) return 'loot min/max are invalid';
+    }
+    return null;
+  }
+
+  if (type === 'gmRoster') {
+    if (String(record.name || '').trim().length > 80) return 'GM character name is too long';
+    return null;
   }
 
   return null;
@@ -191,9 +235,11 @@ export function getContentStudioSchema(type, contentDB) {
   const options = {
     rarities: [...RARITIES], slots: [...ITEM_SLOTS], monsterTypes: [...MONSTER_TYPES], npcRoles: [...NPC_ROLES],
     spellTypes: [...SPELL_TYPES], buffTypes: [...BUFF_TYPES], vocations: Object.keys(VOCATIONS).sort(),
-    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB),
+    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], eventTypes: [...EVENT_TYPES],
     npcs: contentDB.get('npcs').map(entry => entry.id).filter(Boolean).sort(),
     quests: contentDB.get('quests').map(entry => entry.id).filter(Boolean).sort(),
+    items: contentDB.get('items').map(entry => entry.id).filter(Boolean).sort(),
+    lootTables: contentDB.get('lootTables').map(entry => entry.id).filter(Boolean).sort(),
   };
   const runtimeNotes = {
     items: 'Published item stats feed the authoritative loot pool and procedural 8.4 itemization.',
@@ -203,6 +249,9 @@ export function getContentStudioSchema(type, contentDB) {
     quests: 'Quest NPCs, prerequisites and kill targets are checked before publish.',
     maps: 'Map edits rebuild deterministic terrain and live portal travel. Built-in maps cannot be deleted.',
     events: 'World events rotate and reward participants from authoritative server state.',
+    shops: 'Content shops extend the authoritative alpha merchant catalog and can be edited without a client rebuild.',
+    lootTables: 'Loot tables are rolled server-side by monsters that reference them.',
+    gmRoster: 'Characters listed here may enter maps whose access is set to gm. This is server-enforced.',
   };
   return { schema, fields: schema.map(entry => entry.id), options, runtimeNote: runtimeNotes[type] || '' };
 }

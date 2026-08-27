@@ -16,6 +16,8 @@ import {
 } from './OfficialCatalogs.mjs';
 import { officialExplorationKnowledgeDomain } from './OfficialExplorationKnowledgeDomain.mjs';
 import { officialWorldEventDomain } from './OfficialWorldEventDomain.mjs';
+import { contentDB } from './ContentDB.mjs';
+import { buildEquipmentLootPool } from './Items.mjs';
 
 const clamp = (value, min, max, fallback = min) => {
   const number = Number(value);
@@ -140,10 +142,24 @@ function projectState(host, player) {
 }
 
 function projectCatalogs() {
+  const equipment = buildEquipmentLootPool(contentDB.get('items'));
+  const extraShop = [];
+  const seen = new Set(OFFICIAL_SHOP.map(entry => entry.id));
+  for (const shop of contentDB.get('shops')) {
+    for (const entry of Array.isArray(shop?.entries) ? shop.entries : []) {
+      if (!entry?.itemId || seen.has(entry.itemId)) continue;
+      const item = equipment.find(candidate => candidate.id === entry.itemId);
+      if (!item) continue;
+      seen.add(item.id);
+      extraShop.push({ id:item.id, name:item.name, icon:item.icon, type:'equipment', price:Math.max(1,Math.floor(Number(entry.price)||item.value||1)), levelRequired:item.level||1, description:item.description||`Equipment from ${shop.name || 'content shop'}.` });
+      if (extraShop.length >= 100) break;
+    }
+    if (extraShop.length >= 100) break;
+  }
   return {
     pets: clone(OFFICIAL_PETS),
     gems: clone(OFFICIAL_GEMS),
-    shop: clone(OFFICIAL_SHOP),
+    shop: clone([...OFFICIAL_SHOP, ...extraShop]),
     food: clone(OFFICIAL_FOOD),
     recipes: clone(OFFICIAL_RECIPES),
     coinStore: clone(OFFICIAL_COIN_STORE),

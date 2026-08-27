@@ -31,7 +31,7 @@ const DIST_DIR = path.resolve(__dirname, '..', 'dist');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const MAX_HTTP_BODY = 256 * 1024;
 const MAX_WS_PAYLOAD = 64 * 1024;
-const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
+const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events', 'shops', 'lootTables', 'gmRoster']);
 const READ_ONLY_ADMIN_TYPES = new Set();
 const ACTIVE_NAMES = new Map();
 const AUTH_RATE_LIMITS = new BoundedWindowRateLimiter({
@@ -471,7 +471,7 @@ function handleAdminAPI(req, res, route) {
   if (req.method === 'GET') {
     if (type === 'dashboard') {
       const c = contentDB.data;
-      return json(res, 200, { content: { items: c.items.length, monsters: c.monsters.length, npcs: c.npcs.length, quests: c.quests.length, spells: c.spells.length, maps: c.maps.length, events: c.worldEvents.length }, uptime: process.uptime(), tick: engine.getTickCount(), version: c.version });
+      return json(res, 200, { content: { items: c.items.length, monsters: c.monsters.length, npcs: c.npcs.length, quests: c.quests.length, spells: c.spells.length, maps: c.maps.length, events: c.worldEvents.length, shops: c.shops.length, lootTables: c.lootTables.length, gmRoster: c.gmRoster.length }, uptime: process.uptime(), tick: engine.getTickCount(), version: c.version });
     }
     if (type === 'players') {
       const players = [];
@@ -532,6 +532,7 @@ function handleAdminAPI(req, res, route) {
       if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
       if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
       if (type === 'events') officialSystems.syncWorldEvents(contentDB.get('events'));
+      if (type === 'gmRoster') engine.enforceAllMapAccess();
       broadcastContentUpdate();
       return json(res, 200, { ok: true });
     });
@@ -656,6 +657,7 @@ wss.on('connection', ws => {
       const saveKey = playerDB.findNameCaseInsensitive(name);
       const savedPlayer = saveKey ? playerDB.get(saveKey) : null;
       restorePlayer(player, savedPlayer, vocation);
+      engine.enforcePlayerMapAccess(player);
       player.sessionStartedAt = Date.now();
       player.sessionDamageBase = Number(player.stats?.damageDealt) || 0;
       questEngine.restorePlayer(clientId, savedPlayer?.quests);

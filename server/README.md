@@ -1,4 +1,4 @@
-# ⚔ Mor'ia MMO Server — Production Edition 6.2
+# ⚔ Mor'ia MMO Server — Alpha Edition 9.1
 
 Servidor autoritativo do **Mor'ia — Realm of Shadows**. O processo Node.js serve o cliente compilado, expõe APIs HTTP de autenticação/administração e mantém o multiplayer em tempo real por WebSocket na mesma porta.
 
@@ -8,6 +8,7 @@ Servidor autoritativo do **Mor'ia — Realm of Shadows**. O processo Node.js ser
 - Personagens vinculados à conta e nomes globais protegidos contra colisão.
 - Servidor autoritativo para movimento, combate, inventário, equipamento, talentos, quests, aventura e sistemas oficiais.
 - Conteúdo data-driven com painel administrativo e validação de referências.
+- Alpha 9.1: 11 mapas, conteúdo regional 1–60, shops/loot tables editáveis e Ilha GM com roster server-side.
 - WebSocket com payload limitado, heartbeat e estado controlado pelo servidor.
 - Rate limiting de autenticação bounded para impedir crescimento ilimitado de memória sob tráfego distribuído.
 - CI de produção em todo push para `master`: audit, typecheck, build, syntax check e suíte server-side.
@@ -71,7 +72,7 @@ As rotas autenticadas usam `Authorization: Bearer <sessionToken>`.
 - `GET /admin` — painel web; exige `ADMIN_TOKEN`.
 - `/admin/api/*` — CRUD/ações administrativas protegidas pelo mesmo token.
 - O token pode ser estabelecido inicialmente por `/admin?token=...`; o servidor redireciona e grava cookie `HttpOnly`/`SameSite=Strict` para o painel.
-- Mapas permanecem catálogo read-only enquanto o runtime autoritativo de terreno/portais continuar pertencendo a `World.mjs`.
+- Catálogos editáveis: items, monsters, NPCs, spells, quests, maps, events, shops, loot tables e GM roster. Mapas publicados reconstroem o runtime determinístico; referências inválidas são bloqueadas antes da persistência.
 
 ## WebSocket
 

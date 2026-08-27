@@ -8,7 +8,7 @@ const SERVICE = Object.freeze({
   banker: Object.freeze({ npcId: 'banker', label: 'Banker' }),
   innkeeper: Object.freeze({ npcId: 'innkeeper', label: 'Innkeeper' }),
   trainer: Object.freeze({ npcId: 'trainer', label: 'Trainer' }),
-  merchant: Object.freeze({ npcId: 'merchant_gorn', label: 'Merchant' }),
+  merchant: Object.freeze({ npcRole: 'merchant', label: 'Merchant' }),
 });
 
 function bool(value) { return { ok: Boolean(value), detail: null }; }
@@ -50,7 +50,7 @@ const ACTIONS = Object.freeze({
   },
   shop_buy: {
     service: SERVICE.merchant,
-    run: (systems, player, payload) => bool(systems.buyShop(player, payload.itemId, payload.quantity)),
+    run: (systems, player, payload, ctx) => bool(systems.buyShop(player, payload.itemId, payload.quantity, ctx.contentShops || [], ctx.contentItems || [])),
   },
   craft: {
     run: (systems, player, payload) => bool(systems.craft(player, payload.recipeId)),

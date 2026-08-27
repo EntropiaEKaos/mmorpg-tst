@@ -23,6 +23,12 @@ O gate oficial de qualidade executa `npm audit`, TypeScript, build de produção
 
 ---
 
+## 🚀 Mor'ia 9.1 — Alpha Content Expansion
+
+A linha 9.1 adiciona uma base de lançamento alpha orientada a conteúdo: **11 mapas** (10 regiões públicas + **Astra Sanctum, a Ilha dos GMs**), mais de **70 itens**, mais de **70 monstros**, mais de **40 NPCs**, mais de **45 quests**, novos feitiços para as 14 vocações, eventos regionais, lojas e loot tables autoritativas.
+
+Todo esse conteúdo é materializado no ContentDB e pode ser criado/editado/removido pelo `/admin`. Servidores 9.0 existentes migram uma única vez para a base 9.1 preservando valores já personalizados pelo admin. A Ilha GM usa acesso `gm` validado no servidor pela lista **GM Roster** do próprio Admin.
+
 ## ✨ Principais Funcionalidades
 
 ### ⚔️ 14 Classes (Vocações) Únicas

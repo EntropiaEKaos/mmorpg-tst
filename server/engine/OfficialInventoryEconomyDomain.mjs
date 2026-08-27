@@ -128,15 +128,25 @@ export class OfficialInventoryEconomyDomain {
     return true;
   }
 
-  buyShop(host, player, itemId, rawQty) {
-    const item = OFFICIAL_SHOP.find(entry => entry.id === itemId);
+  buyShop(host, player, itemId, rawQty, contentShops = [], contentItems = []) {
     const qty = int(rawQty, 1, INVENTORY_ECONOMY_RULES.maxShopQuantity, 1);
+    const official = OFFICIAL_SHOP.find(entry => entry.id === itemId);
+    const contentEntry = Array.isArray(contentShops)
+      ? contentShops.flatMap(shop => Array.isArray(shop?.entries) ? shop.entries : []).find(entry => entry?.itemId === itemId)
+      : null;
+    const contentItem = contentEntry ? buildEquipmentLootPool(contentItems).find(entry => entry.id === itemId) : null;
+    const item = official || (contentItem ? { ...contentItem, price: Number(contentEntry.price) || contentItem.value || 1, type: 'equipment' } : null);
     if (!item) return false;
+    const effectiveQty = item.type === 'equipment' ? 1 : qty;
     const discount = typeof host.getReputationDiscount === 'function' ? host.getReputationDiscount(player) : 0;
     const unitPrice = Math.max(1, Math.floor(item.price * (1 - discount)));
-    if (player.level < (item.levelRequired || 1) || player.gold < unitPrice * qty) return false;
-    player.gold -= unitPrice * qty;
-    addItem(player, { name: item.name, icon: item.icon, type: item.type, quantity: qty, value: unitPrice, description: item.description });
+    if (player.level < (item.levelRequired || item.level || 1) || player.gold < unitPrice * effectiveQty) return false;
+    player.gold -= unitPrice * effectiveQty;
+    if (item.type === 'equipment') {
+      addItem(player, { name:item.name, icon:item.icon, type:'equipment', quantity:1, value:unitPrice, rarity:item.rarity, description:item.description, equipment:{...item,sockets:item.rarity==='legendary'?1:0,socketedGems:[]} });
+    } else {
+      addItem(player, { name:item.name, icon:item.icon, type:item.type, quantity:effectiveQty, value:unitPrice, description:item.description });
+    }
     return true;
   }
 

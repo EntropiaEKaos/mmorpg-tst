@@ -63,6 +63,9 @@ export function adminPanelHTML() {
     <button onclick="showTab('quests', this)">📜 Quests</button>
     <button onclick="showTab('maps', this)">🗺 Maps</button>
     <button onclick="showTab('events', this)">🌍 Events</button>
+    <button onclick="showTab('shops', this)">🏪 Shops</button>
+    <button onclick="showTab('lootTables', this)">🎁 Loot Tables</button>
+    <button onclick="showTab('gmRoster', this)">🔐 GM Roster</button>
     <hr style="border-color:#3a2a1a;margin:1rem 0">
     <button onclick="showTab('players', this)">👥 Players</button>
     <button onclick="showTab('broadcast', this)">📡 Broadcast</button>

@@ -8,18 +8,19 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { ALPHA_CONTENT } from './AlphaContent.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DB_FILE = process.env.MORIA_CONTENT_DB || path.join(__dirname, '..', 'moria-content.json');
-const COLLECTION_KEYS = Object.freeze(['items', 'monsters', 'npcs', 'quests', 'spells', 'maps', 'worldEvents', 'shops', 'lootTables']);
+const COLLECTION_KEYS = Object.freeze(['items', 'monsters', 'npcs', 'quests', 'spells', 'maps', 'worldEvents', 'shops', 'lootTables', 'gmRoster']);
 const TYPE_ALIASES = Object.freeze({ events: 'worldEvents' });
 
 function emptyContentData() {
   return {
     version: 1,
     items: [], monsters: [], npcs: [], quests: [], spells: [], maps: [],
-    worldEvents: [], shops: [], lootTables: [],
+    worldEvents: [], shops: [], lootTables: [], gmRoster: [],
   };
 }
 
@@ -46,6 +47,15 @@ function dedupeById(records) {
   for (const record of records) {
     if (typeof record.id !== 'string' || !record.id) continue;
     byId.set(record.id, record);
+  }
+  return Array.from(byId.values());
+}
+
+function mergeById(base, additions) {
+  const byId = new Map((Array.isArray(base) ? base : []).map(entry => [entry.id, { ...entry }]));
+  for (const entry of Array.isArray(additions) ? additions : []) {
+    if (!entry || typeof entry.id !== 'string' || !entry.id) continue;
+    byId.set(entry.id, { ...(byId.get(entry.id) || {}), ...entry });
   }
   return Array.from(byId.values());
 }
@@ -78,6 +88,7 @@ export class ContentDB {
     // Only seed a brand-new or unrecoverably corrupt database. A valid empty
     // collection is intentional admin state and must stay empty after restart.
     if (!this.load()) this.seedDefaults();
+    else this.migrateAlphaV2();
   }
 
   load() {
@@ -107,6 +118,29 @@ export class ContentDB {
       }
     }
     return false;
+  }
+
+  migrateAlphaV2() {
+    if (Number(this.data.version) >= 2) return false;
+    const hasExistingContent = COLLECTION_KEYS.some(key => Array.isArray(this.data[key]) && this.data[key].length > 0);
+    if (hasExistingContent) {
+      // Alpha records provide missing defaults while every existing admin value wins.
+      this.data.items = mergeById(ALPHA_CONTENT.items, this.data.items);
+      this.data.monsters = mergeById(ALPHA_CONTENT.monsters, this.data.monsters);
+      this.data.npcs = mergeById(ALPHA_CONTENT.npcs, this.data.npcs);
+      this.data.quests = mergeById(ALPHA_CONTENT.quests, this.data.quests);
+      this.data.spells = mergeById(ALPHA_CONTENT.spells, this.data.spells);
+      this.data.maps = mergeById(ALPHA_CONTENT.maps, this.data.maps);
+      this.data.worldEvents = mergeById(ALPHA_CONTENT.events, this.data.worldEvents);
+      this.data.shops = mergeById(ALPHA_CONTENT.shops, this.data.shops);
+      this.data.lootTables = mergeById(ALPHA_CONTENT.lootTables, this.data.lootTables);
+      this.data.gmRoster = mergeById(ALPHA_CONTENT.gmRoster, this.data.gmRoster);
+    }
+    // Empty v1 stores stay intentionally empty, but are marked migrated so a
+    // later admin-created record cannot unexpectedly trigger the alpha seed.
+    this.data.version = 2;
+    this.save();
+    return true;
   }
 
   save() {
@@ -202,6 +236,20 @@ export class ContentDB {
     this.data.worldEvents = [
       { id: 'event_invasion', name: 'Rat Plague', icon: '🐀', description: 'Rats invade Eldoria!', type: 'invasion', target: 'rat', count: 20, rewardGold: 800, rewardXp: 1200, duration: 900 },
     ];
+
+    // Alpha pack overlays the compact legacy defaults. This fixes old partial map
+    // records and gives fresh deployments a launch-sized content baseline.
+    this.data.items = mergeById(this.data.items, ALPHA_CONTENT.items);
+    this.data.monsters = mergeById(this.data.monsters, ALPHA_CONTENT.monsters);
+    this.data.npcs = mergeById(this.data.npcs, ALPHA_CONTENT.npcs);
+    this.data.quests = mergeById(this.data.quests, ALPHA_CONTENT.quests);
+    this.data.spells = mergeById(this.data.spells, ALPHA_CONTENT.spells);
+    this.data.maps = mergeById(this.data.maps, ALPHA_CONTENT.maps);
+    this.data.worldEvents = mergeById(this.data.worldEvents, ALPHA_CONTENT.events);
+    this.data.shops = mergeById(this.data.shops, ALPHA_CONTENT.shops);
+    this.data.lootTables = mergeById(this.data.lootTables, ALPHA_CONTENT.lootTables);
+    this.data.gmRoster = mergeById(this.data.gmRoster, ALPHA_CONTENT.gmRoster);
+    this.data.version = 2;
 
     this.save();
   }

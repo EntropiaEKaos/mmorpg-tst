@@ -113,6 +113,7 @@ function normalizeConfig(record, base = null) {
     },
     townRange: integer(record?.townRange, 0, 20, base?.townRange ?? 8),
     levelRequired: integer(record?.levelRequired, 1, 100_000, base?.levelRequired ?? 1),
+    access: record?.access === 'gm' ? 'gm' : (base?.access === 'gm' ? 'gm' : 'public'),
     portals,
   };
 }
@@ -182,7 +183,7 @@ class WorldManager {
 
   getDefinitions() {
     return Array.from(this.configs.values()).map(config => ({
-      id: config.id, name: config.name, description: config.description, biome: config.biome,
+      id: config.id, name: config.name, description: config.description, biome: config.biome, access: config.access || 'public',
       levelRequired: config.levelRequired, seed: config.seed,
       spawnX: config.spawnPoint.x, spawnY: config.spawnPoint.y,
       townX: config.townCenter.x, townY: config.townCenter.y, townRange: config.townRange,
