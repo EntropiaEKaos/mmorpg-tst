@@ -16,6 +16,7 @@ import { exportPlayerState, freshGlobalState, freshPlayerState, normalizePlayerS
 import { DEFAULT_OFFICIAL_STATE_FILE, OfficialStateRepository } from './OfficialStateRepository.mjs';
 import { officialPlayerLifecycleDomain } from './OfficialPlayerLifecycleDomain.mjs';
 import { officialSnapshotReadModel } from './OfficialSnapshotReadModel.mjs';
+import { officialRuntimeCoordinator } from './OfficialRuntimeCoordinator.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
@@ -121,19 +122,7 @@ export class OfficialSystems {
   }
 
   onMonsterKill(player, monster) {
-    const key = officialCombatAugmentationDomain.recordBestiaryKill(this, player, monster);
-    const result = { xpMultiplier: this.getXpMultiplier(player), bonusLoot: [], nextDungeonWave: null, dungeonComplete: null, worldEventProgress: null, achievements: [] };
-    const gem = officialCombatAugmentationDomain.maybeGemDrop(player, monster);
-    if (gem) result.bonusLoot.push(gem);
-
-    result.worldEventProgress = officialWorldEventDomain.recordKill(this, player, key);
-
-    const dungeonResult = officialDungeonDomain.onMonsterKill(this, player, monster);
-    result.nextDungeonWave = dungeonResult.nextDungeonWave;
-    result.dungeonComplete = dungeonResult.dungeonComplete;
-
-    result.achievements = this.refreshAchievements(player);
-    return result;
+    return officialRuntimeCoordinator.onMonsterKill(this, player, monster);
   }
 
   getDungeonWave(wave, playerLevel) {
@@ -153,9 +142,7 @@ export class OfficialSystems {
   }
 
   tickPlayer(player, now = Date.now()) {
-    officialProgressionDomain.tickStamina(this, player, now);
-    officialPvpDomain.tick(this, player, now);
-    this.ensureWorldEvent(now);
+    return officialRuntimeCoordinator.tickPlayer(this, player, now);
   }
 
   buyPet(player, petId) {
