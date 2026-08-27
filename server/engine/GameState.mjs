@@ -14,6 +14,7 @@ import { officialSystems } from './OfficialSystems.mjs';
 import { socialSystems } from './SocialSystems.mjs';
 import { contentDB } from './ContentDB.mjs';
 import { accountStore } from './AuthService.mjs';
+import { canAccessMap, explainMapAccess } from './ContentAccess.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -117,6 +118,21 @@ class GameEngine {
     return result;
   }
 
+  enforcePlayerMapAccess(player) {
+    const map = WORLD.getMap(player?.mapId);
+    if (player && map && canAccessMap(contentDB, player, map)) return true;
+    const fallback = WORLD.getMap('eldoria');
+    if (!player || !fallback) return false;
+    player.mapId = 'eldoria';
+    const pos = WORLD.findWalkableSpawn(fallback, fallback.spawnPoint);
+    player.x = pos.x; player.y = pos.y; player.targetId = null;
+    return false;
+  }
+
+  enforceAllMapAccess() {
+    for (const player of this.players.values()) this.enforcePlayerMapAccess(player);
+  }
+
   syncContentMaps(mapContent = []) {
     const previousIds = new Set(WORLD.getMapIds());
     WORLD.syncContentMaps(mapContent);
@@ -138,7 +154,7 @@ class GameEngine {
 
     for (const player of this.players.values()) {
       let map = WORLD.getMap(player.mapId);
-      if (!map) { player.mapId = 'eldoria'; map = WORLD.getMap('eldoria'); player.targetId = null; }
+      if (!map || !canAccessMap(contentDB, player, map)) { player.mapId = 'eldoria'; map = WORLD.getMap('eldoria'); player.targetId = null; }
       if (!map?.tiles?.[player.y]?.[player.x]?.walkable) {
         const pos = WORLD.findWalkableSpawn(map, map?.spawnPoint);
         player.x = pos.x; player.y = pos.y; player.targetId = null;
@@ -295,6 +311,7 @@ class GameEngine {
             speed: Math.floor(boundedNumber(template.speed, 200, 10_000, 1200)),
             goldMin: Math.floor(boundedNumber(template.goldMin, 0, 100_000_000, 0)),
             goldMax: Math.floor(boundedNumber(template.goldMax, 0, 100_000_000, 0)),
+            lootTableId: typeof template.lootTableId === 'string' ? template.lootTableId.trim().slice(0,100) : '',
           });
         }
       }
@@ -536,7 +553,7 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🏆 Dungeon cleared: +${reward.gold}g +${reward.xp}XP +${reward.coins} coins`, color: '#ffd87b', pos: { x: player.x, y: player.y } });
     }
 
-    const loot = [...rollLoot(monster, derived.goldBonus, this.contentItems, player.mapId), ...(officialKill.bonusLoot || [])];
+    const loot = [...rollLoot(monster, derived.goldBonus, this.contentItems, player.mapId, contentDB.get('lootTables')), ...(officialKill.bonusLoot || [])];
     if (loot.length > 0) {
       const groundItems = this.groundItemsByMap.get(player.mapId) || [];
       groundItems.push({ id: `ground_${Date.now()}_${Math.random()}`, x: monster.x, y: monster.y, items: loot, expireAt: Date.now() + 120000 });
@@ -762,6 +779,10 @@ class GameEngine {
     const targetMap = WORLD.getMap(portal.targetMap);
     const spawn = portal.targetSpawn;
     if (!targetMap || !spawn || !targetMap.tiles?.[spawn.y]?.[spawn.x]?.walkable) return false;
+    if (!canAccessMap(contentDB, player, targetMap)) {
+      this.emitEvent(player.mapId, { kind:'system', targetId:player.id, text:`🔒 ${explainMapAccess(contentDB, player, targetMap)}`, color:'#ff6060', pos:{x:player.x,y:player.y} });
+      return false;
+    }
     if (targetMap.levelRequired && player.level < targetMap.levelRequired) {
       this.emitEvent(player.mapId, {
         kind: 'system', targetId: player.id,
@@ -922,6 +943,7 @@ class GameEngine {
       world: WORLD,
       contentItems: this.contentItems,
       contentNpcs: contentDB.get('npcs'),
+      contentShops: contentDB.get('shops'),
       getPlayer: id => this.players.get(id),
       getDerivedStats: target => this.computeDerivedStats(target),
       characterExists: name => Boolean(accountStore.findCharacter(name)),

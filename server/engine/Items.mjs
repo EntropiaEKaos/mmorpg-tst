@@ -37,7 +37,7 @@ export function getStarterInventory() {
   ];
 }
 
-const VALID_EQUIPMENT_SLOTS = new Set(['weapon', 'armor', 'helmet', 'legs', 'boots', 'shield', 'ring', 'amulet']);
+const VALID_EQUIPMENT_SLOTS = new Set(['weapon', 'armor', 'helmet', 'legs', 'boots', 'shield', 'ring', 'ring2', 'amulet', 'cloak', 'belt', 'gloves', 'relic']);
 const VALID_RARITIES = new Set(['common', 'uncommon', 'rare', 'epic', 'legendary']);
 
 function finiteStat(value, fallback = 0, max = 1_000_000) {
@@ -73,7 +73,34 @@ export function buildEquipmentLootPool(contentItems = []) {
   return Array.from(byId.values());
 }
 
-export function rollLoot(monster, goldBonus = 0, contentItems = []) {
+export function rollContentLootTable(monster, contentItems = [], lootTables = [], random = Math.random) {
+  const tableId = typeof monster?.lootTableId === 'string' ? monster.lootTableId : '';
+  const table = Array.isArray(lootTables) ? lootTables.find(entry => entry?.id === tableId) : null;
+  if (!table || !Array.isArray(table.entries)) return [];
+  const pool = buildEquipmentLootPool(contentItems);
+  const drops = [];
+  const rolls = Math.max(1, Math.min(10, Math.floor(Number(table.rolls) || 1)));
+  for (let roll = 0; roll < rolls; roll++) {
+    for (const entry of table.entries) {
+      const chance = Math.max(0, Math.min(1, Number(entry?.chance) || 0));
+      if (chance <= 0 || random() >= chance) continue;
+      const min = Math.max(1, Math.floor(Number(entry.min) || 1));
+      const max = Math.max(min, Math.min(9999, Math.floor(Number(entry.max) || min)));
+      const quantity = min + Math.floor(random() * (max - min + 1));
+      const base = entry.itemId ? pool.find(item => item.id === entry.itemId) : null;
+      if (base) {
+        const item = rollEquipmentAffixes(base, monster.level, random);
+        drops.push({ id:`loot_${Date.now()}_${random()}`, name:item.name, icon:item.icon, quantity:1, value:item.value, type:'equipment', rarity:item.rarity, description:item.description, equipment:{...item,sockets:item.rarity==='legendary'?1:0,socketedGems:[]} });
+      } else {
+        const name = typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim().slice(0,100) : 'Regional Material';
+        drops.push({ id:`loot_${Date.now()}_${random()}`, name, icon:typeof entry.icon==='string'&&entry.icon?entry.icon.slice(0,8):'📦', quantity, value:Math.max(0,Math.floor(Number(entry.value)||0)), type:typeof entry.type==='string'&&entry.type?entry.type:'misc' });
+      }
+    }
+  }
+  return drops.slice(0, 12);
+}
+
+export function rollLoot(monster, goldBonus = 0, contentItems = [], mapId = monster?.mapId, lootTables = []) {
   const drops = [];
   const goldChance = monster.type === 'boss' ? 1 : monster.type === 'elite' ? 0.8 : 0.5;
   if (Math.random() < goldChance) {
@@ -102,7 +129,8 @@ export function rollLoot(monster, goldBonus = 0, contentItems = []) {
       });
     }
   }
-  const regional = rollRegionalMaterial(arguments.length > 3 ? arguments[3] : monster.mapId, monster, Math.random);
+  const regional = rollRegionalMaterial(mapId, monster, Math.random);
   if (regional) drops.push(regional);
+  drops.push(...rollContentLootTable(monster, contentItems, lootTables, Math.random));
   return drops;
 }

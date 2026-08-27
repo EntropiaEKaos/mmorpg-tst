@@ -177,8 +177,8 @@ export class OfficialSystems {
     return officialInventoryEconomyDomain.buyFood(player, foodId);
   }
 
-  buyShop(player, itemId, rawQty) {
-    return officialInventoryEconomyDomain.buyShop(this, player, itemId, rawQty);
+  buyShop(player, itemId, rawQty, contentShops = [], contentItems = []) {
+    return officialInventoryEconomyDomain.buyShop(this, player, itemId, rawQty, contentShops, contentItems);
   }
 
   craft(player, recipeId) {

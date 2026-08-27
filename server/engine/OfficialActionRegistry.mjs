@@ -50,7 +50,7 @@ const ACTIONS = Object.freeze({
   },
   shop_buy: {
     service: SERVICE.merchant,
-    run: (systems, player, payload) => bool(systems.buyShop(player, payload.itemId, payload.quantity)),
+    run: (systems, player, payload, ctx) => bool(systems.buyShop(player, payload.itemId, payload.quantity, ctx.contentShops || [], ctx.contentItems || [])),
   },
   craft: {
     run: (systems, player, payload) => bool(systems.craft(player, payload.recipeId)),

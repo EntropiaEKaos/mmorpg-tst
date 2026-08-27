@@ -82,11 +82,26 @@ export function validateContentReferences(contentDB, type, record) {
   if (type === 'monsters' && record.mapId !== undefined && record.mapId !== null && String(record.mapId).trim()) {
     const mapId = String(record.mapId).trim();
     if (!hasMap(contentDB, mapId)) return `Monster references unknown map: ${mapId}`;
+    const lootTableId = typeof record.lootTableId === 'string' ? record.lootTableId.trim() : '';
+    if (lootTableId && !contentDB.get('lootTables').some(table => table.id === lootTableId)) return `Monster references unknown loot table: ${lootTableId}`;
   }
 
   if (type === 'events' && record.mapId !== undefined && record.mapId !== null && String(record.mapId).trim()) {
     const mapId = String(record.mapId).trim();
     if (!hasMap(contentDB, mapId)) return `World event references unknown map: ${mapId}`;
+  }
+
+  if (type === 'shops') {
+    if (!contentDB.get('npcs').some(npc => npc.id === record.npcId)) return `Shop references unknown NPC: ${record.npcId}`;
+    for (const entry of Array.isArray(record.entries) ? record.entries : []) {
+      if (!contentDB.get('items').some(item => item.id === entry.itemId)) return `Shop references unknown item: ${entry.itemId}`;
+    }
+  }
+
+  if (type === 'lootTables') {
+    for (const entry of Array.isArray(record.entries) ? record.entries : []) {
+      if (entry.itemId && !contentDB.get('items').some(item => item.id === entry.itemId)) return `Loot table references unknown item: ${entry.itemId}`;
+    }
   }
 
   return null;
@@ -99,6 +114,16 @@ export function findBlockingContentReferences(contentDB, type, id) {
 
   if (type === 'npcs') {
     for (const quest of contentDB.get('quests')) if (quest.npcId === canonicalId) blockers.push({ type: 'quest', id: quest.id, field: 'npcId' });
+    for (const shop of contentDB.get('shops')) if (shop.npcId === canonicalId) blockers.push({ type: 'shop', id: shop.id, field: 'npcId' });
+  }
+
+  if (type === 'items') {
+    for (const shop of contentDB.get('shops')) for (const entry of shop.entries || []) if (entry.itemId === canonicalId) blockers.push({ type: 'shop', id: shop.id, field: 'entries.itemId' });
+    for (const table of contentDB.get('lootTables')) for (const entry of table.entries || []) if (entry.itemId === canonicalId) blockers.push({ type: 'lootTable', id: table.id, field: 'entries.itemId' });
+  }
+
+  if (type === 'lootTables') {
+    for (const monster of contentDB.get('monsters')) if (monster.lootTableId === canonicalId) blockers.push({ type: 'monster', id: monster.id, field: 'lootTableId' });
   }
 
   if (type === 'quests') {
@@ -130,7 +155,7 @@ export function findBlockingContentReferences(contentDB, type, id) {
 }
 
 
-const AUDIT_TYPES = Object.freeze(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
+const AUDIT_TYPES = Object.freeze(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events', 'shops', 'lootTables', 'gmRoster']);
 
 export function auditContentReferences(contentDB) {
   const issues = [];

@@ -91,12 +91,14 @@ const mapCenters = {
   emberhold:[65,15], crystal_deep:[40,60], stormwatch_isle:[40,22], voidlands:[40,40], nightfall_citadel:[40,40], gm_sanctum:[40,40],
 };
 
+const LEGACY_MAP_GATES = Object.freeze({ eldoria:1, frostpeak:1, shadowfen:1, emberhold:1, voidlands:25 });
+
 const maps = REGIONS.map(region => {
   const [townX,townY] = mapCenters[region.id];
   return {
     id:region.id, name:region.name, biome:region.biome,
     description:`${region.name} — ${region.theme} frontier for levels ${region.level}+ with its own hunts, boss, quests and economy hooks.`,
-    levelRequired:region.level, seed:region.seed, spawnX:townX, spawnY:townY, townX, townY, townRange:8,
+    levelRequired:LEGACY_MAP_GATES[region.id] ?? region.level, seed:region.seed, spawnX:townX, spawnY:townY, townX, townY, townRange:8,
     access:'public', portals:PORTALS[region.id] || [],
   };
 });
@@ -191,7 +193,7 @@ quests.push(
 
 const spellNames = {
   knight:['Lionheart Cleave','Iron Oath'], paladin:['Sunlance','Radiant Aegis'], sorcerer:['Starfire Lance','Arcane Surge'], druid:['Thornburst','Ancient Renewal'],
-  warlock:['Soul Bolt','Dread Pact'], rogue:['Shadowstep Strike','Killer Instinct'], priest:['Smite','Sanctuary'], death_knight:['Grave Slash','Frozen Resolve'],
+  warlock:['Soul Bolt','Dread Pact'], rogue:['Shadowstep Strike','Killer Instinct'], priest:['Smite','Sanctuary'], deathknight:['Grave Slash','Frozen Resolve'],
   monk:['Palm of Thunder','Flow State'], ranger:['Storm Arrow','Predator Focus'], necromancer:['Bone Spear','Death Shroud'], berserker:['Ruin Axe','Blood Frenzy'],
   shaman:['Chain Spark','Spirit Ward'], templar:['Judgment','Bulwark of Dawn'],
 };
