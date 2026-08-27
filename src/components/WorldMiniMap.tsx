@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Monster, Player, TileType } from '../game/types';
 import { MAPS, MAP_HEIGHT, MAP_WIDTH, generateMap, getBiomeTint } from '../game/maps';
 import { getCityMinimapMarkers } from '../game/cityPresentation';
@@ -15,22 +16,24 @@ interface Props {
 
 export default function WorldMiniMap({ player, monsters, mapId }: Props) {
   const map = MAPS[mapId] || MAPS.eldoria;
-  const world = generateMap(map.id);
   const size = 232;
   const scale = size / MAP_WIDTH;
   const height = size * (MAP_HEIGHT / MAP_WIDTH);
-  const tint = getBiomeTint(map.biome);
-  const markers = getCityMinimapMarkers(map);
   const sample = 2;
-  const tiles: Array<{ x: number; y: number; color: string }> = [];
 
-  for (let y = 0; y < MAP_HEIGHT; y += sample) {
-    for (let x = 0; x < MAP_WIDTH; x += sample) {
-      const tile = world[y]?.[x];
-      const fallback = ((x + y) & 2) === 0 ? tint.ground : tint.groundDark;
-      tiles.push({ x, y, color: tile ? (TILE_COLORS[tile.type] || fallback) : fallback });
+  const { tiles, markers } = useMemo(() => {
+    const world = generateMap(map.id);
+    const tint = getBiomeTint(map.biome);
+    const nextTiles: Array<{ x: number; y: number; color: string }> = [];
+    for (let y = 0; y < MAP_HEIGHT; y += sample) {
+      for (let x = 0; x < MAP_WIDTH; x += sample) {
+        const tile = world[y]?.[x];
+        const fallback = ((x + y) & 2) === 0 ? tint.ground : tint.groundDark;
+        nextTiles.push({ x, y, color: tile ? (TILE_COLORS[tile.type] || fallback) : fallback });
+      }
     }
-  }
+    return { tiles: nextTiles, markers: getCityMinimapMarkers(map) };
+  }, [mapId, map.id, map.biome, map.cityAccent, map.districts, map.landmarks, map.portals]);
 
   return (
     <div className="relative overflow-hidden border border-[#806437] bg-[#070a10] shadow-[inset_0_0_18px_rgba(0,0,0,.85)]" style={{ width: `${size}px`, height: `${height}px` }}>
