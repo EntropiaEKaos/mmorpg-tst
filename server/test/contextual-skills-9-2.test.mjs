@@ -5,6 +5,7 @@ import { createWorldClockSnapshot, worldPhaseMultiplier } from '../engine/WorldC
 import { contextualizeSpell, effectForRelation, multiplierForRelation } from '../engine/ContextualSkillEngine.mjs';
 
 const read = path => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
+const almostEqual = (actual, expected, epsilon = 1e-9) => assert.ok(Math.abs(actual - expected) < epsilon, `expected ${actual} ≈ ${expected}`);
 
 test('9.2 world clock exposes deterministic dawn/day/dusk/night phases', () => {
   const length = 24 * 60 * 1000;
@@ -27,9 +28,9 @@ test('contextual skills resolve different ally/enemy effects and relation multip
   const day = { phase: 'day', daylight: 1 };
   assert.equal(effectForRelation(spell, 'ally'), 'heal');
   assert.equal(effectForRelation(spell, 'enemy'), 'damage');
-  assert.equal(multiplierForRelation(spell, 'ally', day), 1.8);
-  assert.ok(Math.abs(multiplierForRelation(spell, 'self', day) - 1.44) < 1e-9);
-  assert.ok(Math.abs(worldPhaseMultiplier({ phase: 'night', daylight: 0 }, 1.2, 0.9) - 0.9) < 1e-9);
+  almostEqual(multiplierForRelation(spell, 'ally', day), 1.8);
+  almostEqual(multiplierForRelation(spell, 'self', day), 1.44);
+  almostEqual(worldPhaseMultiplier({ phase: 'night', daylight: 0 }, 1.2, 0.9), 0.9);
 });
 
 test('classic spells remain backward compatible while selected spells gain contextual presets', () => {
