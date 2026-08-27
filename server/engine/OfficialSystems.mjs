@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { buildEquipmentLootPool } from './Items.mjs';
+import { executeOfficialAction, getOfficialActionService, hasOfficialAction } from './OfficialActionRegistry.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,15 +22,6 @@ const slug = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0
 const cleanText = (value, max = 500) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const dayKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 const playerKey = (name) => String(name || '').trim().toLocaleLowerCase('en-US');
-
-const SERVICE_RULES = Object.freeze({
-  bank_deposit: { npcId: 'banker', label: 'Banker' },
-  bank_withdraw: { npcId: 'banker', label: 'Banker' },
-  rest: { npcId: 'innkeeper', label: 'Innkeeper' },
-  train: { npcId: 'trainer', label: 'Trainer' },
-  food_buy: { npcId: 'innkeeper', label: 'Innkeeper' },
-  shop_buy: { npcId: 'merchant_gorn', label: 'Merchant' },
-});
 
 export const OFFICIAL_PETS = Object.freeze([
   { id: 'wolf_pup', name: 'Wolf Pup', icon: '🐺', color: '#8a8a8a', attack: 8, price: 500, levelRequired: 3 },
@@ -394,7 +386,7 @@ export class OfficialSystems {
   }
 
   serviceProximity(player, action, npcs = []) {
-    const rule = SERVICE_RULES[action];
+    const rule = getOfficialActionService(action);
     if (!rule) return { ok: true, npc: null };
     const npc = Array.isArray(npcs) ? npcs.find(entry => entry?.id === rule.npcId) : null;
     if (!npc) return { ok: false, error: `${rule.label} is unavailable.` };
@@ -1012,39 +1004,13 @@ export class OfficialSystems {
 
   handle(player, payload, ctx = {}) {
     const action = cleanText(payload?.action, 80);
+    if (!hasOfficialAction(action)) return { ok: false, error: 'Unknown official action.' };
     const proximity = this.serviceProximity(player, action, ctx.contentNpcs || []);
     if (!proximity.ok) return { ok: false, error: proximity.error || 'Move near the required NPC.' };
-    let ok = false;
-    let detail = null;
-    if (action === 'pet_buy') ok = this.buyPet(player, payload.petId);
-    else if (action === 'pet_toggle') ok = this.togglePet(player, payload.petId ?? null);
-    else if (action === 'depot_put') ok = this.depotPut(player, payload.itemId);
-    else if (action === 'depot_take') ok = this.depotTake(player, payload.depotId);
-    else if (action === 'bank_deposit') ok = this.bank(player, 'deposit', payload.amount);
-    else if (action === 'bank_withdraw') ok = this.bank(player, 'withdraw', payload.amount);
-    else if (action === 'rest') ok = this.rest(player);
-    else if (action === 'train') ok = this.train(player);
-    else if (action === 'food_buy') ok = this.buyFood(player, payload.foodId);
-    else if (action === 'shop_buy') ok = this.buyShop(player, payload.itemId, payload.quantity);
-    else if (action === 'craft') ok = this.craft(player, payload.recipeId);
-    else if (action === 'socket_gem') ok = this.socketGem(player, payload.itemId, payload.gemItemId);
-    else if (action === 'daily_claim') { detail = this.claimDaily(player); ok = Boolean(detail); }
-    else if (action === 'gather') { detail = this.gather(player, ctx.world); ok = Boolean(detail); }
-    else if (action === 'book_read') ok = this.readBook(player, payload.bookId);
-    else if (action === 'mystery_answer') { detail = this.answerMystery(player, payload.mysteryId, payload.answer); ok = detail.ok; }
-    else if (action === 'coin_buy') ok = this.buyCoinItem(player, payload.itemId, ctx.contentItems || []);
-    else if (action === 'auction_list') ok = this.listAuction(player, payload.itemId, payload.price);
-    else if (action === 'auction_buy') ok = this.buyAuction(player, payload.listingId, ctx.findOnlinePlayer);
-    else if (action === 'auction_cancel') ok = this.cancelAuction(player, payload.listingId);
-    else if (action === 'mail_send') ok = this.sendMail(player, payload, ctx.characterExists);
-    else if (action === 'mail_read' || action === 'mail_claim' || action === 'mail_delete') ok = this.markMail(player, payload.mailId, action.replace('mail_', ''));
-    else if (action === 'world_event_claim') { detail = this.claimWorldEvent(player); ok = Boolean(detail); }
-    else if (action === 'pvp_toggle') { detail = this.pvpToggle(player); ok = true; }
-    else if (action === 'pvp_attack') { detail = this.pvpAttack(player, ctx.getPlayer?.(payload.targetId), ctx.getDerivedStats); ok = Boolean(detail); }
-    else if (action === 'dungeon_start') { detail = this.startDungeon(player, payload.waves); ok = detail.ok; if (ok) ctx.startDungeon?.(detail); }
-    else if (action === 'dungeon_abandon') { ok = this.abandonDungeon(player); if (ok) ctx.clearDungeon?.(); }
-    else return { ok: false, error: 'Unknown official action.' };
 
+    const result = executeOfficialAction(this, player, action, payload, ctx);
+    const ok = Boolean(result?.ok);
+    const detail = result?.detail ?? null;
     if (ok) this.refreshAchievements(player);
     return { ok, detail, action, error: ok ? null : 'Action rejected by authoritative server.' };
   }
