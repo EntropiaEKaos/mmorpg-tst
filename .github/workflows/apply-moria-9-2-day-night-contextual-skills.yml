@@ -6,6 +6,9 @@ on:
     paths:
       - tools/apply-moria-9-2-day-night-contextual-skills.py
       - tools/fix-moria-9-2-contextual-applicator.py
+      - server/engine/WorldClock.mjs
+      - server/engine/ContextualSkillEngine.mjs
+      - server/test/contextual-skills-9-2.test.mjs
       - .github/workflows/apply-moria-9-2-day-night-contextual-skills.yml
 
 permissions:
