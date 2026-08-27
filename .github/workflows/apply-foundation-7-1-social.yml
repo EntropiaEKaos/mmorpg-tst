@@ -1,0 +1,58 @@
+name: Apply Foundation 7.1 Social
+
+on:
+  push:
+    branches: [mvp-foundation-7.0]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mvp-foundation-7.0
+          fetch-depth: 4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply authoritative social wiring
+        run: python3 tools/apply-foundation-7-1-social.py
+      - name: Validate social invariants
+        run: |
+          grep -q "case 'social': return this.handleSocial" server/engine/GameState.mjs
+          grep -q "socialSystems.snapshot(player" server/engine/GameState.mjs
+          grep -q "socialSystems.chatRecipients" server/server.js
+          grep -q "sendSocial(action" src/game/ServerSync.ts
+          grep -q "social?: any" src/game/network.ts
+          grep -q "SocialHub" src/components/GameScreen.tsx
+          grep -q "party.*guild.*trade" src/game/types.ts
+          grep -q "direct trade requires proximity" server/test/social-systems.test.mjs
+      - name: Validate all gates
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm ci --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated Foundation 7.1 social layer
+        run: |
+          if git diff --quiet -- server src docs; then
+            echo "No source changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server src docs
+          git commit -m "feat(social): add authoritative party guild trade and scoped chat"
+          git restore tools || true
+          git fetch origin mvp-foundation-7.0
+          git rebase origin/mvp-foundation-7.0
+          git push origin HEAD:mvp-foundation-7.0
