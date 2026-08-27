@@ -277,3 +277,32 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Mor'ia 8.2 — combat readability and feedback */
+@keyframes moria-target-enter {
+  from { opacity: 0; transform: translateY(-7px) scale(0.975); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes moria-target-boss-breathe {
+  0%, 100% { box-shadow: 0 24px 70px rgba(0,0,0,.48), 0 0 18px rgba(255,216,123,.05); }
+  50% { box-shadow: 0 24px 70px rgba(0,0,0,.48), 0 0 34px rgba(255,216,123,.16); }
+}
+
+@keyframes moria-action-ready-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.08); }
+}
+
+.moria-target-frame {
+  animation: moria-target-enter 180ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.moria-target-boss {
+  animation: moria-target-enter 180ms cubic-bezier(.2,.8,.2,1) both, moria-target-boss-breathe 2s ease-in-out 180ms infinite;
+}
+
+.moria-action-ready:not(:disabled) {
+  animation: moria-action-ready-pulse 2.4s ease-in-out infinite;
+}

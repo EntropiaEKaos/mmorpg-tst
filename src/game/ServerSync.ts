@@ -195,6 +195,7 @@ class ServerSyncManager {
   processEvents(
     addFloatingText: (text: string, pos: { x: number; y: number }, color: string, big?: boolean) => void,
     addMessage: (sender: string, text: string, color: string, channel: any) => void,
+    onFeedback?: (event: any) => void,
   ): string[] {
     const state = this.getRenderState();
     if (!state) return [];
@@ -207,6 +208,7 @@ class ServerSyncManager {
     const consumedIds: string[] = [];
     for (let index = 0; index < state.events.length; index++) {
       const event = state.events[index];
+      try { onFeedback?.(event); } catch { /* presentation must never break snapshot consumption */ }
       const id = `${event.kind}_${event.targetId || ''}_${event.amount || ''}_${index}`;
       consumedIds.push(id);
       switch (event.kind) {

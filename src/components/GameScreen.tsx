@@ -63,6 +63,8 @@ import DPSMeter from './DPSMeter';
 import AdventureBoard, { type AdventureSnapshot } from './AdventureBoard';
 import OfficialSystemsHub, { type OfficialTab } from './OfficialSystemsHub';
 import SocialHub from './SocialHub';
+import CombatTargetFrame from './CombatTargetFrame';
+import { applyAuthoritativeCombatFeedback, resolveCombatTarget } from '../game/combatPresentation';
 import { dpsMeter } from '../game/dpsMeter';
 import { recordKill } from '../game/bestiary';
 import {
@@ -816,6 +818,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         pos: { ...p.pos }, color: spell.color, startTime: now, duration: 500, type: 'aoe',
       });
       spawnParticles(p.pos, spell.color, 20);
+      if (hits > 0) screenShakeRef.current = Math.max(screenShakeRef.current, Math.min(9, 4 + hits));
     } else {
       const target = p.targetId
         ? monstersRef.current.find((m) => m.id === p.targetId && !m.dead)
@@ -839,7 +842,8 @@ export default function GameScreen({ account, onLogout }: Props) {
         playerRef.current.stats.damageDealt += finalDmg;
         dpsMeter.record(playerRef.current.name, target.name, finalDmg, 'magical', crit);
         addFloatingText(`${crit ? '💥 ' : ''}${finalDmg}`, target.pos, crit ? '#ff4444' : spell.color, crit);
-        spawnParticles(target.pos, spell.damageType === 'ice' ? '#9bd4ff' : spell.damageType === 'fire' ? '#ff6a00' : spell.color, 8);
+        spawnParticles(target.pos, spell.damageType === 'ice' ? '#9bd4ff' : spell.damageType === 'fire' ? '#ff6a00' : spell.color, crit ? 14 : 8);
+        screenShakeRef.current = Math.max(screenShakeRef.current, crit ? 8 : 4);
         addMessage('System', `${spell.name} → ${target.name}: ${finalDmg}${crit ? ' CRIT!' : ''}!`, spell.color, 'battle');
         // Lifesteal from spell
         if (spell.lifestealPercent && spell.lifestealPercent > 0) {
@@ -1668,7 +1672,11 @@ export default function GameScreen({ account, onLogout }: Props) {
           serverMonstersRef.current = renderState.monsters;
           serverPlayersRef.current = renderState.nearbyPlayers;
           serverGroundRef.current = renderState.groundItems;
-          serverSync.processEvents(addFloatingText, addMessage);
+          serverSync.processEvents(addFloatingText, addMessage, (event) => {
+            applyAuthoritativeCombatFeedback(event, p.pos, spawnParticles, (strength) => {
+              screenShakeRef.current = Math.max(screenShakeRef.current, strength);
+            });
+          });
         }
       } else if (!onlineAccount) {
       // LOCAL MODE (single-player or BroadcastChannel): original simulation
@@ -2255,6 +2263,18 @@ export default function GameScreen({ account, onLogout }: Props) {
       const sx = (mx - cam.x) * TILE_SIZE;
       const sy = (my - cam.y) * TILE_SIZE;
       if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
+      if (m.type === 'boss' || m.type === 'elite') {
+        const accent = m.type === 'boss' ? '#ffd87b' : '#b88aff';
+        const aura = 0.24 + (Math.sin(now / (m.type === 'boss' ? 220 : 320)) + 1) * 0.09;
+        ctx.save();
+        ctx.globalAlpha = aura;
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = m.type === 'boss' ? 3 : 2;
+        ctx.beginPath();
+        ctx.arc(sx + TILE_SIZE / 2, sy + TILE_SIZE / 2, TILE_SIZE * (m.type === 'boss' ? 0.58 : 0.48), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       drawMonster(ctx, sx, sy, TILE_SIZE, {
         name: m.name, hp: m.hp, maxHp: m.maxHp,
         color: m.color, emoji: m.emoji, msSize: m.size,
@@ -2327,15 +2347,31 @@ export default function GameScreen({ account, onLogout }: Props) {
       }
     }
 
-    // Target highlight
+    // Target highlight — use the same authoritative/local collection used to render monsters.
     if (p.targetId) {
-      const t = monstersRef.current.find((m) => m.id === p.targetId);
-      if (t && !t.dead) {
-        const tx = (t.pos.x - cam.x) * TILE_SIZE;
-        const ty = (t.pos.y - cam.y) * TILE_SIZE;
-        ctx.strokeStyle = `rgba(255,60,60,${0.5 + Math.sin(now / 200) * 0.3})`;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(tx + 1, ty + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+      const t = renderMonsters.find((monster: any) => monster.id === p.targetId);
+      if (t) {
+        const targetX = t.pos ? t.pos.x : t.x;
+        const targetY = t.pos ? t.pos.y : t.y;
+        const tx = (targetX - cam.x) * TILE_SIZE;
+        const ty = (targetY - cam.y) * TILE_SIZE;
+        const boss = t.type === 'boss';
+        const elite = t.type === 'elite';
+        const accent = boss ? '#ffd87b' : elite ? '#b88aff' : '#ff6060';
+        const pulse = 0.62 + Math.sin(now / 140) * 0.22;
+        ctx.save();
+        ctx.strokeStyle = accent;
+        ctx.globalAlpha = pulse;
+        ctx.lineWidth = boss ? 3 : 2;
+        ctx.beginPath();
+        ctx.ellipse(tx + TILE_SIZE / 2, ty + TILE_SIZE * 0.84, TILE_SIZE * (boss ? 0.52 : 0.43), TILE_SIZE * 0.16, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.22 + pulse * 0.16;
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.ellipse(tx + TILE_SIZE / 2, ty + TILE_SIZE * 0.84, TILE_SIZE * (boss ? 0.48 : 0.39), TILE_SIZE * 0.13, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
     }
 
@@ -2499,6 +2535,12 @@ export default function GameScreen({ account, onLogout }: Props) {
     inv: { icon: '📦', label: 'Inv', hotkey: 'I', onClick: () => setShowInventory((v) => !v) },
   };
   const orderedQuickActions = uiLayout.panelOrder.map((id) => ({ id, action: quickActions[id] })).filter((entry) => Boolean(entry.action));
+  const activeTarget = resolveCombatTarget(
+    player.targetId,
+    serverSync.isActive(),
+    serverMonstersRef.current,
+    monstersRef.current,
+  );
 
   return (
     <div className="w-screen h-screen flex flex-col bg-[#05070c] text-slate-100 overflow-hidden select-none">
@@ -2579,32 +2621,8 @@ export default function GameScreen({ account, onLogout }: Props) {
             <button onClick={() => { zoomRef.current = 1; setZoom(1); }} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-xs" title="Reset zoom">⊙</button>
           </div>
 
-          {/* Target Frame */}
-          {player.targetId && (() => {
-            const t = serverSync.isActive()
-              ? serverMonstersRef.current.find((m: any) => m.id === player.targetId && m.hp > 0)
-              : monstersRef.current.find((m) => m.id === player.targetId && !m.dead);
-            if (!t) return null;
-            return (
-              <div className="moria-panel absolute left-3 top-3 min-w-[230px] rounded-2xl border p-3" style={{ borderColor: t.type === 'boss' ? 'rgba(255,216,123,.62)' : t.type === 'elite' ? 'rgba(184,138,255,.56)' : 'rgba(255,100,116,.42)' }}>
-                <div className="moria-eyebrow mb-2" style={{ color: t.type === 'boss' ? '#ffd87b' : t.type === 'elite' ? '#b88aff' : '#ff818d' }}>{t.type === 'boss' ? 'BOSS TARGET' : t.type === 'elite' ? 'ELITE TARGET' : 'TARGET'}</div>
-                <div className="flex items-center gap-2">
-                  <div className="text-2xl">{t.emoji}</div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-amber-100 font-bold text-sm">{t.name}</span>
-                      <span className="text-amber-200/60 text-xs">Lv {t.level}</span>
-                    </div>
-                    <div className="h-2 bg-black/60 rounded overflow-hidden border border-red-900/50 mt-1">
-                      <div className="h-full bg-gradient-to-r from-rose-700 to-rose-400" style={{ width: `${Math.max(0, Math.min(100, (t.hp / Math.max(1, t.maxHp)) * 100))}%` }} />
-                    </div>
-                    <div className="text-[10px] text-red-300 mt-0.5">{Math.max(0, t.hp)} / {t.maxHp}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
+          {/* Combat target presentation is isolated from the game orchestrator. */}
+          <CombatTargetFrame target={activeTarget} playerLevel={player.level} playerPos={player.pos} />
 
           {/* Active Hunt Tracker */}
           {serverSync.isActive() && adventureState?.active && (
