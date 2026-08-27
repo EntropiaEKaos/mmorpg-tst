@@ -1,58 +1,13 @@
-name: Apply Foundation 7.17 Official Action Gateway
+name: Foundation 7.17 Official Action Gateway — completed
 
 on:
-  push:
-    branches: [mvp-foundation-7.0]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply:
-    if: github.actor != 'github-actions[bot]'
+  completed:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: mvp-foundation-7.0
-          fetch-depth: 4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Apply official action gateway wiring
-        run: python3 tools/apply-foundation-7-17-action-gateway.py
-      - name: Validate action gateway boundaries
-        run: |
-          test -f server/engine/OfficialActionGateway.mjs
-          grep -q "officialActionGateway" server/engine/OfficialSystems.mjs
-          grep -q "return officialActionGateway.handle" server/engine/OfficialSystems.mjs
-          grep -q "return officialActionGateway.serviceProximity" server/engine/OfficialSystems.mjs
-          ! grep -q "executeOfficialAction" server/engine/OfficialSystems.mjs
-          ! grep -q "getOfficialActionService" server/engine/OfficialSystems.mjs
-          grep -q "converts domain exceptions" server/test/official-action-gateway.test.mjs
-          grep -q "authoritative NPC service proximity" server/test/official-action-gateway.test.mjs
-      - name: Validate all gates
-        run: |
-          npm ci
-          npm audit
-          npm run typecheck
-          npm run build
-          npm ci --prefix server --no-fund
-          npm audit --prefix server
-          npm run check --prefix server
-          npm test --prefix server
-      - name: Commit validated Foundation 7.17 action gateway
-        run: |
-          if git diff --quiet -- server docs; then
-            echo "No source changes"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server docs
-          git commit -m "refactor(official): extract action gateway"
-          git restore tools || true
-          git fetch origin mvp-foundation-7.0
-          git rebase origin/mvp-foundation-7.0
-          git push origin HEAD:mvp-foundation-7.0
+      - run: echo "Foundation 7.17 has already been promoted and validated."
