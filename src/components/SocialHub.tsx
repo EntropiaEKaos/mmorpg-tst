@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Item, Player } from '../game/types';
 
 interface Props {
@@ -20,6 +20,7 @@ export default function SocialHub({ player, inventory, social, onAction, onClose
   const [motd, setMotd] = useState(social?.guild?.motd || '');
   const [tradeGold, setTradeGold] = useState('0');
   const [tradeItems, setTradeItems] = useState<string[]>([]);
+  const [now, setNow] = useState(() => Date.now());
   const act = (action: string, payload: Record<string, unknown> = {}) => onAction(action, payload);
 
   const nearby = Array.isArray(social?.nearby) ? social.nearby : [];
@@ -27,6 +28,26 @@ export default function SocialHub({ player, inventory, social, onAction, onClose
   const guild = social?.guild || null;
   const trade = social?.trade || null;
   const ownTrade = useMemo(() => trade?.players?.find((entry: any) => entry.self), [trade]);
+  const guildMembers = useMemo(() => [...(guild?.members || [])].sort((a: any, b: any) => Number(Boolean(b.online)) - Number(Boolean(a.online)) || String(a.name).localeCompare(String(b.name))), [guild]);
+  const ownServerItemIds = useMemo(() => (ownTrade?.items || []).map((item: any) => item.id).sort(), [ownTrade]);
+  const selectedItemIds = useMemo(() => [...tradeItems].sort(), [tradeItems]);
+  const parsedTradeGold = Math.max(0, Math.min(player.gold, Math.floor(Number(tradeGold) || 0)));
+  const offerDirty = Boolean(trade) && (parsedTradeGold !== Number(ownTrade?.gold || 0) || ownServerItemIds.join('|') !== selectedItemIds.join('|'));
+  const inviteSeconds = (invite: any) => Math.max(0, Math.ceil((Number(invite?.expiresAt) - now) / 1000));
+
+  useEffect(() => {
+    if (!social?.partyInvite && !social?.guildInvite && !social?.tradeInvite) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [social?.partyInvite, social?.guildInvite, social?.tradeInvite]);
+
+  useEffect(() => {
+    if (!trade?.id) { setTradeGold('0'); setTradeItems([]); return; }
+    setTradeGold(String(ownTrade?.gold || 0));
+    setTradeItems((ownTrade?.items || []).map((item: any) => item.id));
+  }, [trade?.id]);
+
+  useEffect(() => { setMotd(guild?.motd || ''); }, [guild?.id, guild?.motd]);
 
   const toggleTradeItem = (itemId: string) => {
     setTradeItems((current) => current.includes(itemId) ? current.filter(id => id !== itemId) : current.length < 8 ? [...current, itemId] : current);
@@ -47,9 +68,9 @@ export default function SocialHub({ player, inventory, social, onAction, onClose
           {tab === 'party' && <div className="grid gap-4 lg:grid-cols-2">
             <div className={card}>
               <div className="moria-eyebrow text-sky-300">YOUR PARTY</div>
-              {social?.partyInvite && !party && <div className="mt-3 rounded-xl border border-sky-500/30 bg-sky-950/20 p-3"><b>{social.partyInvite.fromName}</b> invited you.<button onClick={() => act('party_accept')} className={`${button} ml-2`}>Accept</button></div>}
+              {social?.partyInvite && !party && <div className="mt-3 rounded-xl border border-sky-500/30 bg-sky-950/20 p-3"><div className="flex items-center justify-between gap-2"><span><b>{social.partyInvite.fromName}</b> invited you.</span><small className="text-sky-300">{inviteSeconds(social.partyInvite)}s</small></div><div className="mt-2 flex gap-2"><button onClick={() => act('party_accept')} className={button}>Accept</button><button onClick={() => act('party_decline')} className={`${button} border-slate-600 text-slate-300`}>Decline</button></div></div>}
               {!party ? <button onClick={() => act('party_create')} className={`${button} mt-3`}>Create party</button> : <>
-                <div className="mt-3 space-y-2">{party.members?.map((member: any) => <div key={member.key} className="flex items-center justify-between rounded-lg bg-slate-900/60 p-2"><span>{party.leaderKey === member.key ? '👑 ' : ''}{member.name || member.key} {member.online ? <small className="text-emerald-400">online</small> : <small className="text-slate-600">offline</small>}</span>{party.leaderKey === player.name.toLowerCase() && member.key !== party.leaderKey && <button onClick={() => act('party_kick', { targetKey: member.key })} className={button}>Remove</button>}</div>)}</div>
+                <div className="mt-3 space-y-2">{party.members?.map((member: any) => { const hpPct = member.online && member.maxHp > 0 ? Math.max(0, Math.min(100, (member.hp / member.maxHp) * 100)) : 0; const selfLeader = party.leaderKey === (social?.selfKey || player.name.toLowerCase()); return <div key={member.key} className="rounded-lg bg-slate-900/60 p-2"><div className="flex items-center justify-between gap-2"><div className="min-w-0"><div className="truncate font-bold">{party.leaderKey === member.key ? '👑 ' : ''}{member.name || member.key}</div><div className="text-[10px] text-slate-400">{member.online ? `Lv ${member.level} · ${member.vocation}` : 'offline'}</div></div>{selfLeader && member.key !== party.leaderKey && <div className="flex gap-1"><button onClick={() => act('party_leader', { targetKey: member.key })} className={button}>Lead</button><button onClick={() => act('party_kick', { targetKey: member.key })} className={button}>Remove</button></div>}</div>{member.online && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/60"><div className="h-full bg-emerald-400/80 transition-[width]" style={{ width: `${hpPct}%` }} /></div>}</div>})}</div>
                 <button onClick={() => act('party_leave')} className={`${button} mt-3 border-rose-500/40 text-rose-200`}>Leave party</button>
               </>}
             </div>
@@ -59,26 +80,26 @@ export default function SocialHub({ player, inventory, social, onAction, onClose
           {tab === 'guild' && <div className="grid gap-4 lg:grid-cols-2">
             <div className={card}>
               <div className="moria-eyebrow text-amber-300">GUILD</div>
-              {social?.guildInvite && !guild && <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-950/20 p-3"><b>{social.guildInvite.fromName}</b> invited you to <b>{social.guildInvite.guildName}</b>.<button onClick={() => act('guild_accept')} className={`${button} ml-2`}>Accept</button></div>}
+              {social?.guildInvite && !guild && <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-950/20 p-3"><div className="flex items-center justify-between gap-2"><span><b>{social.guildInvite.fromName}</b> invited you to <b>{social.guildInvite.guildName}</b>.</span><small className="text-amber-300">{inviteSeconds(social.guildInvite)}s</small></div><div className="mt-2 flex gap-2"><button onClick={() => act('guild_accept')} className={button}>Accept</button><button onClick={() => act('guild_decline')} className={`${button} border-slate-600 text-slate-300`}>Decline</button></div></div>}
               {!guild ? <div className="mt-3 space-y-2"><input value={guildName} onChange={e => setGuildName(e.target.value)} className={input} maxLength={32} placeholder="Guild name"/><button disabled={player.level < 10 || player.gold < 1000 || guildName.trim().length < 3} onClick={() => act('guild_create', { name: guildName })} className={`${button} w-full`}>Create guild · 1000g · Lv10+</button></div> : <>
                 <h3 className="mt-3 text-xl font-black text-amber-100">🛡 {guild.name}</h3><div className="text-xs text-slate-400">Role: {guild.selfRole}</div><p className="mt-2 rounded bg-black/30 p-2 text-xs text-slate-300">{guild.motd || 'No guild message.'}</p>
                 {['leader','officer'].includes(guild.selfRole) && <div className="mt-2 flex gap-1"><input value={motd} onChange={e => setMotd(e.target.value)} className={input} maxLength={160} placeholder="Guild message"/><button onClick={() => act('guild_motd', { motd })} className={button}>Save</button></div>}
                 <button onClick={() => act('guild_leave')} className={`${button} mt-3 border-rose-500/40 text-rose-200`}>Leave guild</button>
               </>}
             </div>
-            <div className={card}><div className="moria-eyebrow text-emerald-300">MEMBERS & RECRUITING</div>{guild && <div className="mt-3 space-y-2">{guild.members?.map((member: any) => <div key={member.key} className="flex items-center justify-between rounded-lg bg-slate-900/60 p-2"><span>{member.name} · {member.role} {member.online ? '🟢' : '⚫'}</span>{guild.selfRole === 'leader' && member.key !== player.name.toLowerCase() && <div className="flex gap-1"><button onClick={() => act('guild_role', { targetKey: member.key, role: member.role === 'officer' ? 'member' : 'officer' })} className={button}>{member.role === 'officer' ? 'Demote' : 'Officer'}</button><button onClick={() => act('guild_kick', { targetKey: member.key })} className={button}>Kick</button></div>}</div>)}</div>}{guild && ['leader','officer'].includes(guild.selfRole) && <div className="mt-4 space-y-2">{nearby.filter((p: any) => !guild.members?.some((m: any) => m.key === p.name.toLowerCase())).map((p: any) => <div key={p.id} className="flex justify-between"><span>{p.name}</span><button onClick={() => act('guild_invite', { targetId: p.id })} className={button}>Invite</button></div>)}</div>}</div>
+            <div className={card}><div className="moria-eyebrow text-emerald-300">MEMBERS & RECRUITING</div>{guild && <div className="mt-3 space-y-2">{guildMembers.map((member: any) => <div key={member.key} className="flex items-center justify-between rounded-lg bg-slate-900/60 p-2"><span>{member.name} · {member.role} {member.online ? '🟢' : '⚫'}</span>{guild.selfRole === 'leader' && member.key !== player.name.toLowerCase() && <div className="flex gap-1"><button onClick={() => act('guild_role', { targetKey: member.key, role: member.role === 'officer' ? 'member' : 'officer' })} className={button}>{member.role === 'officer' ? 'Demote' : 'Officer'}</button><button onClick={() => act('guild_role', { targetKey: member.key, role: 'leader' })} className={button}>Transfer lead</button><button onClick={() => act('guild_kick', { targetKey: member.key })} className={button}>Kick</button></div>}</div>)}</div>}{guild && ['leader','officer'].includes(guild.selfRole) && <div className="mt-4 space-y-2">{nearby.filter((p: any) => !guild.members?.some((m: any) => m.key === p.name.toLowerCase())).map((p: any) => <div key={p.id} className="flex justify-between"><span>{p.name}</span><button onClick={() => act('guild_invite', { targetId: p.id })} className={button}>Invite</button></div>)}</div>}</div>
           </div>}
 
           {tab === 'trade' && <div className="grid gap-4 lg:grid-cols-2">
             <div className={card}>
               <div className="moria-eyebrow text-emerald-300">DIRECT TRADE</div>
-              {social?.tradeInvite && !trade && <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3"><b>{social.tradeInvite.fromName}</b> wants to trade.<button onClick={() => act('trade_accept')} className={`${button} ml-2`}>Accept</button></div>}
+              {social?.tradeInvite && !trade && <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3"><div className="flex items-center justify-between gap-2"><span><b>{social.tradeInvite.fromName}</b> wants to trade.</span><small className="text-emerald-300">{inviteSeconds(social.tradeInvite)}s</small></div><div className="mt-2 flex gap-2"><button onClick={() => act('trade_accept')} className={button}>Accept</button><button onClick={() => act('trade_decline')} className={`${button} border-slate-600 text-slate-300`}>Decline</button></div></div>}
               {!trade ? <div className="mt-3 space-y-2">{nearby.map((p: any) => <div key={p.id} className="flex items-center justify-between rounded-lg bg-slate-900/60 p-2"><span>{p.name} · Lv {p.level}</span><button onClick={() => act('trade_request', { targetId: p.id })} className={button}>Request trade</button></div>)}</div> : <>
                 <div className="mt-3 space-y-3">{trade.players?.map((entry: any) => <div key={entry.key} className="rounded-xl border border-slate-700/60 p-2"><div className="flex justify-between"><b>{entry.self ? 'You' : entry.name}</b><span className={entry.confirmed ? 'text-emerald-300' : 'text-slate-500'}>{entry.confirmed ? '✓ Confirmed' : 'Not confirmed'}</span></div><div className="text-amber-300">🪙 {entry.gold}g</div><div className="mt-1 flex flex-wrap gap-1">{entry.items?.map((item: any) => <span key={item.id} className="rounded bg-slate-900 px-2 py-1 text-xs">{item.icon} {item.name} ×{item.quantity}</span>)}</div></div>)}</div>
-                <button onClick={() => act('trade_confirm')} className={`${button} mt-3 border-emerald-500/40 text-emerald-200`}>Confirm trade</button><button onClick={() => act('trade_cancel')} className={`${button} ml-2 mt-3 border-rose-500/40 text-rose-200`}>Cancel</button>
+                <button disabled={offerDirty} onClick={() => act('trade_confirm')} className={`${button} mt-3 border-emerald-500/40 text-emerald-200`}>{offerDirty ? 'Update your offer first' : 'Confirm trade'}</button><button onClick={() => act('trade_cancel')} className={`${button} ml-2 mt-3 border-rose-500/40 text-rose-200`}>Cancel</button>
               </>}
             </div>
-            <div className={card}><div className="moria-eyebrow text-sky-300">YOUR OFFER</div>{trade ? <><input type="number" min="0" max={player.gold} value={tradeGold} onChange={e => setTradeGold(e.target.value)} className={`${input} mt-3`} placeholder="Gold"/><div className="mt-3 max-h-64 space-y-1 overflow-y-auto">{inventory.map((item: any) => <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded bg-slate-900/50 p-2"><input type="checkbox" checked={tradeItems.includes(item.id)} onChange={() => toggleTradeItem(item.id)}/><span>{item.icon} {item.name} ×{item.quantity}</span></label>)}</div><button onClick={() => act('trade_offer', { gold: Number(tradeGold) || 0, itemIds: tradeItems })} className={`${button} mt-3 w-full`}>Update offer</button>{ownTrade?.confirmed && <div className="mt-2 text-center text-xs text-emerald-300">Your current offer is confirmed.</div>}</> : <p className="mt-3 text-xs text-slate-500">Trade requests require both characters to remain within 3 tiles. Settlement is server-side and atomic.</p>}</div>
+            <div className={card}><div className="moria-eyebrow text-sky-300">YOUR OFFER</div>{trade ? <><input type="number" min="0" max={player.gold} value={tradeGold} onChange={e => setTradeGold(e.target.value)} className={`${input} mt-3`} placeholder="Gold"/><div className="mt-3 max-h-64 space-y-1 overflow-y-auto">{inventory.map((item: any) => <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded bg-slate-900/50 p-2"><input type="checkbox" checked={tradeItems.includes(item.id)} onChange={() => toggleTradeItem(item.id)}/><span>{item.icon} {item.name} ×{item.quantity}</span></label>)}</div><button onClick={() => act('trade_offer', { gold: parsedTradeGold, itemIds: tradeItems })} className={`${button} mt-3 w-full`}>Update offer</button>{offerDirty && <div className="mt-2 text-center text-xs text-amber-300">Local offer changed — update it before confirming.</div>}{ownTrade?.confirmed && !offerDirty && <div className="mt-2 text-center text-xs text-emerald-300">Your current server offer is confirmed.</div>}</> : <p className="mt-3 text-xs text-slate-500">Trade requests require both characters to remain within 3 tiles. Settlement is server-side and atomic.</p>}</div>
           </div>}
         </div>
       </div>

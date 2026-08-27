@@ -174,6 +174,23 @@ export class SocialSystems {
     return { ok: true, message: 'Party member removed.' };
   }
 
+  transferPartyLeadership(player, targetKey) {
+    const party = this.getParty(player);
+    const actorKey = playerKey(player.name);
+    const nextLeaderKey = playerKey(targetKey);
+    if (!party || party.leaderKey !== actorKey) return { ok: false, error: 'Only the party leader can transfer leadership.' };
+    if (!nextLeaderKey || nextLeaderKey === actorKey || !party.members.includes(nextLeaderKey)) return { ok: false, error: 'Choose another party member.' };
+    party.leaderKey = nextLeaderKey;
+    return { ok: true, message: 'Party leadership transferred.' };
+  }
+
+  declinePartyInvite(player) {
+    const key = playerKey(player.name);
+    if (!this.partyInvites.has(key)) return { ok: false, error: 'No party invite to decline.' };
+    this.partyInvites.delete(key);
+    return { ok: true, message: 'Party invite declined.' };
+  }
+
   getGuildByMember(name) {
     const key = playerKey(name);
     for (const guild of Object.values(this.state.guilds)) if (guild.members?.[key]) return guild;
@@ -189,9 +206,15 @@ export class SocialSystems {
     if (!id || this.state.guilds[id]) return { ok: false, error: 'Guild name is already taken.' };
     if (this.getGuildByMember(player.name)) return { ok: false, error: 'Leave your current guild first.' };
     const key = playerKey(player.name);
+    const beforeState = clone(this.state);
+    const beforeGold = player.gold;
     player.gold -= 1000;
     this.state.guilds[id] = { id, name, createdAt: Date.now(), motd: '', members: { [key]: { name: player.name, role: 'leader', joinedAt: Date.now() } } };
-    this.save();
+    if (!this.save()) {
+      this.state = beforeState;
+      player.gold = beforeGold;
+      return { ok: false, error: 'Guild creation could not be saved. No gold was charged.' };
+    }
     return { ok: true, message: `Guild ${name} created.` };
   }
 
@@ -214,9 +237,21 @@ export class SocialSystems {
     if (!invite || this.getGuildByMember(player.name)) return { ok: false, error: 'No valid guild invite.' };
     const guild = this.state.guilds[invite.guildId];
     if (!guild || Object.keys(guild.members).length >= 100) { this.guildInvites.delete(key); return { ok: false, error: 'Guild invite expired.' }; }
+    const beforeState = clone(this.state);
     guild.members[key] = { name: player.name, role: 'member', joinedAt: Date.now() };
-    this.guildInvites.delete(key); this.save();
+    if (!this.save()) {
+      this.state = beforeState;
+      return { ok: false, error: 'Guild membership could not be saved. The invite is still valid.' };
+    }
+    this.guildInvites.delete(key);
     return { ok: true, message: `Joined guild ${guild.name}.` };
+  }
+
+  declineGuildInvite(player) {
+    const key = playerKey(player.name);
+    if (!this.guildInvites.has(key)) return { ok: false, error: 'No guild invite to decline.' };
+    this.guildInvites.delete(key);
+    return { ok: true, message: 'Guild invite declined.' };
   }
 
   leaveGuild(player) {
@@ -226,9 +261,10 @@ export class SocialSystems {
     const member = guild.members[key];
     const keys = Object.keys(guild.members);
     if (member.role === 'leader' && keys.length > 1) return { ok: false, error: 'Transfer leadership or remove members before leaving.' };
+    const beforeState = clone(this.state);
     delete guild.members[key];
     if (!Object.keys(guild.members).length) delete this.state.guilds[guild.id];
-    this.save();
+    if (!this.save()) { this.state = beforeState; return { ok: false, error: 'Guild leave could not be saved.' }; }
     return { ok: true, message: 'Left the guild.' };
   }
 
@@ -236,7 +272,9 @@ export class SocialSystems {
     const guild = this.getGuildByMember(player.name);
     const member = guild?.members?.[playerKey(player.name)];
     if (!guild || !member || !['leader', 'officer'].includes(member.role)) return { ok: false, error: 'Guild officer permission required.' };
-    guild.motd = cleanText(motd, 160); this.save();
+    const beforeState = clone(this.state);
+    guild.motd = cleanText(motd, 160);
+    if (!this.save()) { this.state = beforeState; return { ok: false, error: 'Guild message could not be saved.' }; }
     return { ok: true, message: 'Guild message updated.' };
   }
 
@@ -248,9 +286,11 @@ export class SocialSystems {
     const victim = guild?.members?.[victimKey];
     if (!guild || actor?.role !== 'leader' || !victim || victimKey === actorKey) return { ok: false, error: 'Guild leader permission required.' };
     if (!['officer', 'member', 'leader'].includes(role)) return { ok: false, error: 'Invalid guild role.' };
+    const beforeState = clone(this.state);
     if (role === 'leader') { actor.role = 'officer'; victim.role = 'leader'; }
     else victim.role = role;
-    this.save(); return { ok: true, message: 'Guild role updated.' };
+    if (!this.save()) { this.state = beforeState; return { ok: false, error: 'Guild role change could not be saved.' }; }
+    return { ok: true, message: 'Guild role updated.' };
   }
 
   kickGuild(player, targetKey) {
@@ -260,7 +300,9 @@ export class SocialSystems {
     const victim = guild?.members?.[victimKey];
     if (!guild || !actor || !victim || victimKey === playerKey(player.name)) return { ok: false, error: 'Invalid guild member.' };
     if (actor.role === 'member' || victim.role === 'leader' || (actor.role === 'officer' && victim.role === 'officer')) return { ok: false, error: 'Insufficient guild permission.' };
-    delete guild.members[victimKey]; this.save();
+    const beforeState = clone(this.state);
+    delete guild.members[victimKey];
+    if (!this.save()) { this.state = beforeState; return { ok: false, error: 'Guild member removal could not be saved.' }; }
     return { ok: true, message: 'Guild member removed.' };
   }
 
@@ -270,6 +312,13 @@ export class SocialSystems {
     if (this.tradeByPlayer.has(key) || this.tradeByPlayer.has(targetKey)) return { ok: false, error: 'One player is already trading.' };
     this.tradeInvites.set(targetKey, { fromKey: key, fromName: player.name, expiresAt: Date.now() + 60_000 });
     return { ok: true, message: `Trade request sent to ${target.name}.`, notices: [{ playerId: target.id, text: `🤝 ${player.name} wants to trade with you.` }] };
+  }
+
+  declineTradeInvite(player) {
+    const key = playerKey(player.name);
+    if (!this.tradeInvites.has(key)) return { ok: false, error: 'No trade request to decline.' };
+    this.tradeInvites.delete(key);
+    return { ok: true, message: 'Trade request declined.' };
   }
 
   acceptTrade(player, players) {
@@ -390,19 +439,25 @@ export class SocialSystems {
         }),
       };
     }
+    const partyInvite = this.partyInvites.get(key);
+    const guildInvite = this.guildInvites.get(key);
+    const tradeInvite = this.tradeInvites.get(key);
+    const inviteView = (invite, extra = {}) => invite ? { ...extra, expiresAt: invite.expiresAt, expiresInMs: Math.max(0, Number(invite.expiresAt) - Date.now()) } : null;
     return {
+      selfKey: key,
+      limits: { partyMax: 5, partyInviteRange: 12, tradeRange: 3, tradeMaxItems: 8, guildMax: 100 },
       party: party ? {
         id: party.id, leaderKey: party.leaderKey,
         members: party.members.map(memberKey => ({ key: memberKey, ...publicPlayer(onlineByKey(players, memberKey)), online: Boolean(onlineByKey(players, memberKey)) })),
       } : null,
-      partyInvite: this.partyInvites.get(key) ? { fromName: this.partyInvites.get(key).fromName, expiresAt: this.partyInvites.get(key).expiresAt } : null,
+      partyInvite: inviteView(partyInvite, { fromName: partyInvite?.fromName }),
       guild: guild ? {
         id: guild.id, name: guild.name, motd: guild.motd,
         selfRole: guild.members[key]?.role || 'member',
         members: Object.entries(guild.members).map(([memberKey, member]) => ({ key: memberKey, name: member.name, role: member.role, online: Boolean(onlineByKey(players, memberKey)) })),
       } : null,
-      guildInvite: this.guildInvites.get(key) ? { guildName: this.state.guilds[this.guildInvites.get(key).guildId]?.name || 'Guild', fromName: this.guildInvites.get(key).fromName, expiresAt: this.guildInvites.get(key).expiresAt } : null,
-      tradeInvite: this.tradeInvites.get(key) ? { fromName: this.tradeInvites.get(key).fromName, expiresAt: this.tradeInvites.get(key).expiresAt } : null,
+      guildInvite: inviteView(guildInvite, { guildName: this.state.guilds[guildInvite?.guildId]?.name || 'Guild', fromName: guildInvite?.fromName }),
+      tradeInvite: inviteView(tradeInvite, { fromName: tradeInvite?.fromName }),
       trade: tradeView,
       nearby: Array.from(players.values()).filter(other => other.id !== player.id && nearby(player, other, 12)).map(publicPlayer),
     };
@@ -417,17 +472,21 @@ export class SocialSystems {
       case 'party_create': result = this.createParty(player); break;
       case 'party_invite': result = this.inviteParty(player, target, players); break;
       case 'party_accept': result = this.acceptParty(player); break;
+      case 'party_decline': result = this.declinePartyInvite(player); break;
       case 'party_leave': result = this.leaveParty(player); break;
       case 'party_kick': result = this.kickParty(player, payload.targetKey); break;
+      case 'party_leader': result = this.transferPartyLeadership(player, payload.targetKey); break;
       case 'guild_create': result = this.createGuild(player, payload.name); break;
       case 'guild_invite': result = this.inviteGuild(player, target); break;
       case 'guild_accept': result = this.acceptGuild(player); break;
+      case 'guild_decline': result = this.declineGuildInvite(player); break;
       case 'guild_leave': result = this.leaveGuild(player); break;
       case 'guild_motd': result = this.guildSetMotd(player, payload.motd); break;
       case 'guild_role': result = this.guildRole(player, payload.targetKey, payload.role); break;
       case 'guild_kick': result = this.kickGuild(player, payload.targetKey); break;
       case 'trade_request': result = this.requestTrade(player, target); break;
       case 'trade_accept': result = this.acceptTrade(player, players); break;
+      case 'trade_decline': result = this.declineTradeInvite(player); break;
       case 'trade_offer': result = this.setTradeOffer(player, payload); break;
       case 'trade_confirm': result = this.confirmTrade(player, players); break;
       case 'trade_cancel': result = this.cancelTrade(player); break;
