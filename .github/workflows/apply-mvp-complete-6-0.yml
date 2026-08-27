@@ -56,13 +56,14 @@ jobs:
           npm test --prefix server
       - name: Commit validated MVP Complete 6.0
         run: |
-          if git diff --quiet -- server src docs .gitignore .github/workflows/ci.yml; then
+          if git diff --quiet -- server src docs .gitignore; then
             echo "No source changes"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server src docs .gitignore .github/workflows/ci.yml
+          git restore .github/workflows/ci.yml
+          git add server src docs .gitignore
           git commit -m "feat(mvp): make legacy gameplay systems authoritative online"
           git restore tools
           git fetch origin mvp-complete-6.0
