@@ -1,125 +1,143 @@
-# ⚔ Mor'ia MMO Server — Production Edition v2.0
+# ⚔ Mor'ia MMO Server — Production Edition 6.2
 
-Servidor **real** para o Mor'ia. Serve o cliente (HTML) + WebSocket multiplayer na **mesma porta** — perfeito para hospedagem gratuita.
+Servidor autoritativo do **Mor'ia — Realm of Shadows**. O processo Node.js serve o cliente compilado, expõe APIs HTTP de autenticação/administração e mantém o multiplayer em tempo real por WebSocket na mesma porta.
 
-## 🚀 Quick Start (Local)
+## Estado atual
+
+- Contas persistentes com senha derivada por `scrypt`, recovery code e sessões rotativas.
+- Personagens vinculados à conta e nomes globais protegidos contra colisão.
+- Servidor autoritativo para movimento, combate, inventário, equipamento, talentos, quests, aventura e sistemas oficiais.
+- Conteúdo data-driven com painel administrativo e validação de referências.
+- WebSocket com payload limitado, heartbeat e estado controlado pelo servidor.
+- Rate limiting de autenticação bounded para impedir crescimento ilimitado de memória sob tráfego distribuído.
+- CI de produção em todo push para `master`: audit, typecheck, build, syntax check e suíte server-side.
+
+## Quick start local
 
 ```bash
-# Na raiz do projeto:
-npm install          # instala deps do cliente
-npm run build        # compila o cliente para dist/
+# raiz do projeto
+npm ci
+npm run typecheck
+npm run build
 
-# Na pasta server:
+# servidor
 cd server
-npm install          # instala deps do servidor
-npm start            # inicia em http://localhost:3000
+npm ci
+npm run check
+npm test
+npm start
 ```
 
-Abra `http://localhost:3000` no navegador. Abra em múltiplas abas — os jogadores se veem!
+Por padrão o jogo fica disponível em `http://localhost:3000`.
 
-## 🌐 Deploy Grátis (3 opções)
+## Variáveis de ambiente
 
-### Opção 1: Render.com (recomendado — mais fácil)
+| Variável | Obrigatória | Padrão | Uso |
+|---|---:|---|---|
+| `PORT` | não | `3000` | Porta HTTP/WebSocket |
+| `ADMIN_TOKEN` | produção: sim | vazio | Habilita e protege `/admin` e `/admin/api/*` |
+| `TRUST_PROXY` | não | `false` | Usa o primeiro `X-Forwarded-For` para rate limiting quando atrás de proxy confiável |
+| `AUTH_RATE_LIMIT_MAX_ENTRIES` | não | `10000` | Limite global de janelas ativas do rate limiter de autenticação |
+| `MORIA_ACCOUNT_DB` | não | `server/moria-accounts.json` | Caminho do banco persistente de contas |
 
-1. Faça push do código para o GitHub
-2. Vá em [render.com](https://render.com) → **New → Web Service**
-3. Conecte seu repositório
-4. Settings:
-   - **Build**: `cd server && npm install && cd .. && npm install && npm run build`
-   - **Start**: `node server/server.js`
-   - **Plan**: Free
-5. Deploy! O Render detecta o `render.yaml` automaticamente.
+> Só habilite `TRUST_PROXY=true` quando o processo estiver realmente atrás de um proxy/reverse proxy controlado. Caso contrário um cliente pode falsificar `X-Forwarded-For`.
 
-URL final: `https://seu-app.onrender.com` — compartilhe com amigos!
+## APIs HTTP principais
 
-### Opção 2: Railway.app
+### Saúde
 
-```bash
-npm i -g @railway/cli
-railway login
-railway init
-railway up
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/health` | Saúde, jogadores online, tick e contagem resumida de conteúdo |
+| `GET` | `/status` | Alias do health check |
+
+### Autenticação e personagens
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `POST` | `/api/auth/register` | Cria conta e devolve sessão + recovery code inicial |
+| `POST` | `/api/auth/login` | Autentica e cria nova sessão |
+| `POST` | `/api/auth/recover` | Recupera a conta e rotaciona recovery code |
+| `GET` | `/api/auth/session` | Valida e rotaciona a sessão atual |
+| `POST` | `/api/auth/logout` | Revoga a sessão atual |
+| `POST` | `/api/auth/password` | Altera senha e revoga sessões anteriores |
+| `GET` | `/api/characters` | Lista personagens da conta autenticada |
+| `POST` | `/api/characters` | Cria personagem pertencente à conta |
+
+As rotas autenticadas usam `Authorization: Bearer <sessionToken>`.
+
+### Administração
+
+- `GET /admin` — painel web; exige `ADMIN_TOKEN`.
+- `/admin/api/*` — CRUD/ações administrativas protegidas pelo mesmo token.
+- O token pode ser estabelecido inicialmente por `/admin?token=...`; o servidor redireciona e grava cookie `HttpOnly`/`SameSite=Strict` para o painel.
+- Mapas permanecem catálogo read-only enquanto o runtime autoritativo de terreno/portais continuar pertencendo a `World.mjs`.
+
+## WebSocket
+
+Endpoint: `WS /ws`.
+
+O cliente envia intenções e o servidor decide o resultado. Coordenadas, dano, recompensas, inventário, progressão e demais estados relevantes não devem ser aceitos como verdade enviada pelo navegador.
+
+O WebSocket possui limite de payload (`64 KiB`) e integra sessão/ownership de personagem antes de disponibilizar controle autoritativo do jogador.
+
+## Persistência
+
+A arquitetura atual separa credenciais de estado de personagem:
+
+- `moria-accounts.json`: contas, credenciais derivadas e ownership dos personagens.
+- Player/content stores: estado autoritativo de personagem e catálogos do jogo.
+- Sessões ficam em memória e são deliberadamente invalidadas quando o processo reinicia.
+
+Para múltiplas instâncias horizontais, o próximo passo arquitetural é mover persistência e coordenação compartilhada para serviços externos (por exemplo PostgreSQL + Redis), sem abandonar a autoridade server-side.
+
+## Segurança operacional
+
+O servidor aplica limites independentes para registro, login e recuperação. Desde a edição 6.2, as janelas são mantidas por `BoundedWindowRateLimiter`; entradas expiradas são removidas e o número de chaves simultâneas nunca ultrapassa `AUTH_RATE_LIMIT_MAX_ENTRIES`.
+
+Também existem limites de corpo HTTP, payload WebSocket, validação de path para arquivos estáticos, comparação timing-safe do token administrativo e validação de referências antes de mutações de conteúdo.
+
+## CI / quality gate
+
+O workflow `.github/workflows/ci.yml` roda em `master` e branches de evolução suportadas. Ele executa:
+
+```text
+npm ci
+npm audit --audit-level=high
+npm run typecheck
+npm run build
+npm ci --prefix server
+npm audit --prefix server --audit-level=high
+npm run check --prefix server
+npm test --prefix server
 ```
 
-### Opção 3: Fly.io (com Docker)
+Commits em `master` portanto voltam a ter validação automática de produção.
 
-```bash
-npm i -g flyctl
-fly launch
-fly deploy
+## Estrutura relevante
+
+```text
+server/
+├── server.js
+├── adminPanel.mjs
+├── engine/
+│   ├── AuthService.mjs
+│   ├── ContentDB.mjs
+│   ├── ContentIntegrity.mjs
+│   ├── GameState.mjs
+│   ├── OfficialSystems.mjs
+│   ├── RateLimiter.mjs
+│   └── ...
+├── test/
+│   ├── auth*.test.mjs
+│   ├── hardening.test.mjs
+│   ├── official-systems.test.mjs
+│   ├── rate-limiter.test.mjs
+│   └── ...
+└── tools/
+    └── migrate-legacy-character.mjs
 ```
 
-### Opção 4: Tunnel local (testar com amigos sem deploy)
+## Regra de evolução
 
-```bash
-cd server
-npm install && npm start
-# em outro terminal:
-npx localtunnel --port 3000
-# → dá uma URL pública tipo https://xyz.loca.lt
-```
-
-## ✨ Recursos do Servidor v2.0
-
-| Recurso | Descrição |
-|---------|-----------|
-| **Single Port** | Cliente + WebSocket na mesma porta (ideal para free tier) |
-| **Auto-detect URL** | Cliente detecta o servidor automaticamente — zero config |
-| **Map Rooms** | Broadcast otimizado: só recebe updates de jogadores no MESMO mapa |
-| **Anti-cheat** | Rate limiting + validação de movimento (rejeita teleport hack) |
-| **Persistência** | Salva jogadores, chat e stats em arquivo JSON a cada 30s |
-| **Health Check** | Endpoint `/health` para Render/Kubernetes |
-| **Graceful Shutdown** | Salva DB e avisa jogadores antes de desligar |
-| **Heartbeat** | Remove conexões mortas a cada 15s |
-| **Chat API** | `GET /api/chat` retorna histórico de mensagens |
-| **Online API** | `GET /api/online` retorna contagem de jogadores |
-
-## 📡 Endpoints HTTP
-
-| Rota | Descrição |
-|------|-----------|
-| `GET /` | Serve o jogo (HTML) |
-| `GET /health` | Status do servidor (JSON) |
-| `GET /api/online` | Contagem de jogadores online |
-| `GET /api/chat` | Últimas 50 mensagens do chat |
-| `WS /ws` | Conexão WebSocket para multiplayer |
-
-## 🔌 Protocolo WebSocket
-
-```jsonc
-// Cliente → Servidor
-{ "kind": "player:join", "payload": { "name": "Hero", "vocation": "knight", ... } }
-{ "kind": "player:move", "payload": { "x": 40, "y": 40, "direction": "down", ... } }
-{ "kind": "chat", "payload": { "text": "hello!", "color": "#fff", "channel": "world" } }
-{ "kind": "ping" }
-
-// Servidor → Cliente
-{ "kind": "roster", "payload": [ /* todos os jogadores no mapa */ ] }
-{ "kind": "player:move", "payload": { /* posição de outro jogador */ } }
-{ "kind": "player:leave", "payload": { "id": "..." } }
-{ "kind": "chat", "payload": { /* mensagem */ } }
-{ "kind": "presence", "payload": { "count": 5 } }
-{ "kind": "pong" }
-{ "kind": "system", "payload": { "text": "Welcome!" } }
-```
-
-## 🏗 Para Produção (escalar)
-
-O servidor usa estado em memória + arquivo JSON. Para escalar:
-1. **PostgreSQL**: troque o `db` object por queries SQL
-2. **Redis Pub/Sub**: para múltiplas instâncias do servidor sincronizarem
-3. **Auth**: adicione JWT/tokens em `handleJoin`
-4. **CDN**: sirva o cliente via Cloudflare/Netlify, servidor só WebSocket
-
-## 📁 Estrutura
-
-```
-├── server/
-│   ├── server.js          # Servidor (HTTP + WebSocket)
-│   ├── package.json       # Deps do servidor (ws)
-│   └── moria-db.json      # Estado persistido (criado automaticamente)
-├── dist/                  # Cliente compilado (criado pelo build)
-├── render.yaml            # Config Render.com
-├── Dockerfile             # Config Fly.io/Railway
-└── src/                   # Código fonte do cliente
-```
+Novos sistemas que alterem economia, progressão, combate, ownership ou recompensa devem permanecer **autoritativos no servidor**, possuir teste de regressão e passar pelo quality gate antes de serem considerados prontos para produção.
