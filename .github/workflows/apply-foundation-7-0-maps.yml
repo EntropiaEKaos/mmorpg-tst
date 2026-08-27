@@ -1,0 +1,62 @@
+name: Apply Foundation 7.0 Maps
+
+on:
+  push:
+    branches: [mvp-foundation-7.0]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mvp-foundation-7.0
+          fetch-depth: 4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Normalize migration
+        run: python3 tools/fix-foundation-7-0-maps-script.py
+      - name: Apply authoritative map runtime
+        run: python3 tools/apply-foundation-7-0-maps.py
+      - name: Normalize map fixtures
+        run: python3 tools/finalize-foundation-7-0-maps.py
+      - name: Validate map runtime invariants
+        run: |
+          grep -q "syncContentMaps(mapContent" server/engine/GameState.mjs
+          grep -q "getDefinitions()" server/engine/World.mjs
+          grep -q "syncServerMaps(rawMaps" src/game/maps.ts
+          grep -q "syncServerMaps(content.maps)" src/components/GameScreen.tsx
+          grep -q "AUTHORITATIVE RUNTIME" server/adminPanel.mjs
+          grep -q "Map portals must be a JSON array" server/engine/ContentIntegrity.mjs
+          grep -q "deterministic authoritative runtime maps" server/test/map-runtime.test.mjs
+          ! grep -q "Reference catalog only: authoritative terrain" server/server.js
+      - name: Validate all gates
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          npm ci --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated Foundation 7.0 maps
+        run: |
+          if git diff --quiet -- server src docs; then
+            echo "No source changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server src docs
+          git commit -m "feat(world): make admin maps authoritative and expandable"
+          git restore tools || true
+          git fetch origin mvp-foundation-7.0
+          git rebase origin/mvp-foundation-7.0
+          git push origin HEAD:mvp-foundation-7.0
