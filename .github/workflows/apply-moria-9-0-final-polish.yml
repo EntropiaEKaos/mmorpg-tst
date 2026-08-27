@@ -10,6 +10,7 @@ on:
 permissions:
   contents: write
 
+# Final release gate rerun after migrating the 8.6 regression to ContentStudio.
 jobs:
   apply-and-validate:
     if: github.actor != 'github-actions[bot]'
