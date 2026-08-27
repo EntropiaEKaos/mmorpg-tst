@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditContentReferences } from '../engine/ContentIntegrity.mjs';
+import { getContentStudioSchema } from '../engine/ContentStudio.mjs';
+import { contentDB } from '../engine/ContentDB.mjs';
 import { adminPanelHTML } from '../adminPanel.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,11 +36,17 @@ test('8.6 Studio exposes Content Health, export and structured quest prerequisit
   assert.match(html, /Ignored|Players|Broadcast/);
 });
 
-test('8.6 server marks live players read-only and exposes advanced item authoring fields', () => {
+test('8.6 server keeps live players read-only and Studio exposes advanced authoring through the declarative schema', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(source, /readOnly: true, runtimeNote: 'Live player state is authoritative/);
-  assert.match(source, /critChance','lifesteal','thorns','moveSpeed','xpBonus','goldBonus','damageReduction/);
-  assert.match(source, /'levelRequired','requires'/);
   assert.match(source, /type === 'integrity'/);
   assert.match(source, /type === 'export'/);
+
+  const itemFields = new Set(getContentStudioSchema('items', contentDB).fields);
+  for (const field of ['critChance','lifesteal','thorns','moveSpeed','xpBonus','goldBonus','damageReduction']) {
+    assert.equal(itemFields.has(field), true, `${field} must remain authorable`);
+  }
+  const questFields = new Set(getContentStudioSchema('quests', contentDB).fields);
+  assert.equal(questFields.has('levelRequired'), true);
+  assert.equal(questFields.has('requires'), true);
 });
