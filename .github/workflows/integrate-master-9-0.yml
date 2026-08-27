@@ -1,0 +1,100 @@
+name: Integrate master into Mor'ia 9.0
+
+on:
+  push:
+    branches: [moria-9.0-final-polish-validated]
+    paths:
+      - .github/workflows/integrate-master-9-0.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.0-final-polish-validated
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Merge master and resolve known overlaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin master
+          git merge --no-ff --no-commit origin/master || true
+
+          if git diff --name-only --diff-filter=U | grep -qx '.github/workflows/ci.yml'; then
+            git checkout --ours .github/workflows/ci.yml
+            git add .github/workflows/ci.yml
+          fi
+
+          if git diff --name-only --diff-filter=U | grep -qx 'server/server.js'; then
+            git checkout --ours server/server.js
+            python3 - <<'PY'
+          from pathlib import Path
+          p = Path('server/server.js')
+          s = p.read_text(encoding='utf-8')
+          old = "import { accountStore, sessionManager } from './engine/AuthService.mjs';\nimport { adminPanelHTML } from './adminPanel.mjs';"
+          new = "import { accountStore, sessionManager } from './engine/AuthService.mjs';\nimport { BoundedWindowRateLimiter } from './engine/RateLimiter.mjs';\nimport { adminPanelHTML } from './adminPanel.mjs';"
+          if old not in s:
+              raise SystemExit('RateLimiter import anchor missing')
+          s = s.replace(old, new, 1)
+          old = "const AUTH_RATE_LIMITS = new Map();"
+          new = "const AUTH_RATE_LIMITS = new BoundedWindowRateLimiter({\n  maxEntries: Number(process.env.AUTH_RATE_LIMIT_MAX_ENTRIES) || 10_000,\n});"
+          if old not in s:
+              raise SystemExit('AUTH_RATE_LIMITS anchor missing')
+          s = s.replace(old, new, 1)
+          old = """function consumeAuthRateLimit(req, res, bucket, limit, windowMs) {\n  const now = Date.now();\n  const key = `${bucket}:${getRequestIp(req)}`;\n  let state = AUTH_RATE_LIMITS.get(key);\n  if (!state || now >= state.resetAt) state = { count: 0, resetAt: now + windowMs };\n  state.count++;\n  AUTH_RATE_LIMITS.set(key, state);\n  if (state.count <= limit) return true;\n  res.setHeader('Retry-After', String(Math.max(1, Math.ceil((state.resetAt - now) / 1000))));\n  json(res, 429, { error: 'Too many authentication attempts. Try again later.' });\n  return false;\n}"""
+          new = """function consumeAuthRateLimit(req, res, bucket, limit, windowMs) {\n  const key = `${bucket}:${getRequestIp(req)}`;\n  const result = AUTH_RATE_LIMITS.consume(key, { limit, windowMs });\n  if (result.allowed) return true;\n  res.setHeader('Retry-After', String(Math.max(1, Math.ceil(result.retryAfterMs / 1000))));\n  json(res, 429, { error: 'Too many authentication attempts. Try again later.' });\n  return false;\n}"""
+          if old not in s:
+              raise SystemExit('consumeAuthRateLimit anchor missing')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+            git add server/server.js
+          fi
+
+          unresolved="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$unresolved" ]; then
+            echo "Unresolved merge conflicts:"
+            echo "$unresolved"
+            exit 1
+          fi
+
+      - name: Install client dependencies
+        run: npm ci
+      - name: Audit client dependencies
+        run: npm audit
+      - name: Typecheck client
+        run: npm run typecheck
+      - name: Build client
+        run: npm run build
+      - name: Install server dependencies
+        run: npm ci --prefix server --no-fund
+      - name: Audit server dependencies
+        run: npm audit --prefix server
+      - name: Check server syntax
+        run: npm run check --prefix server
+      - name: Run full server suite
+        run: npm test --prefix server
+
+      - name: Commit validated merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          git commit -m "merge: integrate master hardening into Mor'ia 9.0"
+          git push origin HEAD:moria-9.0-final-polish-validated
