@@ -29,14 +29,16 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const MAX_HTTP_BODY = 256 * 1024;
 const MAX_WS_PAYLOAD = 64 * 1024;
 const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
-const READ_ONLY_ADMIN_TYPES = new Set(['maps']);
+const READ_ONLY_ADMIN_TYPES = new Set();
 const ACTIVE_NAMES = new Map();
 const AUTH_RATE_LIMITS = new Map();
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
 
 // ContentDB is persistent; reconcile server-owned catalogs into the already-
-// initialized authoritative runtime at server boot.
+// initialized authoritative runtime at server boot. Maps go first because
+// monsters, NPC references, portals and travel all depend on the world graph.
+engine.syncContentMaps(contentDB.get('maps'));
 engine.syncContentItems(contentDB.get('items'));
 engine.syncContentSpells(contentDB.get('spells'));
 engine.syncContentMonsters(contentDB.get('monsters'));
@@ -391,7 +393,7 @@ const server = http.createServer((req, res) => {
       players: engine.getOnlineCount(),
       tick: engine.getTickCount(),
       auth: 'accounts-v1',
-      content: { items: contentDB.get('items').length, monsters: contentDB.get('monsters').length },
+      content: { items: contentDB.get('items').length, monsters: contentDB.get('monsters').length, maps: WORLD.getMapIds().length },
     });
   }
 
@@ -480,14 +482,15 @@ function handleAdminAPI(req, res, route) {
       npcs: ['id','name','emoji','color','role','posX','posY','mapId','dialogue'],
       spells: ['id','name','icon','mana','cooldown','damage','range','color','type','vocation','levelRequired','buffType','buffDuration','buffValue','scalingCoeff'],
       quests: ['id','name','npcId','description','target','count','rewardGold','rewardXp','levelRequired'],
-      maps: ['id','name','biome','description','levelRequired'],
+      maps: ['id','name','biome','description','levelRequired','seed','spawnX','spawnY','townX','townY','townRange','portals'],
       events: ['id','name','icon','description','target','count','rewardGold','rewardXp','rewardCoins','mapId','durationMs'],
     };
     const readOnly = READ_ONLY_ADMIN_TYPES.has(type);
     const runtimeNote = type === 'maps'
-      ? 'Reference catalog only: authoritative terrain, portals and map lifecycle are still defined by World.mjs.'
+      ? 'Authoritative runtime: edits regenerate deterministic terrain and synchronize the live world. Built-in maps cannot be deleted.'
       : '';
-    return json(res, 200, { items: contentDB.get(type), fields: fieldsMap[type] || [], readOnly, runtimeNote });
+    const items = type === 'maps' ? WORLD.getDefinitions() : contentDB.get(type);
+    return json(res, 200, { items, fields: fieldsMap[type] || [], readOnly, runtimeNote });
   }
 
   if (req.method === 'POST') {
@@ -512,6 +515,7 @@ function handleAdminAPI(req, res, route) {
       if (referenceError) return json(res, 409, { error: referenceError });
       const changed = existing ? contentDB.update(type, data.id, data) : contentDB.add(type, data);
       if (!changed) return json(res, 409, { error: 'Content write was rejected' });
+      if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }
       if (type === 'items') engine.syncContentItems(contentDB.get('items'));
       if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
       if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));
@@ -526,11 +530,15 @@ function handleAdminAPI(req, res, route) {
     if (READ_ONLY_ADMIN_TYPES.has(type)) {
       return json(res, 409, { error: `${type} catalog is read-only until its authoritative runtime is connected` });
     }
+    if (type === 'maps' && Array.from(engine.players.values()).some(player => player.mapId === id)) {
+      return json(res, 409, { error: 'Map has online players and cannot be deleted' });
+    }
     const blockers = findBlockingContentReferences(contentDB, type, id);
     if (blockers.length > 0) {
       return json(res, 409, { error: 'Content is still referenced and cannot be deleted', references: blockers });
     }
     if (!contentDB.remove(type, id)) return json(res, 404, { error: 'Content not found' });
+    if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }
     if (type === 'items') engine.syncContentItems(contentDB.get('items'));
     if (type === 'spells') engine.syncContentSpells(contentDB.get('spells'));
     if (type === 'monsters') engine.syncContentMonsters(contentDB.get('monsters'));

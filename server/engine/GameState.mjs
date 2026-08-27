@@ -71,7 +71,7 @@ class GameEngine {
   }
 
   init() {
-    WORLD.init();
+    WORLD.syncContentMaps(contentDB.get('maps'));
     for (const mapId of WORLD.getMapIds()) {
       this.monstersByMap.set(mapId, WORLD.spawnMonsters(mapId));
       this.groundItemsByMap.set(mapId, []);
@@ -113,6 +113,41 @@ class GameEngine {
     const result = [];
     for (const p of this.players.values()) if (p.mapId === mapId) result.push(p);
     return result;
+  }
+
+  syncContentMaps(mapContent = []) {
+    const previousIds = new Set(WORLD.getMapIds());
+    WORLD.syncContentMaps(mapContent);
+    const nextIds = new Set(WORLD.getMapIds());
+
+    for (const mapId of nextIds) {
+      if (!this.monstersByMap.has(mapId)) this.monstersByMap.set(mapId, WORLD.spawnMonsters(mapId));
+      if (!this.groundItemsByMap.has(mapId)) this.groundItemsByMap.set(mapId, []);
+      if (!this.pendingEvents.has(mapId)) this.pendingEvents.set(mapId, []);
+      const map = WORLD.getMap(mapId);
+      const monsters = this.monstersByMap.get(mapId) || [];
+      for (const monster of monsters) {
+        if (!map?.tiles?.[monster.y]?.[monster.x]?.walkable) {
+          const pos = WORLD.findWalkableSpawn(map, map?.spawnPoint);
+          monster.x = pos.x; monster.y = pos.y; monster.spawnX = pos.x; monster.spawnY = pos.y;
+        }
+      }
+    }
+
+    for (const player of this.players.values()) {
+      let map = WORLD.getMap(player.mapId);
+      if (!map) { player.mapId = 'eldoria'; map = WORLD.getMap('eldoria'); player.targetId = null; }
+      if (!map?.tiles?.[player.y]?.[player.x]?.walkable) {
+        const pos = WORLD.findWalkableSpawn(map, map?.spawnPoint);
+        player.x = pos.x; player.y = pos.y; player.targetId = null;
+      }
+    }
+
+    for (const mapId of previousIds) {
+      if (nextIds.has(mapId)) continue;
+      this.monstersByMap.delete(mapId); this.groundItemsByMap.delete(mapId); this.pendingEvents.delete(mapId);
+    }
+    return WORLD.getMapIds();
   }
 
   progressSkill(player, skillId, amount = 1) {

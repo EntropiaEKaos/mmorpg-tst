@@ -29,7 +29,7 @@ import PetShop from './PetShop';
 import { DUNGEON_WAVES, spawnDungeonWave, getDungeonReward, PETS, getActivePet, buyPet, type ActivePetState } from '../game/dungeons';
 import { randomGemDrop, GEMS } from '../game/itemSets';
 import { RECIPES, canCraft } from '../game/crafting';
-import { generateMap, MAPS, MAP_WIDTH, MAP_HEIGHT } from '../game/maps';
+import { generateMap, MAPS, MAP_WIDTH, MAP_HEIGHT, syncServerMaps } from '../game/maps';
 import { createCorpse, createLootBag, rollLoot, CORPSE_LIFETIME, type GroundItem, type LootItem } from '../game/loot';
 import QuestCreator from './QuestCreator';
 import MysteryQuestBook from './MysteryQuestBook';
@@ -638,6 +638,11 @@ export default function GameScreen({ account, onLogout }: Props) {
           try {
             const content = msg.payload;
             localStorage.setItem('moria_server_content', JSON.stringify(content));
+            syncServerMaps(content.maps);
+            if (MAPS[currentMapIdRef.current]) {
+              worldRef.current = generateMap(currentMapIdRef.current);
+              buildingsRef.current = getTownBuildings(MAPS[currentMapIdRef.current].biome);
+            }
             const quests = Array.isArray(content.quests)
               ? content.quests.map(serverQuestToClient).filter((q: Quest | null): q is Quest => Boolean(q))
               : [];

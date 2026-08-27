@@ -148,18 +148,20 @@ export function adminPanelHTML() {
     if (readOnly) editing = null;
     
     let html = '<div class="card"><h2>' + currentTab.toUpperCase() + ' (' + items.length + ')</h2>';
-    if (readOnly) {
-      html += '<div class="catalog-note"><strong>READ-ONLY CATALOG</strong><br>' + escapeHtml(data.runtimeNote || 'This catalog is not connected to the authoritative runtime yet.') + '</div>';
+    if (data.runtimeNote) {
+      html += '<div class="catalog-note"><strong>' + (readOnly ? 'READ-ONLY CATALOG' : 'AUTHORITATIVE RUNTIME') + '</strong><br>' + escapeHtml(data.runtimeNote) + '</div>';
     }
     
     // Edit/Create form
     if (!readOnly && editing !== null) {
       const item = editing === 'new'
-        ? (currentTab === 'monsters'
-          ? { mapId: 'eldoria', count: 1, speed: 1200 }
-          : currentTab === 'spells'
-            ? { type: 'attack', vocation: 'knight', levelRequired: 1, mana: 10, cooldown: 1500, damage: 10, range: 1 }
-            : {})
+        ? (currentTab === 'maps'
+          ? { biome: 'plains', levelRequired: 1, seed: Date.now() % 2147483646, spawnX: 40, spawnY: 40, townX: 40, townY: 40, townRange: 8, portals: [] }
+          : currentTab === 'monsters'
+            ? { mapId: 'eldoria', count: 1, speed: 1200 }
+            : currentTab === 'spells'
+              ? { type: 'attack', vocation: 'knight', levelRequired: 1, mana: 10, cooldown: 1500, damage: 10, range: 1 }
+              : {})
         : items.find(i => i.id === editing) || {};
       html += '<h3>' + (editing === 'new' ? '➕ Create' : '✏ Edit') + '</h3>';
       html += '<div class="form-row">';
@@ -168,6 +170,8 @@ export function adminPanelHTML() {
         if (f === 'type' || f === 'buffType' || f === 'rarity' || f === 'slot' || f === 'role' || f === 'biome' || f === 'vocation' || f === 'mapId') {
           html += '<input value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '" list="' + f + '_list">';
           html += '<datalist id="' + f + '_list">' + (f==='type' && currentTab==='spells'?'<option>attack<option>heal<option>aoe<option>buff':'') + (f==='buffType'?'<option>shield<option>haste<option>invisible<option>frenzy':'') + (f==='rarity'?'<option>common<option>uncommon<option>rare<option>epic<option>legendary':'') + (f==='slot'?'<option>weapon<option>armor<option>helmet<option>legs<option>boots<option>shield<option>ring<option>amulet':'') + (f==='mapId'?'<option>eldoria<option>frostpeak<option>shadowfen<option>emberhold<option>voidlands':'') + '</datalist>';
+        } else if (f === 'portals') {
+          html += '<textarea id="fld_' + f + '" rows="5">' + escapeHtml(JSON.stringify(item[f] ?? [], null, 2)) + '</textarea>';
         } else if (f === 'description' || f === 'dialogue') {
           html += '<textarea id="fld_' + f + '" rows="2">' + escapeHtml(item[f] ?? '') + '</textarea>';
         } else {
@@ -214,7 +218,12 @@ export function adminPanelHTML() {
       const el = document.getElementById('fld_' + f);
       if (el) {
         let v = el.value;
-        if (typeof data.items[0]?.[f] === 'number' && f !== 'id') v = parseFloat(v) || 0;
+        const numericFields = new Set(['hp','attack','defense','armor','mana','magic','level','value','xp','size','goldMin','goldMax','count','posX','posY','speed','cooldown','damage','range','levelRequired','buffDuration','buffValue','scalingCoeff','rewardGold','rewardXp','rewardCoins','durationMs','seed','spawnX','spawnY','townX','townY','townRange']);
+        if (f === 'portals') {
+          try { body[f] = JSON.parse(v || '[]'); } catch { alert('Portals must be valid JSON.'); return; }
+          continue;
+        }
+        if (numericFields.has(f)) v = parseFloat(v) || 0;
         body[f] = v;
       }
     }
