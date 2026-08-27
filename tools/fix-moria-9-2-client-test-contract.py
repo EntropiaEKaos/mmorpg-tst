@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 root = Path(__file__).resolve().parents[1]
 sync_path = root / 'src/game/ServerSync.ts'
@@ -20,17 +21,24 @@ for intent in ("'appearance'", "'task'", "'housing'"):
     if intent not in network:
         raise SystemExit(f'missing network Intent member: {intent}')
 
-old = """  assert.match(sync, /sendIntent\\(\\{ type: 'appearance'/);\n  assert.match(sync, /sendIntent\\(\\{ type: 'task'/);\n  assert.match(sync, /sendIntent\\(\\{ type: 'housing'/);"""
-strict = """  assert.match(sync, /sendAppearance\\(action: string/);\n  assert.match(sync, /sendTask\\(action: string/);\n  assert.match(sync, /sendHousing\\(action: string/);\n  assert.match(sync, /sendTypedIntent\\(type: 'appearance' \\| 'task' \\| 'housing'/);\n  assert.match(sync, /sendIntent\\(\\{ type, payload: \\{ action, \\.\\.\\.payload \\} \\}\\)/);\n  const network = fs.readFileSync(new URL('../../src/game/network.ts', import.meta.url), 'utf8');\n  for (const intent of ['appearance', 'task', 'housing']) assert.match(network, new RegExp(`'${intent}'`));"""
-robust = """  assert.match(sync, /sendAppearance\\(action: string/);\n  assert.match(sync, /sendTask\\(action: string/);\n  assert.match(sync, /sendHousing\\(action: string/);\n  assert.match(sync, /sendTypedIntent\\(type:\\s*'appearance'\\s*\\|\\s*'task'\\s*\\|\\s*'housing'/);\n  assert.match(sync, /sendIntent\\(\\{\\s*type,\\s*payload:\\s*\\{\\s*action,\\s*\\.\\.\\.payload\\s*\\}\\s*\\}\\);?/);\n  const network = fs.readFileSync(new URL('../../src/game/network.ts', import.meta.url), 'utf8');\n  for (const intent of ['appearance', 'task', 'housing']) assert.match(network, new RegExp(`'${intent}'`));"""
+replacement = r"""test('9.2 client sync exposes dedicated authoritative intents', () => {
+  assert.match(sync, /type AlphaLifeIntentType\s*=\s*'appearance'\s*\|\s*'task'\s*\|\s*'housing'\s*;/);
+  assert.match(sync, /sendTypedIntent\(type:\s*AlphaLifeIntentType,/);
+  assert.match(sync, /sendTypedIntent\(type:\s*AlphaLifeIntentType,[\s\S]*?sendIntent\(\{\s*type,\s*payload:\s*\{\s*action,\s*\.\.\.payload\s*\}\s*\}\);?/);
+  assert.match(sync, /sendAppearance\(action:\s*string[\s\S]*?this\.sendTypedIntent\('appearance',\s*action,\s*payload\);/);
+  assert.match(sync, /sendTask\(action:\s*string[\s\S]*?this\.sendTypedIntent\('task',\s*action,\s*payload\);/);
+  assert.match(sync, /sendHousing\(action:\s*string[\s\S]*?this\.sendTypedIntent\('housing',\s*action,\s*payload\);/);
+  const network = fs.readFileSync(new URL('../../src/game/network.ts', import.meta.url), 'utf8');
+  for (const intent of ['appearance', 'task', 'housing']) assert.match(network, new RegExp(`'${intent}'`));
+});"""
 
-if robust in test:
-    print('9.2 typed intent test contract already robust')
-elif strict in test:
-    test_path.write_text(test.replace(strict, robust, 1), encoding='utf-8')
-    print('9.2 typed intent test contract made whitespace-insensitive')
-elif old in test:
-    test_path.write_text(test.replace(old, robust, 1), encoding='utf-8')
-    print('9.2 typed intent test contract aligned')
-else:
-    raise SystemExit('stale 9.2 intent assertion block not found')
+pattern = re.compile(
+    r"test\('9\.2 client sync exposes dedicated authoritative intents', \(\) => \{.*?^\}\);",
+    re.MULTILINE | re.DOTALL,
+)
+updated, count = pattern.subn(lambda _match: replacement, test, count=1)
+if count != 1:
+    raise SystemExit(f'expected one 9.2 client intent test block, found {count}')
+
+test_path.write_text(updated, encoding='utf-8')
+print('9.2 typed intent test contract now validates alias, helper dispatch, and all public routes')
