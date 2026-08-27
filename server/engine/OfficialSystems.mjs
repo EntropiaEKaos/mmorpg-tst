@@ -22,6 +22,15 @@ const cleanText = (value, max = 500) => typeof value === 'string' ? value.trim()
 const dayKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 const playerKey = (name) => String(name || '').trim().toLocaleLowerCase('en-US');
 
+const SERVICE_RULES = Object.freeze({
+  bank_deposit: { npcId: 'banker', label: 'Banker' },
+  bank_withdraw: { npcId: 'banker', label: 'Banker' },
+  rest: { npcId: 'innkeeper', label: 'Innkeeper' },
+  train: { npcId: 'trainer', label: 'Trainer' },
+  food_buy: { npcId: 'innkeeper', label: 'Innkeeper' },
+  shop_buy: { npcId: 'merchant_gorn', label: 'Merchant' },
+});
+
 export const OFFICIAL_PETS = Object.freeze([
   { id: 'wolf_pup', name: 'Wolf Pup', icon: '🐺', color: '#8a8a8a', attack: 8, price: 500, levelRequired: 3 },
   { id: 'boar', name: 'Wild Boar', icon: '🐗', color: '#6a4a3a', attack: 12, price: 1500, levelRequired: 8 },
@@ -368,6 +377,37 @@ export class OfficialSystems {
     return Date.now() < this.ensurePlayer(player).blessingsUntil ? 0.5 : 1;
   }
 
+  getReputationDiscount(player) {
+    const town = int(player.reputation?.town, -100_000, 100_000, 0);
+    if (town >= 42000) return 0.25;
+    if (town >= 21000) return 0.15;
+    if (town >= 9000) return 0.10;
+    if (town >= 3000) return 0.05;
+    return 0;
+  }
+
+  awardReputation(player, amount) {
+    if (!player.reputation || typeof player.reputation !== 'object' || Array.isArray(player.reputation)) player.reputation = { town: 0 };
+    const delta = int(amount, -10_000, 10_000, 0);
+    player.reputation.town = int(player.reputation.town, -100_000, 100_000, 0) + delta;
+    return player.reputation.town;
+  }
+
+  serviceProximity(player, action, npcs = []) {
+    const rule = SERVICE_RULES[action];
+    if (!rule) return { ok: true, npc: null };
+    const npc = Array.isArray(npcs) ? npcs.find(entry => entry?.id === rule.npcId) : null;
+    if (!npc) return { ok: false, error: `${rule.label} is unavailable.` };
+    const mapId = cleanText(npc.mapId, 50);
+    const x = Number(npc.posX);
+    const y = Number(npc.posY);
+    const near = mapId === player.mapId && Number.isFinite(x) && Number.isFinite(y)
+      && Math.abs(player.x - x) <= 2 && Math.abs(player.y - y) <= 2;
+    return near
+      ? { ok: true, npc }
+      : { ok: false, error: `Move near ${cleanText(npc.name, 80) || rule.label} to use this service.` };
+  }
+
   applyDerivedBonuses(player, stats) {
     const s = this.ensurePlayer(player);
     stats.totalAttack += s.training * 2;
@@ -537,6 +577,7 @@ export class OfficialSystems {
           s.coins += reward.coins;
           s.dungeon.highestWave = Math.max(s.dungeon.highestWave, waves);
           s.dungeon.clears++;
+          this.awardReputation(player, 150);
           s.dungeon.active = false; s.dungeon.runId = null; s.dungeon.killsRemaining = 0;
           result.dungeonComplete = reward;
         }
@@ -658,9 +699,12 @@ export class OfficialSystems {
   buyShop(player, itemId, rawQty) {
     const item = OFFICIAL_SHOP.find(entry => entry.id === itemId);
     const qty = int(rawQty, 1, 20, 1);
-    if (!item || player.level < (item.levelRequired || 1) || player.gold < item.price * qty) return false;
-    player.gold -= item.price * qty;
-    addItem(player, { name: item.name, icon: item.icon, type: item.type, quantity: qty, value: item.price, description: item.description });
+    if (!item) return false;
+    const discount = this.getReputationDiscount(player);
+    const unitPrice = Math.max(1, Math.floor(item.price * (1 - discount)));
+    if (player.level < (item.levelRequired || 1) || player.gold < unitPrice * qty) return false;
+    player.gold -= unitPrice * qty;
+    addItem(player, { name: item.name, icon: item.icon, type: item.type, quantity: qty, value: unitPrice, description: item.description });
     return true;
   }
 
@@ -762,6 +806,7 @@ export class OfficialSystems {
       progress.completed = true;
       player.gold += mystery.rewardGold; player.xp += mystery.rewardXp;
       player.stats.goldEarned = (player.stats.goldEarned || 0) + mystery.rewardGold;
+      this.awardReputation(player, 75);
       if (mystery.rewardItem) addItem(player, { ...mystery.rewardItem, type: 'misc', quantity: 1 });
     }
     s.mysteries[mystery.id] = progress;
@@ -802,12 +847,18 @@ export class OfficialSystems {
     return true;
   }
 
-  buyAuction(player, listingId) {
+  buyAuction(player, listingId, findOnlinePlayer = null) {
     const index = this.global.auctions.findIndex(a => a.id === listingId);
     const listing = index >= 0 ? this.global.auctions[index] : null;
     if (!listing || listing.sellerKey === playerKey(player.name) || player.gold < listing.price) return false;
     player.gold -= listing.price;
-    this.global.credits[listing.sellerKey] = int(this.global.credits[listing.sellerKey], 0, 1_000_000_000, 0) + listing.price;
+    const onlineSeller = typeof findOnlinePlayer === 'function' ? findOnlinePlayer(listing.sellerKey) : null;
+    if (onlineSeller) {
+      onlineSeller.gold += listing.price;
+      onlineSeller.stats.goldEarned = (onlineSeller.stats.goldEarned || 0) + listing.price;
+    } else {
+      this.global.credits[listing.sellerKey] = int(this.global.credits[listing.sellerKey], 0, 1_000_000_000, 0) + listing.price;
+    }
     addItem(player, { ...listing.item, id: `auction_buy_${Date.now()}_${Math.random()}` });
     this.global.auctions.splice(index, 1);
     this.save();
@@ -822,7 +873,7 @@ export class OfficialSystems {
     this.save(); return true;
   }
 
-  sendMail(player, payload) {
+  sendMail(player, payload, characterExists = null) {
     const s = this.ensurePlayer(player);
     const now = Date.now();
     if (now - s.lastMailAt < 30_000) return false;
@@ -831,10 +882,31 @@ export class OfficialSystems {
     const subject = cleanText(payload.subject, 80);
     const body = cleanText(payload.body, 500);
     const gold = int(payload.gold, 0, 1_000_000, 0);
+    const itemId = cleanText(payload.itemId, 120);
     if (!targetKey || targetKey === playerKey(player.name) || !subject || !body || player.gold < gold + 5) return false;
+    if (typeof characterExists === 'function' && !characterExists(target)) return false;
+
+    let item = null;
+    let itemIndex = -1;
+    if (itemId) {
+      itemIndex = player.inventory.findIndex(entry => entry.id === itemId);
+      if (itemIndex < 0) return false;
+      const source = player.inventory[itemIndex];
+      item = { ...source, quantity: 1, id: `mail_item_${now}_${Math.random()}` };
+      if (source.equipment) item.equipment = { ...source.equipment };
+    }
+
     player.gold -= gold + 5;
+    if (itemIndex >= 0) {
+      const source = player.inventory[itemIndex];
+      if (int(source.quantity, 1, 999999, 1) > 1 && source.type !== 'equipment') source.quantity -= 1;
+      else player.inventory.splice(itemIndex, 1);
+    }
     s.lastMailAt = now;
-    this.global.mail.push({ id: `mail_${now}_${Math.random()}`, from: player.name, to: targetKey, subject, body, gold, claimed: gold === 0, read: false, sentAt: now, system: false });
+    this.global.mail.push({
+      id: `mail_${now}_${Math.random()}`, from: player.name, to: targetKey, subject, body, gold, item,
+      claimed: gold === 0 && !item, read: false, sentAt: now, system: false,
+    });
     this.global.mail = this.global.mail.slice(-5000);
     this.save(); return true;
   }
@@ -847,11 +919,13 @@ export class OfficialSystems {
     if (action === 'read') mail.read = true;
     else if (action === 'claim') {
       if (mail.claimed) return false;
-      player.gold += int(mail.gold, 0, 1_000_000, 0);
-      player.stats.goldEarned = (player.stats.goldEarned || 0) + int(mail.gold, 0, 1_000_000, 0);
+      const gold = int(mail.gold, 0, 1_000_000, 0);
+      player.gold += gold;
+      player.stats.goldEarned = (player.stats.goldEarned || 0) + gold;
+      if (mail.item) addItem(player, { ...mail.item, id: `mail_claim_${Date.now()}_${Math.random()}` });
       mail.claimed = true; mail.read = true;
     } else if (action === 'delete') {
-      if (!mail.claimed && Number(mail.gold) > 0) return false;
+      if (!mail.claimed && (Number(mail.gold) > 0 || mail.item)) return false;
       this.global.mail.splice(index, 1);
     } else return false;
     this.save(); return true;
@@ -865,6 +939,7 @@ export class OfficialSystems {
     reward.claimed = true;
     player.gold += reward.gold; player.xp += reward.xp; this.ensurePlayer(player).coins += reward.coins;
     player.stats.goldEarned = (player.stats.goldEarned || 0) + reward.gold;
+    this.awardReputation(player, 100);
     this.save(); return reward;
   }
 
@@ -872,7 +947,7 @@ export class OfficialSystems {
     const s = this.ensurePlayer(player); s.pvp.enabled = !s.pvp.enabled; return s.pvp.enabled;
   }
 
-  pvpAttack(player, target) {
+  pvpAttack(player, target, getDerivedStats = null) {
     const now = Date.now();
     const s = this.ensurePlayer(player);
     const ts = target ? this.ensurePlayer(target) : null;
@@ -880,15 +955,25 @@ export class OfficialSystems {
     if (now - s.lastPvpAttack < 900) return null;
     if (Math.abs(target.x - player.x) + Math.abs(target.y - player.y) > 2) return null;
     s.lastPvpAttack = now;
-    const damage = Math.max(1, Math.floor((player.attack + player.level * 0.8 - target.defense * 0.5) * 0.65));
+    const attacker = typeof getDerivedStats === 'function' ? getDerivedStats(player) : null;
+    const defender = typeof getDerivedStats === 'function' ? getDerivedStats(target) : null;
+    const attack = Number(attacker?.totalAttack) || player.attack || 0;
+    const defense = Number(defender?.totalDefense) || target.defense || 0;
+    const reduction = clamp(defender?.damageReduction, 0, 80, 0);
+    const raw = Math.max(1, (attack + player.level * 0.8 - defense * 0.5) * 0.65);
+    const damage = Math.max(1, Math.floor(raw * (1 - reduction / 100)));
     target.hp -= damage;
+    player.stats.damageDealt = (player.stats.damageDealt || 0) + damage;
+    target.stats.damageTaken = (target.stats.damageTaken || 0) + damage;
     s.pvp.aggression = Math.min(100, s.pvp.aggression + 2);
     s.pvp.lastAggression = now;
     s.pvp.skull = skullForAggression(s.pvp.aggression);
     let killed = false;
     if (target.hp <= 0) {
       killed = true;
-      target.hp = target.maxHp; target.mana = target.maxMana; target.mapId = 'eldoria'; target.x = 40; target.y = 40;
+      target.hp = Number(defender?.totalMaxHp) || target.maxHp;
+      target.mana = Number(defender?.totalMaxMana) || target.maxMana;
+      target.mapId = 'eldoria'; target.x = 40; target.y = 40;
       target.stats.deaths = (target.stats.deaths || 0) + 1;
       s.pvp.aggression = Math.min(100, s.pvp.aggression + 18); s.pvp.skull = skullForAggression(s.pvp.aggression);
     }
@@ -911,6 +996,7 @@ export class OfficialSystems {
         bestiary: s.bestiary, achievements: s.achievements, daily: s.daily, stamina: s.stamina,
         booksRead: s.booksRead, mysteries: s.mysteries, pvp: s.pvp, mastery: s.mastery,
         blessingsUntil: s.blessingsUntil, titles: s.titles, dungeon: s.dungeon,
+        reputation: { ...(player.reputation || { town: 0 }) }, shopDiscount: this.getReputationDiscount(player),
       },
       catalogs: {
         pets: OFFICIAL_PETS, gems: OFFICIAL_GEMS, shop: OFFICIAL_SHOP, food: OFFICIAL_FOOD,
@@ -926,6 +1012,8 @@ export class OfficialSystems {
 
   handle(player, payload, ctx = {}) {
     const action = cleanText(payload?.action, 80);
+    const proximity = this.serviceProximity(player, action, ctx.contentNpcs || []);
+    if (!proximity.ok) return { ok: false, error: proximity.error || 'Move near the required NPC.' };
     let ok = false;
     let detail = null;
     if (action === 'pet_buy') ok = this.buyPet(player, payload.petId);
@@ -946,13 +1034,13 @@ export class OfficialSystems {
     else if (action === 'mystery_answer') { detail = this.answerMystery(player, payload.mysteryId, payload.answer); ok = detail.ok; }
     else if (action === 'coin_buy') ok = this.buyCoinItem(player, payload.itemId, ctx.contentItems || []);
     else if (action === 'auction_list') ok = this.listAuction(player, payload.itemId, payload.price);
-    else if (action === 'auction_buy') ok = this.buyAuction(player, payload.listingId);
+    else if (action === 'auction_buy') ok = this.buyAuction(player, payload.listingId, ctx.findOnlinePlayer);
     else if (action === 'auction_cancel') ok = this.cancelAuction(player, payload.listingId);
-    else if (action === 'mail_send') ok = this.sendMail(player, payload);
+    else if (action === 'mail_send') ok = this.sendMail(player, payload, ctx.characterExists);
     else if (action === 'mail_read' || action === 'mail_claim' || action === 'mail_delete') ok = this.markMail(player, payload.mailId, action.replace('mail_', ''));
     else if (action === 'world_event_claim') { detail = this.claimWorldEvent(player); ok = Boolean(detail); }
     else if (action === 'pvp_toggle') { detail = this.pvpToggle(player); ok = true; }
-    else if (action === 'pvp_attack') { detail = this.pvpAttack(player, ctx.getPlayer?.(payload.targetId)); ok = Boolean(detail); }
+    else if (action === 'pvp_attack') { detail = this.pvpAttack(player, ctx.getPlayer?.(payload.targetId), ctx.getDerivedStats); ok = Boolean(detail); }
     else if (action === 'dungeon_start') { detail = this.startDungeon(player, payload.waves); ok = detail.ok; if (ok) ctx.startDungeon?.(detail); }
     else if (action === 'dungeon_abandon') { ok = this.abandonDungeon(player); if (ok) ctx.clearDungeon?.(); }
     else return { ok: false, error: 'Unknown official action.' };

@@ -481,3 +481,45 @@ test('authoritative monster kills progress canonical quest targets', () => {
     cleanup(id);
   }
 });
+
+
+test('authoritative skills use structured progress and advance from combat actions', () => {
+  const { id, player } = makePlayer('knight');
+  try {
+    assert.equal(typeof player.skills.sword, 'object');
+    const before = player.skills.sword.progress;
+    const monster = (engine.monstersByMap.get(player.mapId) || []).find(m => !m.dead);
+    assert.ok(monster);
+    const map = WORLD.getMap(player.mapId);
+    const candidates = [[-1,0],[1,0],[0,-1],[0,1]]
+      .map(([dx,dy]) => ({ x: monster.x + dx, y: monster.y + dy }))
+      .filter(pos => map.tiles?.[pos.y]?.[pos.x]?.walkable);
+    assert.ok(candidates.length > 0);
+    player.x = candidates[0].x; player.y = candidates[0].y;
+    player.lastAttack = 0;
+    assert.equal(engine.handleAttack(player, { monsterId: monster.id }), true);
+    assert.ok(player.skills.sword.progress > before || player.skills.fist.progress > 0);
+  } finally { cleanup(id); }
+});
+
+test('official fishing gathering progresses the authoritative fish quest', () => {
+  const { id, player } = makePlayer('knight');
+  try {
+    player.level = 10;
+    questEngine.restorePlayer(id, { active: [{ questId: 'quest_fish', progress: { fish: 0 }, startedAt: Date.now() }], completed: [] });
+    const map = WORLD.getMap('shadowfen');
+    let spot = null;
+    for (let y = 1; y < map.height - 1 && !spot; y++) {
+      for (let x = 1; x < map.width - 1 && !spot; x++) {
+        if (!map.tiles[y][x].walkable) continue;
+        const around = [[1,0],[-1,0],[0,1],[0,-1]];
+        if (around.some(([dx,dy]) => map.tiles[y + dy]?.[x + dx]?.type === 'water')) spot = { x, y };
+      }
+    }
+    assert.ok(spot, 'expected a walkable tile adjacent to water');
+    player.mapId = 'shadowfen'; player.x = spot.x; player.y = spot.y;
+    assert.equal(engine.handleOfficial(player, { action: 'gather' }), true);
+    const state = questEngine.serialize(id);
+    assert.ok(state.active[0].current >= 1);
+  } finally { cleanup(id); }
+});

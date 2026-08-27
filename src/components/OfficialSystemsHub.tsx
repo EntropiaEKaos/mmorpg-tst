@@ -39,6 +39,7 @@ export default function OfficialSystemsHub({ player, inventory, official, nearby
   const [mailSubject, setMailSubject] = useState('');
   const [mailBody, setMailBody] = useState('');
   const [mailGold, setMailGold] = useState('0');
+  const [mailItem, setMailItem] = useState('');
   const [auctionItem, setAuctionItem] = useState('');
   const [auctionPrice, setAuctionPrice] = useState('100');
   const [socketItem, setSocketItem] = useState('');
@@ -120,6 +121,16 @@ export default function OfficialSystemsHub({ player, inventory, official, nearby
                 <div className="moria-eyebrow text-rose-300">WEAPON MASTERY</div>
                 <div className="mt-2 flex flex-wrap gap-2">{masteryRows.length ? masteryRows.map(([id, value]: any) => <span key={id} className="rounded-lg bg-rose-950/30 px-2 py-1 text-xs text-rose-200">{id}: Lv {value.level} ({value.xp} xp)</span>) : <span className="text-slate-500">Equip a weapon and fight to build mastery.</span>}</div>
               </div>
+              <div className={card}>
+                <div className="moria-eyebrow text-red-300">SESSION DPS · SERVER</div>
+                <div className="mt-2 text-2xl font-black text-red-200">{Number(state.combat?.dps || 0).toFixed(1)}</div>
+                <div className="text-xs text-slate-500">{Number(state.combat?.sessionDamage || 0).toLocaleString()} damage · {Number(state.combat?.sessionSeconds || 0)}s</div>
+              </div>
+              <div className={`${card} lg:col-span-2`}>
+                <div className="moria-eyebrow text-emerald-300">TOWN REPUTATION · SERVER</div>
+                <div className="mt-2 flex items-center justify-between"><b className="text-emerald-100">{Number(state.reputation?.town || 0).toLocaleString()} points</b><span className="text-amber-300">{Math.round(Number(state.shopDiscount || 0) * 100)}% shop discount</span></div>
+                <div className="mt-1 text-xs text-slate-500">Earn reputation from official quests, mysteries, dungeons and world events.</div>
+              </div>
             </div>
           )}
 
@@ -155,8 +166,41 @@ export default function OfficialSystemsHub({ player, inventory, official, nearby
 
           {tab === 'mail' && (
             <div className="grid gap-4 lg:grid-cols-2">
-              <div className={card}><div className="moria-eyebrow text-sky-300">INBOX</div><div className="mt-2 space-y-2">{mail.length ? [...mail].reverse().map((m: any) => <div key={m.id} className="rounded-xl border border-slate-700/60 p-2"><div className="flex justify-between"><b className="text-slate-200">{m.subject}</b><span className="text-[10px] text-slate-500">{m.from}</span></div><p className="mt-1 whitespace-pre-wrap text-xs text-slate-400">{m.body}</p>{m.gold > 0 && <div className="mt-1 text-xs text-amber-300">🪙 {m.gold} gold attached</div>}<div className="mt-2 flex gap-1"><button onClick={() => act('mail_read', { mailId: m.id })} className={button}>Read</button>{!m.claimed && <button onClick={() => act('mail_claim', { mailId: m.id })} className={button}>Claim</button>}<button onClick={() => act('mail_delete', { mailId: m.id })} className={button}>Delete</button></div></div>) : <div className="text-slate-500">Inbox empty.</div>}</div></div>
-              <div className={card}><div className="moria-eyebrow text-violet-300">SEND MAIL · 5g POSTAGE</div><div className="mt-3 space-y-2"><input className={input} placeholder="Character name" value={mailTarget} onChange={e => setMailTarget(e.target.value)}/><input className={input} placeholder="Subject" value={mailSubject} onChange={e => setMailSubject(e.target.value)}/><textarea className={`${input} h-28`} placeholder="Message" value={mailBody} onChange={e => setMailBody(e.target.value)}/><input className={input} type="number" min="0" placeholder="Gold attachment" value={mailGold} onChange={e => setMailGold(e.target.value)}/><button onClick={() => { act('mail_send', { target: mailTarget, subject: mailSubject, body: mailBody, gold: Number(mailGold) || 0 }); setMailBody(''); }} className={`${button} w-full border-violet-500/40 text-violet-200`}>📮 Send</button></div></div>
+              <div className={card}>
+                <div className="moria-eyebrow text-sky-300">INBOX</div>
+                <div className="mt-2 space-y-2">
+                  {mail.length ? [...mail].reverse().map((m: any) => (
+                    <div key={m.id} className="rounded-xl border border-slate-700/60 p-2">
+                      <div className="flex justify-between"><b className="text-slate-200">{m.subject}</b><span className="text-[10px] text-slate-500">{m.from}</span></div>
+                      <p className="mt-1 whitespace-pre-wrap text-xs text-slate-400">{m.body}</p>
+                      {m.gold > 0 && <div className="mt-1 text-xs text-amber-300">🪙 {m.gold} gold attached</div>}
+                      {m.item && <div className="mt-1 text-xs text-cyan-300">{m.item.icon} {m.item.name} attached</div>}
+                      <div className="mt-2 flex gap-1">
+                        <button onClick={() => act('mail_read', { mailId: m.id })} className={button}>Read</button>
+                        {!m.claimed && <button onClick={() => act('mail_claim', { mailId: m.id })} className={button}>Claim</button>}
+                        <button onClick={() => act('mail_delete', { mailId: m.id })} className={button}>Delete</button>
+                      </div>
+                    </div>
+                  )) : <div className="text-slate-500">Inbox empty.</div>}
+                </div>
+              </div>
+              <div className={card}>
+                <div className="moria-eyebrow text-violet-300">SEND MAIL · 5g POSTAGE</div>
+                <div className="mt-3 space-y-2">
+                  <input className={input} placeholder="Character name" value={mailTarget} onChange={e => setMailTarget(e.target.value)}/>
+                  <input className={input} placeholder="Subject" value={mailSubject} onChange={e => setMailSubject(e.target.value)}/>
+                  <textarea className={`${input} h-28`} placeholder="Message" value={mailBody} onChange={e => setMailBody(e.target.value)}/>
+                  <input className={input} type="number" min="0" placeholder="Gold attachment" value={mailGold} onChange={e => setMailGold(e.target.value)}/>
+                  <select className={input} value={mailItem} onChange={e => setMailItem(e.target.value)}>
+                    <option value="">No item attachment</option>
+                    {inventory.map((i: any) => <option key={i.id} value={i.id}>{i.icon} {i.name} ×{i.quantity}</option>)}
+                  </select>
+                  <button onClick={() => {
+                    act('mail_send', { target: mailTarget, subject: mailSubject, body: mailBody, gold: Number(mailGold) || 0, itemId: mailItem || undefined });
+                    setMailBody(''); setMailItem('');
+                  }} className={`${button} w-full border-violet-500/40 text-violet-200`}>📮 Send</button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -176,11 +220,32 @@ export default function OfficialSystemsHub({ player, inventory, official, nearby
           )}
 
           {tab === 'services' && (
-            <div className="grid gap-3 lg:grid-cols-2">
-              <div className={card}><div className="moria-eyebrow text-amber-300">BANK</div><input className={`${input} mt-3`} type="number" value={bankAmount} onChange={e => setBankAmount(e.target.value)}/><div className="mt-2 flex gap-2"><button onClick={() => act('bank_deposit', { amount: Number(bankAmount) })} className={button}>Deposit</button><button onClick={() => act('bank_withdraw', { amount: Number(bankAmount) })} className={button}>Withdraw</button></div></div>
-              <div className={card}><div className="moria-eyebrow text-emerald-300">INN & TRAINING</div><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => act('rest')} className={button}>💚 Rest · 50g</button><button onClick={() => act('train')} disabled={(state.training || 0) >= 20} className={button}>📚 Train · 200g ({state.training || 0}/20)</button></div></div>
-              <div className={card}><div className="moria-eyebrow text-pink-300">FOOD BUFFS</div><div className="mt-2 space-y-1">{(catalogs.food || []).map((f: any) => <div key={f.id} className="flex items-center justify-between rounded bg-slate-900/50 p-2"><span>{f.icon} {f.name}<small className="ml-2 text-slate-500">{f.description}</small></span><button disabled={player.gold < f.price || player.level < f.levelRequired} onClick={() => act('food_buy', { foodId: f.id })} className={button}>{f.price}g</button></div>)}</div></div>
-              <div className={card}><div className="moria-eyebrow text-sky-300">GENERAL SHOP</div><div className="mt-2 space-y-1">{(catalogs.shop || []).map((i: any) => <div key={i.id} className="flex items-center justify-between rounded bg-slate-900/50 p-2"><span>{i.icon} {i.name}</span><button disabled={player.gold < i.price || player.level < (i.levelRequired || 1)} onClick={() => act('shop_buy', { itemId: i.id, quantity: 1 })} className={button}>{i.price}g</button></div>)}</div></div>
+            <div>
+              <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-900/10 p-2 text-xs text-amber-200">
+                🔒 Official services require you to be within 2 tiles of the matching NPC (Banker, Innkeeper, Trainer or Merchant).
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className={card}>
+                  <div className="moria-eyebrow text-amber-300">BANK</div>
+                  <input className={`${input} mt-3`} type="number" value={bankAmount} onChange={e => setBankAmount(e.target.value)}/>
+                  <div className="mt-2 flex gap-2"><button onClick={() => act('bank_deposit', { amount: Number(bankAmount) })} className={button}>Deposit</button><button onClick={() => act('bank_withdraw', { amount: Number(bankAmount) })} className={button}>Withdraw</button></div>
+                </div>
+                <div className={card}>
+                  <div className="moria-eyebrow text-emerald-300">INN & TRAINING</div>
+                  <div className="mt-3 flex flex-wrap gap-2"><button onClick={() => act('rest')} className={button}>💚 Rest · 50g</button><button onClick={() => act('train')} disabled={(state.training || 0) >= 20} className={button}>📚 Train · 200g ({state.training || 0}/20)</button></div>
+                </div>
+                <div className={card}>
+                  <div className="moria-eyebrow text-pink-300">FOOD BUFFS</div>
+                  <div className="mt-2 space-y-1">{(catalogs.food || []).map((f: any) => <div key={f.id} className="flex items-center justify-between rounded bg-slate-900/50 p-2"><span>{f.icon} {f.name}<small className="ml-2 text-slate-500">{f.description}</small></span><button disabled={player.gold < f.price || player.level < f.levelRequired} onClick={() => act('food_buy', { foodId: f.id })} className={button}>{f.price}g</button></div>)}</div>
+                </div>
+                <div className={card}>
+                  <div className="moria-eyebrow text-sky-300">GENERAL SHOP</div>
+                  <div className="mt-2 space-y-1">{(catalogs.shop || []).map((i: any) => {
+                    const finalPrice = Math.max(1, Math.floor(i.price * (1 - Number(state.shopDiscount || 0))));
+                    return <div key={i.id} className="flex items-center justify-between rounded bg-slate-900/50 p-2"><span>{i.icon} {i.name}</span><button disabled={player.gold < finalPrice || player.level < (i.levelRequired || 1)} onClick={() => act('shop_buy', { itemId: i.id, quantity: 1 })} className={button}>{finalPrice}g{finalPrice < i.price ? <small className="ml-1 text-emerald-300">(-{Math.round(Number(state.shopDiscount || 0) * 100)}%)</small> : null}</button></div>;
+                  })}</div>
+                </div>
+              </div>
             </div>
           )}
 

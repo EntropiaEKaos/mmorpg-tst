@@ -10,6 +10,7 @@ interface Props {
   player: Player;
   onClose: () => void;
   onUnequip: (slot: keyof Player['equipment']) => void;
+  official?: any;
 }
 
 const SLOTS: Array<{ slot: EquipmentSlot; label: string; icon: string }> = [
@@ -28,9 +29,25 @@ const SLOTS: Array<{ slot: EquipmentSlot; label: string; icon: string }> = [
   { slot: 'relic', label: 'Relic', icon: '💠' },
 ];
 
-export default function CharacterPanel({ player, onClose, onUnequip }: Props) {
+export default function CharacterPanel({ player, onClose, onUnequip, official }: Props) {
   const vocation = VOCATIONS[player.vocation];
-  const derived = computeDerivedStats(player);
+  const authoritative = Boolean(official);
+  const officialState = official?.state || {};
+  const derived = authoritative ? {
+    totalAttack: player.attack,
+    totalDefense: player.defense,
+    totalArmor: Number((player as any).armor) || 0,
+    totalMagic: player.magic,
+    totalMaxHp: player.maxHp,
+    totalMaxMana: player.maxMana,
+    critChance: Number((player as any).critChance) || 0,
+    lifesteal: Number((player as any).lifesteal) || 0,
+    thorns: Number((player as any).thorns) || 0,
+    moveSpeed: Number((player as any).moveSpeed) || 0,
+    xpBonus: Number((player as any).xpBonus) || 0,
+    goldBonus: Number((player as any).goldBonus) || 0,
+    damageReduction: Number((player as any).damageReduction) || 0,
+  } : computeDerivedStats(player);
   const hpPct = Math.max(0, Math.min(100, (player.hp / Math.max(1, derived.totalMaxHp)) * 100));
   const mpPct = Math.max(0, Math.min(100, (player.mana / Math.max(1, derived.totalMaxMana)) * 100));
   const xpPct = Math.max(0, Math.min(100, (player.xp / Math.max(1, player.xpNext)) * 100));
@@ -190,84 +207,86 @@ export default function CharacterPanel({ player, onClose, onUnequip }: Props) {
 
           {/* Right: Blessings, Professions, Reputation, Stamina */}
           <div className="moria-scrollbar max-h-[70vh] space-y-3 overflow-y-auto pr-1 xl:col-span-4">
-            <div>
-              <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">✨ BLESSINGS ({getBlessings(player).length}/{BLESSINGS.length})</div>
-              <div className="space-y-1">
-                {BLESSINGS.map((b) => {
-                  const owned = getBlessings(player).includes(b.id);
-                  return (
-                    <div key={b.id} className={`flex items-center gap-2 p-1.5 rounded text-xs ${owned ? 'bg-green-900/20 border border-green-700/40' : 'bg-black/30 border border-gray-700/30 opacity-50'}`}>
-                      <span>{b.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className={owned ? 'text-green-300 font-bold' : 'text-gray-400'}>{b.name}</div>
-                        <div className="text-[9px] text-amber-200/50 truncate">{b.description}</div>
-                      </div>
-                      {owned && <span className="text-green-400">✓</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">⛏ PROFESSIONS</div>
-              <div className="space-y-1">
-                {(['miner', 'herbalist', 'fisher'] as const).map((prof) => {
-                  const profData = getProfessions(player)[prof];
-                  const pct = (profData.progress / (profData.level * 8)) * 100;
-                  const icons = { miner: '⛏', herbalist: '🌿', fisher: '🎣' };
-                  return (
-                    <div key={prof} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-amber-200/80">{icons[prof]} {prof.charAt(0).toUpperCase() + prof.slice(1)}</span>
-                        <span className="text-amber-300 font-bold">Lv {profData.level}</span>
-                      </div>
-                      <div className="h-1 bg-black/60 rounded mt-0.5 overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-amber-600 to-amber-300" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">🏰 REPUTATION</div>
-              {FACTIONS.map((faction) => {
-                const rep = getReputation(player);
-                const value = rep[faction.id] || 0;
-                const level = getRepLevel(faction.id, value);
-                return (
-                  <div key={faction.id} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-amber-200/80">{faction.icon} {faction.name}</span>
-                      <span className="font-bold" style={{ color: level.color }}>{level.name}</span>
-                    </div>
-                    <div className="text-[9px] text-amber-200/50">{value.toLocaleString()} points</div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {(() => {
-              const stamina = getStamina(player);
-              const hours = Math.floor(stamina / 60);
-              const mult = getStaminaMultiplier(stamina);
-              return (
+            {authoritative ? (
+              <>
                 <div>
-                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">⚡ STAMINA</div>
+                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">✨ OFFICIAL BLESSING</div>
+                  <div className="bg-black/30 rounded px-2 py-2 border border-amber-900/30 text-xs">
+                    {Number(officialState.blessingsUntil || 0) > Date.now()
+                      ? <span className="text-green-300">✓ Blessing of Mor'ia active</span>
+                      : <span className="text-amber-200/50">No official blessing active</span>}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">⛏ PROFESSIONS · SERVER</div>
+                  <div className="space-y-1">
+                    {Object.entries(officialState.professions || {}).map(([name, value]: any) => (
+                      <div key={name} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 flex items-center justify-between text-xs">
+                        <span className="capitalize text-amber-200/80">{name}</span>
+                        <span className="text-amber-300 font-bold">Lv {value.level} · {value.xp} xp</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">🏰 REPUTATION · SERVER</div>
                   <div className="bg-black/30 rounded px-2 py-1 border border-amber-900/30">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-amber-200/80">⏱ {hours}h remaining</span>
-                      <span className="font-bold" style={{ color: mult >= 1 ? '#2ecc71' : mult >= 0.75 ? '#f4e04d' : '#ff6060' }}>{Math.round(mult * 100)}% XP</span>
+                      <span className="text-amber-200/80">🏰 Town of Antica</span>
+                      <span className="text-green-300 font-bold">{Number(officialState.reputation?.town || 0).toLocaleString()} pts</span>
                     </div>
-                    <div className="h-1 bg-black/60 rounded mt-0.5 overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-green-600 to-green-300" style={{ width: `${(stamina / (42 * 60)) * 100}%` }} />
+                    <div className="text-[9px] text-amber-200/50">Shop discount: {Math.round(Number(officialState.shopDiscount || 0) * 100)}%</div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">⚡ STAMINA · SERVER</div>
+                  <div className="bg-black/30 rounded px-2 py-1 border border-amber-900/30">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-amber-200/80">⏱ {Math.floor(Number(officialState.stamina || 0) / 60)}h remaining</span>
+                      <span className="text-emerald-300 font-bold">{officialState.stamina > 2400 ? '120%' : officialState.stamina < 840 ? '50%' : '100%'} XP</span>
                     </div>
                   </div>
                 </div>
-              );
-            })()}
+
+                <div>
+                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">🎯 SKILLS · SERVER</div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {Object.entries(player.skills || {}).map(([name, raw]: any) => {
+                      const skill = typeof raw === 'number' ? { level: raw, progress: 0 } : raw;
+                      return <div key={name} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 text-[10px] flex justify-between">
+                        <span className="capitalize text-amber-200/70">{name}</span><b className="text-sky-200">Lv {skill.level} · {skill.progress}</b>
+                      </div>;
+                    })}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">✨ BLESSINGS ({getBlessings(player).length}/{BLESSINGS.length})</div>
+                  <div className="space-y-1">
+                    {BLESSINGS.map((b) => {
+                      const owned = getBlessings(player).includes(b.id);
+                      return <div key={b.id} className={`flex items-center gap-2 p-1.5 rounded text-xs ${owned ? 'bg-green-900/20 border border-green-700/40' : 'bg-black/30 border border-gray-700/30 opacity-50'}`}>
+                        <span>{b.icon}</span><div className="flex-1 min-w-0"><div className={owned ? 'text-green-300 font-bold' : 'text-gray-400'}>{b.name}</div><div className="text-[9px] text-amber-200/50 truncate">{b.description}</div></div>{owned && <span className="text-green-400">✓</span>}
+                      </div>;
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">⛏ PROFESSIONS</div>
+                  <div className="space-y-1">{(['miner', 'herbalist', 'fisher'] as const).map((prof) => { const data = getProfessions(player)[prof]; return <div key={prof} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 text-xs flex justify-between"><span className="capitalize text-amber-200/80">{prof}</span><b className="text-amber-300">Lv {data.level}</b></div>; })}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">🏰 REPUTATION</div>
+                  {FACTIONS.map((faction) => { const value = getReputation(player)[faction.id] || 0; const level = getRepLevel(faction.id, value); return <div key={faction.id} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 text-xs flex justify-between"><span>{faction.icon} {faction.name}</span><b style={{ color: level.color }}>{level.name} · {value}</b></div>; })}
+                </div>
+                <div className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 text-xs">⚡ Stamina: {Math.floor(getStamina(player) / 60)}h · {Math.round(getStaminaMultiplier(getStamina(player)) * 100)}% XP</div>
+              </>
+            )}
           </div>
         </div>
       </div>

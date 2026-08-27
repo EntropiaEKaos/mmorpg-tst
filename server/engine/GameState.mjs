@@ -11,6 +11,7 @@ import { questEngine } from './QuestEngine.mjs';
 import { adventureEngine, createAdventureState } from './AdventureEngine.mjs';
 import { officialSystems } from './OfficialSystems.mjs';
 import { contentDB } from './ContentDB.mjs';
+import { accountStore } from './AuthService.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -45,6 +46,15 @@ const CONTENT_BUFF_TYPES = new Set(['shield', 'haste', 'invisible', 'frenzy']);
 function spellSlug(value) {
   return String(value || '').trim().toLowerCase()
     .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function freshSkills() {
+  return {
+    fist: { level: 10, progress: 0 }, sword: { level: 10, progress: 0 },
+    axe: { level: 10, progress: 0 }, club: { level: 10, progress: 0 },
+    distance: { level: 10, progress: 0 }, shielding: { level: 10, progress: 0 },
+    magic: { level: 10, progress: 0 }, fishing: { level: 10, progress: 0 },
+  };
 }
 
 class GameEngine {
@@ -84,12 +94,13 @@ class GameEngine {
       targetId: null,
       inventory: getStarterInventory(),
       equipment: {},
-      buffs: [], skills: { sword: 10, magic: 10, shielding: 10 },
+      buffs: [], skills: freshSkills(),
       lastAttack: 0, lastMove: 0, lastRegen: 0, cooldowns: {},
       mounted: false, professions: {}, reputation: { town: 0 }, talents: {},
       adventure: createAdventureState(),
       official: null,
-      stats: { monstersKilled: 0, damageDealt: 0, damageTaken: 0, healingDone: 0, goldEarned: 0, deaths: 0, levelUps: 0, spellsCast: 0, adventuresCompleted: 0 },
+      stats: { monstersKilled: 0, bossesKilled: 0, damageDealt: 0, damageTaken: 0, healingDone: 0, goldEarned: 0, distanceWalked: 0, deaths: 0, levelUps: 0, spellsCast: 0, adventuresCompleted: 0 },
+      sessionStartedAt: Date.now(), sessionDamageBase: 0,
       ws, lastActivity: Date.now(),
     };
     this.players.set(id, player);
@@ -102,6 +113,23 @@ class GameEngine {
     const result = [];
     for (const p of this.players.values()) if (p.mapId === mapId) result.push(p);
     return result;
+  }
+
+  progressSkill(player, skillId, amount = 1) {
+    if (!player.skills || typeof player.skills !== 'object') player.skills = freshSkills();
+    const raw = player.skills[skillId];
+    const skill = raw && typeof raw === 'object'
+      ? raw
+      : { level: Math.max(1, Math.floor(Number(raw) || 10)), progress: 0 };
+    skill.level = Math.max(1, Math.floor(Number(skill.level) || 10));
+    skill.progress = Math.max(0, Math.floor(Number(skill.progress) || 0)) + Math.max(1, Math.floor(Number(amount) || 1));
+    const needed = Math.max(10, skill.level * 10);
+    if (skill.progress >= needed) {
+      skill.progress -= needed;
+      skill.level++;
+    }
+    player.skills[skillId] = skill;
+    return skill;
   }
 
   syncContentItems(itemContent = []) {
@@ -291,6 +319,7 @@ class GameEngine {
 
     player.lastMove = now;
     player.x = nx; player.y = ny;
+    player.stats.distanceWalked = (player.stats.distanceWalked || 0) + 1;
     if (dx < 0) player.direction = 'left';
     else if (dx > 0) player.direction = 'right';
     else if (dy < 0) player.direction = 'up';
@@ -312,7 +341,7 @@ class GameEngine {
   // ===== DERIVED STATS (equipment + passive talents + active buffs) =====
   computeDerivedStats(player) {
     const stats = {
-      totalAttack: player.attack || 0, totalDefense: player.defense || 0,
+      totalAttack: player.attack || 0, totalDefense: player.defense || 0, totalArmor: 0,
       totalMagic: player.magic || 0, totalMaxHp: player.maxHp || 100, totalMaxMana: player.maxMana || 50,
       critChance: 15, lifesteal: 0, thorns: 0, moveSpeed: 0,
       xpBonus: 0, goldBonus: 0, healBonus: 0, damageReduction: 0,
@@ -324,6 +353,7 @@ class GameEngine {
       stats.totalAttack += Number(eq.attack) || 0;
       stats.totalDefense += Number(eq.defense) || 0;
       stats.totalDefense += Number(eq.armor) || 0;
+      stats.totalArmor += Number(eq.armor) || 0;
       stats.totalMagic += Number(eq.magic) || 0;
       stats.totalMaxHp += Number(eq.hp) || 0;
       stats.totalMaxMana += Number(eq.mana) || 0;
@@ -388,6 +418,8 @@ class GameEngine {
 
     monster.hp -= dmg;
     player.stats.damageDealt += dmg;
+    const attackSkill = (player.vocation === 'paladin' || player.vocation === 'ranger') ? 'distance' : (player.equipment?.weapon ? 'sword' : 'fist');
+    this.progressSkill(player, attackSkill, 1);
     officialSystems.recordWeaponHit(player);
     this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: dmg, pos: { x: monster.x, y: monster.y }, color: crit ? '#ff4444' : '#ffdddd' });
 
@@ -407,6 +439,7 @@ class GameEngine {
     monster.dead = true;
     monster.respawnAt = monster.noRespawn ? Number.MAX_SAFE_INTEGER : Date.now() + (monster.type === 'boss' ? 60000 : 15000);
     player.stats.monstersKilled++;
+    if (monster.type === 'boss') player.stats.bossesKilled = (player.stats.bossesKilled || 0) + 1;
 
     const derived = this.computeDerivedStats(player);
     const adventureKill = adventureEngine.onMonsterKill(player, monster);
@@ -485,6 +518,7 @@ class GameEngine {
     player.mana -= spell.mana;
     player.cooldowns[spell.name] = now;
     player.stats.spellsCast++;
+    this.progressSkill(player, 'magic', 1);
 
     const derived = this.computeDerivedStats(player);
     this.emitEvent(player.mapId, { kind: 'spell', targetId: player.id, text: spell.name, color: spell.color, pos: { x: player.x, y: player.y } });
@@ -836,7 +870,11 @@ class GameEngine {
     const result = officialSystems.handle(player, payload, {
       world: WORLD,
       contentItems: this.contentItems,
+      contentNpcs: contentDB.get('npcs'),
       getPlayer: id => this.players.get(id),
+      getDerivedStats: target => this.computeDerivedStats(target),
+      characterExists: name => Boolean(accountStore.findCharacter(name)),
+      findOnlinePlayer: sellerKey => Array.from(this.players.values()).find(candidate => candidate.name.toLocaleLowerCase('en-US') === sellerKey) || null,
       startDungeon: () => this.spawnOfficialDungeonWave(player),
       clearDungeon: () => this.clearOfficialDungeon(player),
     });
@@ -857,7 +895,17 @@ class GameEngine {
     };
     let text = labels[action] || '✓ Official action complete';
     if (action === 'daily_claim' && result.detail) text += ` · +${result.detail.gold}g +${result.detail.xp}XP +${result.detail.coins} coins`;
-    if (action === 'gather' && result.detail) text += ` · +${result.detail.quantity} ${result.detail.name}`;
+    if (action === 'gather' && result.detail) {
+      text += ` · +${result.detail.quantity} ${result.detail.name}`;
+      if (result.detail.profession === 'fishing') this.progressSkill(player, 'fishing', result.detail.quantity);
+      const questProgress = questEngine.progressQuest(player.id, result.detail.name, result.detail.quantity, [result.detail.profession]);
+      for (const prog of questProgress) {
+        this.emitEvent(player.mapId, { kind: 'quest_progress', targetId: player.id, text: `${prog.name}: ${prog.current}/${prog.needed}`, color: '#9bd4ff', pos: { x: player.x, y: player.y } });
+      }
+      for (const comp of questEngine.checkCompletion(player.id)) {
+        this.emitEvent(player.mapId, { kind: 'quest_complete', targetId: player.id, text: `✅ ${comp.quest.name} COMPLETE!`, color: '#2ecc71', pos: { x: player.x, y: player.y } });
+      }
+    }
     if (action === 'mystery_answer' && result.detail?.completed) text += ' · mystery completed!';
     if (action === 'pvp_attack' && result.detail) {
       text += ` · ${result.detail.damage} damage · skull ${result.detail.skull}`;
@@ -926,6 +974,7 @@ class GameEngine {
       player.xp += result.rewards.xp;
       player.stats.goldEarned += result.rewards.gold;
       if (result.rewards.item) player.inventory.push({ id: `quest_${Date.now()}`, ...result.rewards.item, type: 'misc', quantity: 1 });
+      officialSystems.awardReputation(player, Math.max(25, Math.floor((Number(result.quest.levelRequired) || 1) * 10)));
       const voc = VOCATIONS[player.vocation];
       while (voc && player.xp >= player.xpNext) {
         player.xp -= player.xpNext;
@@ -970,6 +1019,7 @@ class GameEngine {
         let dmg = Math.max(1, m.attack + Math.floor(Math.random() * 4) - derived.totalDefense);
         dmg = Math.max(1, Math.floor(dmg * (1 - derived.damageReduction / 100)));
         nearest.hp -= dmg; nearest.stats.damageTaken += dmg;
+        this.progressSkill(nearest, 'shielding', 1);
         this.emitEvent(mapId, { kind: 'damage', targetId: nearest.id, amount: dmg, pos: { x: nearest.x, y: nearest.y }, color: '#ff6060' });
         if (nearest.hp <= 0) {
           nearest.hp = derived.totalMaxHp; nearest.mana = derived.totalMaxMana;
@@ -1032,6 +1082,7 @@ class GameEngine {
       magic: derived.totalMagic,
       maxHp: derived.totalMaxHp,
       maxMana: derived.totalMaxMana,
+      armor: derived.totalArmor,
       critChance: derived.critChance,
       lifesteal: derived.lifesteal,
       thorns: derived.thorns,
@@ -1042,6 +1093,8 @@ class GameEngine {
       moveSpeed: derived.moveSpeed,
       quests: questEngine.serialize(playerId),
       adventure: adventureEngine.serialize(player),
+      sessionStartedAt: undefined,
+      sessionDamageBase: undefined,
     };
 
     const nearbyPlayers = [];
@@ -1065,6 +1118,9 @@ class GameEngine {
       !privateKinds.has(event.kind) || event.targetId === playerId
     );
     const official = officialSystems.snapshot(player, this.getPlayersOnMap(player.mapId).filter(p => p.id !== playerId && Math.abs(p.x - player.x) + Math.abs(p.y - player.y) < 25));
+    const sessionSeconds = Math.max(1, (Date.now() - (Number(player.sessionStartedAt) || Date.now())) / 1000);
+    const sessionDamage = Math.max(0, (Number(player.stats?.damageDealt) || 0) - (Number(player.sessionDamageBase) || 0));
+    official.state.combat = { sessionDamage, sessionSeconds: Math.floor(sessionSeconds), dps: Math.round((sessionDamage / sessionSeconds) * 10) / 10 };
     return { player: playerData, nearbyPlayers, monsters, groundItems, events, official };
   }
 

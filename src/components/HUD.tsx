@@ -11,10 +11,26 @@ interface Props {
   spells: Spell[];
   onCastSpell: (idx: number) => void;
   monsters?: Monster[];
+  official?: any;
 }
 
-export default function HUD({ player, spells, onCastSpell, monsters, tick }: Props) {
-  const derived = computeDerivedStats(player);
+export default function HUD({ player, spells, onCastSpell, monsters, tick, official }: Props) {
+  const authoritative = Boolean(official);
+  const derived = authoritative ? {
+    totalAttack: player.attack,
+    totalDefense: player.defense,
+    totalArmor: Number((player as any).armor) || 0,
+    totalMagic: player.magic,
+    totalMaxHp: player.maxHp,
+    totalMaxMana: player.maxMana,
+    critChance: Number((player as any).critChance) || 0,
+    lifesteal: Number((player as any).lifesteal) || 0,
+    thorns: Number((player as any).thorns) || 0,
+    moveSpeed: Number((player as any).moveSpeed) || 0,
+    xpBonus: Number((player as any).xpBonus) || 0,
+    goldBonus: Number((player as any).goldBonus) || 0,
+    damageReduction: Number((player as any).damageReduction) || 0,
+  } : computeDerivedStats(player);
   const hpPct = clampPct(player.hp, derived.totalMaxHp);
   const mpPct = clampPct(player.mana, derived.totalMaxMana);
   const xpPct = clampPct(player.xp, player.xpNext);
@@ -53,7 +69,10 @@ export default function HUD({ player, spells, onCastSpell, monsters, tick }: Pro
         <Section title="ACTIVE EFFECTS" compact>
           <div className="flex flex-wrap gap-1.5">
             {player.buffs.map((b) => {
-              const remaining = Math.max(0, b.duration - (now - b.startTime));
+              const expiresAt = Number((b as any).expiresAt);
+              const remaining = expiresAt > now
+                ? expiresAt - now
+                : Math.max(0, Number((b as any).duration || 0) - (now - Number(b.startTime || now)));
               return (
                 <div key={b.id} className="moria-chip flex items-center gap-1.5 rounded-lg px-2 py-1 text-[9px]" style={{ borderColor: `${b.color}55`, color: b.color }} title={`${b.name} - ${Math.ceil(remaining / 1000)}s`}>
                   <span className="text-xs">{b.icon}</span>
@@ -99,7 +118,7 @@ export default function HUD({ player, spells, onCastSpell, monsters, tick }: Pro
             <Stat label="GOLD" icon="🪙" value={player.gold} color="#e5c477" />
           </Tooltip>
           <div className="col-span-2">
-            <Stat label="COINS" icon="💎" value={getCoins(player.name)} color="#c6a9ff" wide />
+            <Stat label="COINS" icon="💎" value={authoritative ? Number(official?.state?.coins || 0) : getCoins(player.name)} color="#c6a9ff" wide />
           </div>
         </div>
       </Section>
@@ -107,10 +126,11 @@ export default function HUD({ player, spells, onCastSpell, monsters, tick }: Pro
       <Section title="SKILL MASTERY" compact>
         <div className="grid grid-cols-4 gap-1.5">
           {(['sword', 'magic', 'shielding', 'distance'] as const).map((sk) => {
-            const skill = player.skills[sk];
-            if (!skill) return null;
-            const needed = Math.max(1, skill.level * 10);
-            const pct = Math.max(0, Math.min(100, (skill.progress / needed) * 100));
+            const rawSkill: any = player.skills?.[sk];
+            if (rawSkill == null) return null;
+            const skill = typeof rawSkill === 'number' ? { level: rawSkill, progress: 0 } : rawSkill;
+            const needed = Math.max(1, (Number(skill.level) || 1) * 10);
+            const pct = Math.max(0, Math.min(100, ((Number(skill.progress) || 0) / needed) * 100));
             const icons: Record<string, string> = { sword: '⚔', magic: '🔮', shielding: '🛡', distance: '🏹' };
             return (
               <div key={sk} className="moria-card rounded-xl px-1.5 py-2 text-center">

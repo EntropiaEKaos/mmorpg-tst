@@ -729,7 +729,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (e.key.toLowerCase() === 't') setShowTalents((s) => !s);
       if (e.key.toLowerCase() === 'r') setAutoAttack((s) => { autoAttackRef.current = !s; return !s; });
       if (e.key.toLowerCase() === 'b') onlineAccount ? openOfficial('progress') : setShowBestiary((s) => !s);
-      if (e.key.toLowerCase() === 'd') setShowDPS((s) => !s);
+      if (e.key.toLowerCase() === 'd') onlineAccount ? openOfficial('progress') : setShowDPS((s) => !s);
       if (e.key.toLowerCase() === 'o' && onlineAccount) openOfficial('progress');
       if (e.key.toLowerCase() === 'p') usePotion('hp');
       if (e.key.toLowerCase() === 'm') usePotion('mp');
@@ -1744,9 +1744,10 @@ export default function GameScreen({ account, onLogout }: Props) {
         const renderState = serverSync.getRenderState();
         if (renderState) {
           const sp = renderState.player || {};
-          const { x, y, inventory: serverInventory, quests: serverQuestState, adventure: serverAdventure, skills: _serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
+          const { x, y, inventory: serverInventory, quests: serverQuestState, adventure: serverAdventure, skills: serverSkills, stats: serverStats, ws: _ws, ...compatibleServerPlayer } = sp;
           const serverOfficial = renderState.official;
           Object.assign(p, compatibleServerPlayer);
+          if (serverSkills && typeof serverSkills === 'object') p.skills = serverSkills;
           if (Number.isFinite(x) && Number.isFinite(y)) p.pos = { x, y };
           if (serverStats && typeof serverStats === 'object') p.stats = { ...p.stats, ...serverStats };
           if (serverAdventure && typeof serverAdventure === 'object') {
@@ -1761,6 +1762,8 @@ export default function GameScreen({ account, onLogout }: Props) {
             if (signature !== lastOfficialSignatureRef.current) {
               lastOfficialSignatureRef.current = signature;
               setOfficialState(serverOfficial);
+              if (Array.isArray(serverOfficial.state?.achievements)) p.achievements = serverOfficial.state.achievements;
+              if (serverOfficial.state?.reputation && typeof serverOfficial.state.reputation === 'object') p.reputation = serverOfficial.state.reputation;
             }
           }
           if (serverQuestState && typeof serverQuestState === 'object') {
@@ -2611,7 +2614,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     char: { icon: '👤', label: 'Char', hotkey: 'C', onClick: () => setShowCharacter((v) => !v) },
     talents: { icon: '🌟', label: 'Talents', hotkey: 'T', onClick: () => setShowTalents((v) => !v) },
     bestiary: { icon: '📖', label: 'Bestiary', hotkey: 'B', onClick: () => onlineAccount ? openOfficial('progress') : setShowBestiary((v) => !v) },
-    dps: { icon: '📊', label: 'DPS', hotkey: 'D', onClick: () => setShowDPS((v) => !v) },
+    dps: { icon: '📊', label: 'DPS', hotkey: 'D', onClick: () => onlineAccount ? openOfficial('progress') : setShowDPS((v) => !v) },
     dungeon: { icon: '🌀', label: 'Dungeon', hotkey: '', onClick: () => onlineAccount ? openOfficial('dungeon') : setShowDungeon(true) },
     pet: { icon: '🐾', label: 'Pet', hotkey: '', onClick: () => onlineAccount ? openOfficial('pets') : setShowPetShop(true) },
     mystery: { icon: '✦', label: 'Mystery', hotkey: '', onClick: () => onlineAccount ? openOfficial('library') : setShowMysteryBook(true) },
@@ -2757,7 +2760,7 @@ export default function GameScreen({ account, onLogout }: Props) {
             <div className="moria-panel absolute right-3 top-3 max-w-[270px] rounded-2xl border border-amber-200/20 p-3">
               <div className="moria-eyebrow mb-2 text-[9px] text-amber-200/80">📜 ACTIVE QUESTS</div>
               {player.activeQuests.slice(0, 3).map((aq) => {
-                const quest = QUESTS.find((q) => q.id === aq.questId);
+                const quest = questCatalog.find((q) => q.id === aq.questId);
                 if (!quest) return null;
                 return (
                   <div key={aq.questId} className="mb-1 last:mb-0">
@@ -2779,9 +2782,15 @@ export default function GameScreen({ account, onLogout }: Props) {
               items={inventory}
               onClose={() => setShowInventory(false)}
               onUse={(item) => {
-                if (item.id === 'hp1') usePotion('hp');
-                else if (item.id === 'mp1') usePotion('mp');
-                else if (item.id === 'hpg') usePotion('hpg');
+                if (serverSync.isActive()) {
+                  if (item.name === 'Health Potion') usePotion('hp');
+                  else if (item.name === 'Mana Potion') usePotion('mp');
+                  else if (item.name === 'Greater Health Potion') usePotion('hpg');
+                } else {
+                  if (item.id === 'hp1') usePotion('hp');
+                  else if (item.id === 'mp1') usePotion('mp');
+                  else if (item.id === 'hpg') usePotion('hpg');
+                }
               }}
               onEquip={equipItem}
               shopItems={activeDialog?.shop}
@@ -2798,6 +2807,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           {showCharacter && (
             <CharacterPanel
               player={player}
+              official={serverSync.isActive() ? officialState : null}
               onClose={() => setShowCharacter(false)}
               onUnequip={unequipItem}
             />
@@ -2812,7 +2822,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           {showBestiary && (
             <Bestiary player={player} onClose={() => setShowBestiary(false)} />
           )}
-          {showDPS && (
+          {showDPS && !serverSync.isActive() && (
             <DPSMeter onClose={() => setShowDPS(false)} />
           )}
           {showDungeon && (
@@ -2978,9 +2988,9 @@ export default function GameScreen({ account, onLogout }: Props) {
             player={player}
             spells={spells}
             potions={{
-              hp: inventory.find((i) => i.id === 'hp1')?.quantity ?? 0,
-              mp: inventory.find((i) => i.id === 'mp1')?.quantity ?? 0,
-              hpg: inventory.find((i) => i.id === 'hpg')?.quantity ?? 0,
+              hp: inventory.find((i) => serverSync.isActive() ? i.name === 'Health Potion' : i.id === 'hp1')?.quantity ?? 0,
+              mp: inventory.find((i) => serverSync.isActive() ? i.name === 'Mana Potion' : i.id === 'mp1')?.quantity ?? 0,
+              hpg: inventory.find((i) => serverSync.isActive() ? i.name === 'Greater Health Potion' : i.id === 'hpg')?.quantity ?? 0,
             }}
             onCastSpell={castSpell}
             onUsePotion={usePotion}
@@ -3041,7 +3051,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               completedQuests={serverSync.isActive() && serverQuestsRef.current ? serverQuestsRef.current.completed : player.quests}
               availableQuests={availableQuests}
               questCatalog={questCatalog}
-              achievements={player.achievements}
+              achievements={serverSync.isActive() ? (officialState?.state?.achievements || []) : player.achievements}
               stats={player.stats}
               onClose={() => setShowQuestLog(false)}
               onAcceptQuest={serverSync.isActive() ? (id: string) => serverSync.sendQuestAccept(id) : undefined}
@@ -3133,7 +3143,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           )}
         </div>
 
-        <HUD player={player} tick={hudTick} spells={spells} onCastSpell={castSpell} monsters={monstersRef.current} />
+        <HUD player={player} tick={hudTick} spells={spells} onCastSpell={castSpell} monsters={monstersRef.current} official={serverSync.isActive() ? officialState : null} />
       </div>
 
     </div>

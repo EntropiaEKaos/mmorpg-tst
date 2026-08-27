@@ -173,6 +173,23 @@ function requireSession(req, res, { touch = true } = {}) {
   return { token, session };
 }
 
+function normalizeSkills(raw) {
+  const names = ['fist', 'sword', 'axe', 'club', 'distance', 'shielding', 'magic', 'fishing'];
+  const result = {};
+  for (const name of names) {
+    const value = raw?.[name];
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      result[name] = {
+        level: Math.max(1, Math.floor(Number(value.level) || 10)),
+        progress: Math.max(0, Math.floor(Number(value.progress) || 0)),
+      };
+    } else {
+      result[name] = { level: Math.max(1, Math.floor(Number(value) || 10)), progress: 0 };
+    }
+  }
+  return result;
+}
+
 function buildAuthoritativeSave(p) {
   return {
     level: p.level,
@@ -211,7 +228,7 @@ function restorePlayer(p, saved, expectedVocation) {
   if (Array.isArray(saved.inventory)) p.inventory = saved.inventory;
   if (saved.equipment && typeof saved.equipment === 'object' && !Array.isArray(saved.equipment)) p.equipment = saved.equipment;
   if (saved.talents && typeof saved.talents === 'object' && !Array.isArray(saved.talents)) p.talents = saved.talents;
-  if (saved.skills && typeof saved.skills === 'object' && !Array.isArray(saved.skills)) p.skills = saved.skills;
+  if (saved.skills && typeof saved.skills === 'object' && !Array.isArray(saved.skills)) p.skills = normalizeSkills(saved.skills);
   if (saved.professions && typeof saved.professions === 'object' && !Array.isArray(saved.professions)) p.professions = saved.professions;
   if (saved.reputation && typeof saved.reputation === 'object' && !Array.isArray(saved.reputation)) p.reputation = saved.reputation;
   if (saved.stats && typeof saved.stats === 'object' && !Array.isArray(saved.stats)) p.stats = { ...p.stats, ...saved.stats };
@@ -582,6 +599,8 @@ wss.on('connection', ws => {
       const saveKey = playerDB.findNameCaseInsensitive(name);
       const savedPlayer = saveKey ? playerDB.get(saveKey) : null;
       restorePlayer(player, savedPlayer, vocation);
+      player.sessionStartedAt = Date.now();
+      player.sessionDamageBase = Number(player.stats?.damageDealt) || 0;
       questEngine.restorePlayer(clientId, savedPlayer?.quests);
       officialSystems.onLogin(player);
       authenticatedPlayer = name;

@@ -55,35 +55,37 @@ test('pets cost server gold, require ownership and add combat damage', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('auction removes seller item, transfers buyer gold and persists seller credit', () => {
+test('auction removes seller item, transfers buyer gold and credits an online seller immediately', () => {
   const { systems, dir } = createSystem();
   const seller = player('Seller'); const buyer = player('Buyer');
   systems.restorePlayer(seller, null); systems.restorePlayer(buyer, null);
   assert.equal(systems.listAuction(seller, 'hp', 321), true);
   assert.equal(seller.inventory.some(i => i.id === 'hp'), false);
   const listing = systems.global.auctions[0];
-  const buyerGold = buyer.gold;
-  assert.equal(systems.buyAuction(buyer, listing.id), true);
+  const buyerGold = buyer.gold; const sellerGold = seller.gold;
+  assert.equal(systems.buyAuction(buyer, listing.id, key => key === 'seller' ? seller : null), true);
   assert.equal(buyer.gold, buyerGold - 321);
+  assert.equal(seller.gold, sellerGold + 321);
   assert.equal(buyer.inventory.some(i => i.name === 'Health Potion'), true);
-  assert.equal(systems.global.credits.seller, 321);
-  systems.onLogin(seller);
-  assert.ok(seller.gold >= 321);
   assert.equal(systems.global.credits.seller, undefined);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('mail attachment is deducted from sender and claimed exactly once', () => {
+test('mail validates recipient and atomically transfers gold plus item attachment', () => {
   const { systems, dir } = createSystem();
   const a = player('Alice'); const b = player('Bob');
   systems.restorePlayer(a, null); systems.restorePlayer(b, null);
   const before = a.gold;
-  assert.equal(systems.sendMail(a, { target: 'Bob', subject: 'Hi', body: 'Take this', gold: 50 }), true);
+  assert.equal(systems.sendMail(a, { target: 'Ghost', subject: 'Hi', body: 'Nope', gold: 0 }, name => name === 'Bob'), false);
+  assert.equal(systems.sendMail(a, { target: 'Bob', subject: 'Hi', body: 'Take this', gold: 50, itemId: 'hp' }, name => name === 'Bob'), true);
   assert.equal(a.gold, before - 55);
+  assert.equal(a.inventory.find(i => i.id === 'hp')?.quantity, 2);
   const mail = systems.global.mail.find(m => m.to === 'bob');
+  assert.equal(mail.item.name, 'Health Potion');
   const bobGold = b.gold;
   assert.equal(systems.markMail(b, mail.id, 'claim'), true);
   assert.equal(b.gold, bobGold + 50);
+  assert.equal(b.inventory.filter(i => i.name === 'Health Potion').reduce((sum, i) => sum + i.quantity, 0), 4);
   assert.equal(systems.markMail(b, mail.id, 'claim'), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -170,5 +172,44 @@ test('PvP requires both players opted in and escalates server skull', () => {
   const hit = systems.pvpAttack(a, b);
   assert.ok(hit?.damage > 0);
   assert.notEqual(a.official.pvp.skull, 'none');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+
+test('shop prices honor authoritative town reputation discounts', () => {
+  const { systems, dir } = createSystem();
+  const p = player(); systems.restorePlayer(p, null);
+  p.reputation = { town: 42000 };
+  const before = p.gold;
+  assert.equal(systems.buyShop(p, 'health_potion', 1), true);
+  assert.equal(p.gold, before - 37);
+  assert.equal(systems.getReputationDiscount(p), 0.25);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('official NPC services reject remote access and allow nearby access', () => {
+  const { systems, dir } = createSystem();
+  const p = player(); systems.restorePlayer(p, null);
+  const npcs = [{ id: 'banker', name: 'Banker Elric', mapId: 'eldoria', posX: 34, posY: 38 }];
+  p.x = 40; p.y = 40;
+  assert.equal(systems.handle(p, { action: 'bank_deposit', amount: 10 }, { contentNpcs: npcs }).ok, false);
+  p.x = 34; p.y = 38;
+  assert.equal(systems.handle(p, { action: 'bank_deposit', amount: 10 }, { contentNpcs: npcs }).ok, true);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('PvP damage uses derived combat stats and records both sides of combat', () => {
+  const { systems, dir } = createSystem();
+  const a = player('Alice'); const b = player('Bob');
+  systems.restorePlayer(a, null); systems.restorePlayer(b, null);
+  systems.pvpToggle(a); systems.pvpToggle(b);
+  const beforeA = a.stats.damageDealt || 0;
+  const beforeB = b.stats.damageTaken || 0;
+  const hit = systems.pvpAttack(a, b, target => target === a
+    ? { totalAttack: 120, totalDefense: 0, damageReduction: 0, totalMaxHp: 300, totalMaxMana: 150 }
+    : { totalAttack: 0, totalDefense: 40, damageReduction: 20, totalMaxHp: 300, totalMaxMana: 150 });
+  assert.ok(hit.damage > 0);
+  assert.equal(a.stats.damageDealt, beforeA + hit.damage);
+  assert.equal(b.stats.damageTaken, beforeB + hit.damage);
   fs.rmSync(dir, { recursive: true, force: true });
 });
