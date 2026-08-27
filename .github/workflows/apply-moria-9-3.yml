@@ -5,6 +5,7 @@ on:
     branches: [moria-9.3-visual-rewards-class-identity]
     paths:
       - tools/apply-moria-9-3.py
+      - tools/fix-moria-9-3-stat-semantics.py
       - .github/workflows/apply-moria-9-3.yml
 
 permissions:
@@ -28,7 +29,9 @@ jobs:
             package-lock.json
             server/package-lock.json
       - name: Apply 9.3 integration
-        run: python3 tools/apply-moria-9-3.py
+        run: |
+          python3 tools/apply-moria-9-3.py
+          python3 tools/fix-moria-9-3-stat-semantics.py
       - name: Install client dependencies
         run: npm ci
       - name: Audit client dependencies
