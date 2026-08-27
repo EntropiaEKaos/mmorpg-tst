@@ -105,13 +105,13 @@ export function getClassIdentity(vocation) {
 
 export function applyClassDerivedStats(player, stats) {
   const identity = getClassIdentity(player?.vocation);
-  stats.totalDefense *= Number(identity.defenseMultiplier) || 1;
+  // Equipment defense keeps exact authored values; tanks specialize through damage reduction.
   stats.totalMagic *= Number(identity.magicMultiplier) || 1;
   stats.critChance += Number(identity.critBonus) || 0;
   stats.damageReduction += Number(identity.damageReduction) || 0;
   stats.moveSpeed += Number(identity.moveSpeed) || 0;
   stats.lifesteal += Number(identity.lifesteal) || 0;
-  stats.healBonus += Math.max(0, ((Number(identity.healPowerMultiplier) || 1) - 1) * 100);
+  // Healing specialization is applied per cast by classSpellMultiplier.
   const hpRatio = Math.max(0, Math.min(1, Number(player?.hp) / Math.max(1, Number(stats.totalMaxHp) || 1)));
   if (identity.healthyThreshold && hpRatio >= identity.healthyThreshold) {
     stats.damageReduction += Number(identity.healthyDamageReduction) || 0;
@@ -137,7 +137,8 @@ export function classBasicAttackRules(player, monster, derivedStats) {
 export function classSpellMultiplier(player, spell, effect) {
   const identity = getClassIdentity(player?.vocation);
   let multiplier = Number(identity.spellPowerMultiplier) || 1;
-  if (effect === 'heal' || effect === 'buff') multiplier = Number(identity.healPowerMultiplier) || multiplier;
+  if (effect === 'buff') return 1; // Content-authored buff values remain exact.
+  if (effect === 'heal') multiplier = Number(identity.healPowerMultiplier) || multiplier;
   if (effect === 'drain') multiplier *= Number(identity.drainMultiplier) || 1;
   return Math.max(0.25, Math.min(3, multiplier));
 }
