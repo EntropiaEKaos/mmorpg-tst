@@ -1,4 +1,4 @@
-name: Apply Foundation 7.9 World Event Domain
+name: Apply Persistence Durability Test Hardening
 
 on:
   push:
@@ -20,19 +20,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply world event domain extraction
-        run: python3 tools/apply-foundation-7-9-world-events.py
       - name: Harden persistence movement tests
         run: python3 tools/harden-persistence-adjacent-move.py
-      - name: Validate world event boundaries
+      - name: Validate persistence test hardening
         run: |
-          test -f server/engine/OfficialWorldEventDomain.mjs
-          grep -q "officialWorldEventDomain" server/engine/OfficialSystems.mjs
-          grep -q "return officialWorldEventDomain.ensure" server/engine/OfficialSystems.mjs
-          grep -q "officialWorldEventDomain.recordKill" server/engine/OfficialSystems.mjs
-          grep -q "return officialWorldEventDomain.claim" server/engine/OfficialSystems.mjs
-          grep -q "world event reward claim is private and exactly once" server/test/official-world-event-domain.test.mjs
-          grep -q "const moved = await moveToAnyAdjacentTile(client);" server/test/persistence-durability.test.mjs
+          grep -q "async function moveToAnyAdjacentTile" server/test/persistence-durability.test.mjs
+          test "$(grep -c "const moved = await moveToAnyAdjacentTile(client);" server/test/persistence-durability.test.mjs)" -eq 3
+          ! grep -q "player?.x === beforeX + 1" server/test/persistence-durability.test.mjs
       - name: Validate all gates
         run: |
           npm ci
@@ -43,16 +37,16 @@ jobs:
           npm audit --prefix server
           npm run check --prefix server
           npm test --prefix server
-      - name: Commit validated Foundation 7.9 world event domain
+      - name: Commit validated durability hardening
         run: |
-          if git diff --quiet -- server src docs; then
+          if git diff --quiet -- server; then
             echo "No source changes"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server src docs
-          git commit -m "refactor(official): extract world events and harden durability tests"
+          git add server
+          git commit -m "test(persistence): remove spawn-direction flakiness"
           git restore tools || true
           git fetch origin mvp-foundation-7.0
           git rebase origin/mvp-foundation-7.0
