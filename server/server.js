@@ -19,6 +19,7 @@ import { adventureEngine } from './engine/AdventureEngine.mjs';
 import { officialSystems } from './engine/OfficialSystems.mjs';
 import { validateContentReferences, findBlockingContentReferences } from './engine/ContentIntegrity.mjs';
 import { accountStore, sessionManager } from './engine/AuthService.mjs';
+import { BoundedWindowRateLimiter } from './engine/RateLimiter.mjs';
 import { adminPanelHTML } from './adminPanel.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,7 +32,9 @@ const MAX_WS_PAYLOAD = 64 * 1024;
 const ALLOWED_ADMIN_TYPES = new Set(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events']);
 const READ_ONLY_ADMIN_TYPES = new Set(['maps']);
 const ACTIVE_NAMES = new Map();
-const AUTH_RATE_LIMITS = new Map();
+const AUTH_RATE_LIMITS = new BoundedWindowRateLimiter({
+  maxEntries: Number(process.env.AUTH_RATE_LIMIT_MAX_ENTRIES) || 10_000,
+});
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
 
@@ -151,14 +154,10 @@ function getRequestIp(req) {
 }
 
 function consumeAuthRateLimit(req, res, bucket, limit, windowMs) {
-  const now = Date.now();
   const key = `${bucket}:${getRequestIp(req)}`;
-  let state = AUTH_RATE_LIMITS.get(key);
-  if (!state || now >= state.resetAt) state = { count: 0, resetAt: now + windowMs };
-  state.count++;
-  AUTH_RATE_LIMITS.set(key, state);
-  if (state.count <= limit) return true;
-  res.setHeader('Retry-After', String(Math.max(1, Math.ceil((state.resetAt - now) / 1000))));
+  const result = AUTH_RATE_LIMITS.consume(key, { limit, windowMs });
+  if (result.allowed) return true;
+  res.setHeader('Retry-After', String(Math.max(1, Math.ceil(result.retryAfterMs / 1000))));
   json(res, 429, { error: 'Too many authentication attempts. Try again later.' });
   return false;
 }
