@@ -7,6 +7,7 @@
 import { WORLD } from './World.mjs';
 import { VOCATIONS } from './Vocations.mjs';
 import { rollLoot, getStarterInventory, buildEquipmentLootPool } from './Items.mjs';
+import { sumAffixStats } from './Itemization.mjs';
 import { questEngine } from './QuestEngine.mjs';
 import { adventureEngine, createAdventureState } from './AdventureEngine.mjs';
 import { officialSystems } from './OfficialSystems.mjs';
@@ -401,6 +402,19 @@ class GameEngine {
       stats.goldBonus += Number(eq.goldBonus) || 0;
       stats.damageReduction += Number(eq.damageReduction) || 0;
       stats.moveSpeed += Number(eq.moveSpeed) || 0;
+      const affix = sumAffixStats(eq);
+      stats.totalAttack += Number(affix.attack) || 0;
+      stats.totalDefense += Number(affix.defense) || 0;
+      stats.totalDefense += Number(affix.armor) || 0;
+      stats.totalArmor += Number(affix.armor) || 0;
+      stats.totalMagic += Number(affix.magic) || 0;
+      stats.totalMaxHp += Number(affix.hp) || 0;
+      stats.totalMaxMana += Number(affix.mana) || 0;
+      stats.critChance += Number(affix.critChance) || 0;
+      stats.lifesteal += Number(affix.lifesteal) || 0;
+      stats.moveSpeed += Number(affix.moveSpeed) || 0;
+      stats.xpBonus += Number(affix.xpBonus) || 0;
+      stats.goldBonus += Number(affix.goldBonus) || 0;
     }
 
     // Attribute-changing talents are applied to base stats at purchase time;
@@ -522,7 +536,7 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind: 'system', targetId: player.id, text: `🏆 Dungeon cleared: +${reward.gold}g +${reward.xp}XP +${reward.coins} coins`, color: '#ffd87b', pos: { x: player.x, y: player.y } });
     }
 
-    const loot = [...rollLoot(monster, derived.goldBonus, this.contentItems), ...(officialKill.bonusLoot || [])];
+    const loot = [...rollLoot(monster, derived.goldBonus, this.contentItems, player.mapId), ...(officialKill.bonusLoot || [])];
     if (loot.length > 0) {
       const groundItems = this.groundItemsByMap.get(player.mapId) || [];
       groundItems.push({ id: `ground_${Date.now()}_${Math.random()}`, x: monster.x, y: monster.y, items: loot, expireAt: Date.now() + 120000 });

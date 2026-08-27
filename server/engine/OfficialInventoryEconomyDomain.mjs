@@ -4,6 +4,7 @@
 // ===================================================================
 
 import { buildEquipmentLootPool } from './Items.mjs';
+import { rollEquipmentAffixes } from './Itemization.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD,
   OFFICIAL_RECIPES, OFFICIAL_COIN_STORE,
@@ -186,11 +187,12 @@ export class OfficialInventoryEconomyDomain {
       const pool = buildEquipmentLootPool(contentItems).filter(item => (item.level || 1) <= player.level + 3);
       if (!pool.length) { s.coins += entry.price; return false; }
       const sorted = pool.sort((a, b) => Math.abs((a.level || 1) - player.level) - Math.abs((b.level || 1) - player.level)).slice(0, 8);
-      const reward = sorted[Math.floor(Math.random() * sorted.length)];
+      const baseReward = sorted[Math.floor(Math.random() * sorted.length)];
+      const reward = rollEquipmentAffixes(baseReward, player.level, Math.random);
       addItem(player, {
         name: reward.name, icon: reward.icon, type: 'equipment', quantity: 1,
         value: reward.value || 0, rarity: reward.rarity, description: reward.description,
-        equipment: { ...reward, sockets: Math.random() < 0.35 ? 1 : 0, socketedGems: [] },
+        equipment: { ...reward, sockets: reward.rarity === 'legendary' || Math.random() < 0.35 ? 1 : 0, socketedGems: [] },
       });
     } else if (entry.id === 'blessing') {
       s.blessingsUntil = Math.max(now, s.blessingsUntil) + INVENTORY_ECONOMY_RULES.blessingDurationMs;

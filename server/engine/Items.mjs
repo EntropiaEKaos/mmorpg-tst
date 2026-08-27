@@ -3,6 +3,8 @@
 //  The server decides what drops and what stats items have.
 // ===================================================================
 
+import { rollEquipmentAffixes, rollRegionalMaterial } from './Itemization.mjs';
+
 export const RARITY_COLORS = {
   common: '#aaaaaa', uncommon: '#2ecc71', rare: '#3498db', epic: '#9b59ff', legendary: '#ff8c00',
 };
@@ -91,13 +93,16 @@ export function rollLoot(monster, goldBonus = 0, contentItems = []) {
     // Pick a valid item based on monster level
     const eligible = buildEquipmentLootPool(contentItems).filter(e => e.level <= monster.level + 3);
     if (eligible.length > 0) {
-      const drop = eligible[Math.floor(Math.random() * eligible.length)];
+      const baseDrop = eligible[Math.floor(Math.random() * eligible.length)];
+      const drop = rollEquipmentAffixes(baseDrop, monster.level, Math.random);
       drops.push({
         id: `eq_${Date.now()}_${Math.random()}`, name: drop.name, icon: drop.icon, quantity: 1, value: drop.value, type: 'equipment',
         rarity: drop.rarity, description: drop.description,
-        equipment: { ...drop, sockets: 0, socketedGems: [] }
+        equipment: { ...drop, sockets: drop.rarity === 'legendary' ? 1 : 0, socketedGems: [] }
       });
     }
   }
+  const regional = rollRegionalMaterial(arguments.length > 3 ? arguments[3] : monster.mapId, monster, Math.random);
+  if (regional) drops.push(regional);
   return drops;
 }

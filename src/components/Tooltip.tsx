@@ -190,6 +190,7 @@ export function ItemTooltip({
     rarity: string;
     level: number;
     slot: string;
+    affixes?: Array<{ id: string; name: string; description: string; stats: Record<string, number> }>;
   };
   };
 }) {
@@ -231,6 +232,16 @@ export function ItemTooltip({
           {item.equipment.xpBonus ? <div style={{ color: '#f4e04d' }}>⭐ +{item.equipment.xpBonus}% XP</div> : null}
           {item.equipment.goldBonus ? <div style={{ color: '#f4e04d' }}>🪙 +{item.equipment.goldBonus}% Gold</div> : null}
           {item.equipment.damageReduction ? <div style={{ color: '#4a90e2' }}>🛡 -{item.equipment.damageReduction}% Dmg Taken</div> : null}
+          {(item.equipment.affixes || []).length > 0 && (
+            <div className="mt-1 border-t border-fuchsia-500/30 pt-1 space-y-1">
+              {(item.equipment.affixes || []).map((affix) => (
+                <div key={affix.id}>
+                  <div className="font-black text-fuchsia-300">✦ {affix.name}</div>
+                  <div className="text-[9px] text-fuchsia-100/65">{affix.description}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {item.description && (

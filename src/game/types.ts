@@ -170,6 +170,20 @@ export function computeDerivedStats(player: Player): DerivedStats {
     stats.xpBonus += eq.xpBonus ?? 0;
     stats.goldBonus += eq.goldBonus ?? 0;
     stats.damageReduction += eq.damageReduction ?? 0;
+    for (const affix of eq.affixes || []) {
+      const bonus = affix.stats || {};
+      stats.totalAttack += bonus.attack ?? 0;
+      stats.totalDefense += (bonus.defense ?? 0) + (bonus.armor ?? 0);
+      stats.totalArmor += bonus.armor ?? 0;
+      stats.totalMagic += bonus.magic ?? 0;
+      stats.totalMaxHp += bonus.hp ?? 0;
+      stats.totalMaxMana += bonus.mana ?? 0;
+      stats.critChance += bonus.critChance ?? 0;
+      stats.lifesteal += bonus.lifesteal ?? 0;
+      stats.moveSpeed += bonus.moveSpeed ?? 0;
+      stats.xpBonus += bonus.xpBonus ?? 0;
+      stats.goldBonus += bonus.goldBonus ?? 0;
+    }
     // Apply socketed gems
     if (eq.socketedGems) {
       for (const gemId of eq.socketedGems) {
@@ -210,6 +224,13 @@ export function computeDerivedStats(player: Player): DerivedStats {
   return stats;
 }
 
+export interface EquipmentAffix {
+  id: string;
+  name: string;
+  description: string;
+  stats: Partial<Record<'attack' | 'defense' | 'armor' | 'hp' | 'mana' | 'magic' | 'critChance' | 'lifesteal' | 'moveSpeed' | 'xpBonus' | 'goldBonus', number>>;
+}
+
 export interface Equipment {
   id: string;
   name: string;
@@ -234,6 +255,8 @@ export interface Equipment {
   value: number;
   sockets?: number;
   socketedGems?: string[];
+  baseItemId?: string;
+  affixes?: EquipmentAffix[];
 }
 
 export interface Item {
