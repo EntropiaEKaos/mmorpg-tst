@@ -37,7 +37,24 @@ function publicPlayer(player) {
 }
 
 function freshPersistentState() {
-  return { version: 1, guilds: {} };
+  return { version: 2, guilds: {}, profiles: {} };
+}
+
+function normalizeProfile(raw) {
+  const profile = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const friends = {};
+  for (const [rawKey, entry] of Object.entries(profile.friends || {}).slice(0, 100)) {
+    const key = playerKey(rawKey || entry?.name);
+    if (!key) continue;
+    friends[key] = { name: cleanText(entry?.name || rawKey, 24) || rawKey, addedAt: Number(entry?.addedAt) || Date.now() };
+  }
+  const ignores = {};
+  for (const [rawKey, entry] of Object.entries(profile.ignores || {}).slice(0, 100)) {
+    const key = playerKey(rawKey || entry?.name);
+    if (!key) continue;
+    ignores[key] = { name: cleanText(entry?.name || rawKey, 24) || rawKey, addedAt: Number(entry?.addedAt) || Date.now() };
+  }
+  return { friends, ignores };
 }
 
 export class SocialSystems {
@@ -81,7 +98,13 @@ export class SocialSystems {
           motd: cleanText(source.motd, 160), members,
         };
       }
-      this.state = { version: 1, guilds };
+      const profiles = {};
+      for (const [rawKey, source] of Object.entries(raw.profiles || {}).slice(0, 5000)) {
+        const key = playerKey(rawKey);
+        if (!key) continue;
+        profiles[key] = normalizeProfile(source);
+      }
+      this.state = { version: 2, guilds, profiles };
       return true;
     } catch (error) {
       console.warn('⚠ Social DB load failed:', error?.message || error);
@@ -116,6 +139,67 @@ export class SocialSystems {
     return id ? this.parties.get(id) || null : null;
   }
 
+  getProfile(name, create = false) {
+    const key = playerKey(name);
+    if (!key) return null;
+    if (!this.state.profiles || typeof this.state.profiles !== 'object') this.state.profiles = {};
+    if (!this.state.profiles[key] && create) this.state.profiles[key] = normalizeProfile({});
+    return this.state.profiles[key] || null;
+  }
+
+  isIgnored(ownerName, otherName) {
+    const profile = this.getProfile(ownerName, false);
+    return Boolean(profile?.ignores?.[playerKey(otherName)]);
+  }
+
+  socialInteractionAllowed(a, b) {
+    return Boolean(a && b) && !this.isIgnored(a.name, b.name) && !this.isIgnored(b.name, a.name);
+  }
+
+  addFriend(player, target) {
+    if (!target || target.id === player.id) return { ok: false, error: 'Choose another online player.' };
+    if (!this.socialInteractionAllowed(player, target)) return { ok: false, error: 'Social interaction unavailable.' };
+    const owner = this.getProfile(player.name, true);
+    const targetKey = playerKey(target.name);
+    if (owner.friends[targetKey]) return { ok: false, error: 'That player is already on your friends list.' };
+    if (Object.keys(owner.friends).length >= 100) return { ok: false, error: 'Friends list is full (100).' };
+    owner.friends[targetKey] = { name: cleanText(target.name, 24), addedAt: Date.now() };
+    this.save();
+    return { ok: true, message: `${target.name} added to friends.` };
+  }
+
+  removeFriend(player, targetKey) {
+    const owner = this.getProfile(player.name, false);
+    const key = playerKey(targetKey);
+    if (!owner?.friends?.[key]) return { ok: false, error: 'Friend not found.' };
+    delete owner.friends[key];
+    this.save();
+    return { ok: true, message: 'Friend removed.' };
+  }
+
+  ignorePlayer(player, target) {
+    if (!target || target.id === player.id) return { ok: false, error: 'Choose another online player.' };
+    const owner = this.getProfile(player.name, true);
+    const targetKey = playerKey(target.name);
+    if (owner.ignores[targetKey]) return { ok: false, error: 'That player is already ignored.' };
+    if (Object.keys(owner.ignores).length >= 100) return { ok: false, error: 'Ignore list is full (100).' };
+    delete owner.friends[targetKey];
+    owner.ignores[targetKey] = { name: cleanText(target.name, 24), addedAt: Date.now() };
+    const ownKey = playerKey(player.name);
+    this.partyInvites.delete(ownKey); this.guildInvites.delete(ownKey); this.tradeInvites.delete(ownKey);
+    this.save();
+    return { ok: true, message: `${target.name} is now ignored.` };
+  }
+
+  unignorePlayer(player, targetKey) {
+    const owner = this.getProfile(player.name, false);
+    const key = playerKey(targetKey);
+    if (!owner?.ignores?.[key]) return { ok: false, error: 'Ignored player not found.' };
+    delete owner.ignores[key];
+    this.save();
+    return { ok: true, message: 'Player removed from ignore list.' };
+  }
+
   createParty(player) {
     const key = playerKey(player.name);
     if (this.partyByPlayer.has(key)) return { ok: false, error: 'You are already in a party.' };
@@ -127,6 +211,7 @@ export class SocialSystems {
 
   inviteParty(player, target, players) {
     if (!target || target.id === player.id) return { ok: false, error: 'Choose another online player.' };
+    if (!this.socialInteractionAllowed(player, target)) return { ok: false, error: 'Social interaction unavailable.' };
     if (!nearby(player, target, 12)) return { ok: false, error: 'Party invite target must be nearby.' };
     let party = this.getParty(player);
     if (!party) {
@@ -200,6 +285,7 @@ export class SocialSystems {
     const actor = guild?.members?.[playerKey(player.name)];
     if (!guild || !actor || !['leader', 'officer'].includes(actor.role)) return { ok: false, error: 'Guild officer permission required.' };
     if (!target || target.id === player.id) return { ok: false, error: 'Choose another online player.' };
+    if (!this.socialInteractionAllowed(player, target)) return { ok: false, error: 'Social interaction unavailable.' };
     if (this.getGuildByMember(target.name)) return { ok: false, error: 'That player is already in a guild.' };
     if (Object.keys(guild.members).length >= 100) return { ok: false, error: 'Guild member cap reached.' };
     const targetKey = playerKey(target.name);
@@ -267,6 +353,7 @@ export class SocialSystems {
   requestTrade(player, target) {
     const key = playerKey(player.name); const targetKey = playerKey(target?.name);
     if (!target || target.id === player.id || !nearby(player, target, 3)) return { ok: false, error: 'Trade target must be within 3 tiles.' };
+    if (!this.socialInteractionAllowed(player, target)) return { ok: false, error: 'Social interaction unavailable.' };
     if (this.tradeByPlayer.has(key) || this.tradeByPlayer.has(targetKey)) return { ok: false, error: 'One player is already trading.' };
     this.tradeInvites.set(targetKey, { fromKey: key, fromName: player.name, expiresAt: Date.now() + 60_000 });
     return { ok: true, message: `Trade request sent to ${target.name}.`, notices: [{ playerId: target.id, text: `🤝 ${player.name} wants to trade with you.` }] };
@@ -361,13 +448,14 @@ export class SocialSystems {
 
   chatRecipients(player, channel, players) {
     const all = Array.from(players.values());
-    if (channel === 'world' || channel === 'trade') return all.map(p => p.id);
-    if (channel === 'say') return all.filter(p => p.mapId === player.mapId && Math.abs(p.x - player.x) + Math.abs(p.y - player.y) <= 10).map(p => p.id);
+    const visibleTo = (recipient) => recipient?.id === player.id || !this.isIgnored(recipient?.name, player.name);
+    if (channel === 'world' || channel === 'trade') return all.filter(visibleTo).map(p => p.id);
+    if (channel === 'say') return all.filter(p => visibleTo(p) && p.mapId === player.mapId && Math.abs(p.x - player.x) + Math.abs(p.y - player.y) <= 10).map(p => p.id);
     if (channel === 'party') {
-      const party = this.getParty(player); return party ? party.members.map(key => onlineByKey(players, key)?.id).filter(Boolean) : [player.id];
+      const party = this.getParty(player); return party ? party.members.map(key => onlineByKey(players, key)).filter(visibleTo).map(p => p.id) : [player.id];
     }
     if (channel === 'guild') {
-      const guild = this.getGuildByMember(player.name); return guild ? Object.keys(guild.members).map(key => onlineByKey(players, key)?.id).filter(Boolean) : [player.id];
+      const guild = this.getGuildByMember(player.name); return guild ? Object.keys(guild.members).map(key => onlineByKey(players, key)).filter(visibleTo).map(p => p.id) : [player.id];
     }
     return [player.id];
   }
@@ -390,7 +478,15 @@ export class SocialSystems {
         }),
       };
     }
+    const profile = this.getProfile(player.name, false) || normalizeProfile({});
+    const friends = Object.entries(profile.friends).map(([friendKey, friend]) => {
+      const online = onlineByKey(players, friendKey);
+      return { key: friendKey, name: friend.name, online: Boolean(online), player: online ? publicPlayer(online) : null, addedAt: friend.addedAt };
+    }).sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+    const ignored = Object.entries(profile.ignores).map(([ignoredKey, entry]) => ({ key: ignoredKey, name: entry.name, addedAt: entry.addedAt }));
     return {
+      friends,
+      ignored,
       party: party ? {
         id: party.id, leaderKey: party.leaderKey,
         members: party.members.map(memberKey => ({ key: memberKey, ...publicPlayer(onlineByKey(players, memberKey)), online: Boolean(onlineByKey(players, memberKey)) })),
@@ -414,6 +510,10 @@ export class SocialSystems {
     const target = typeof payload.targetId === 'string' ? players.get(payload.targetId) : null;
     let result;
     switch (action) {
+      case 'friend_add': result = this.addFriend(player, target); break;
+      case 'friend_remove': result = this.removeFriend(player, payload.targetKey); break;
+      case 'ignore_add': result = this.ignorePlayer(player, target); break;
+      case 'ignore_remove': result = this.unignorePlayer(player, payload.targetKey); break;
       case 'party_create': result = this.createParty(player); break;
       case 'party_invite': result = this.inviteParty(player, target, players); break;
       case 'party_accept': result = this.acceptParty(player); break;

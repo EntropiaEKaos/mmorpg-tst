@@ -9,13 +9,13 @@ interface Props {
   onClose: () => void;
 }
 
-type Tab = 'party' | 'guild' | 'trade';
+type Tab = 'friends' | 'party' | 'guild' | 'trade';
 const card = 'rounded-2xl border border-slate-700/70 bg-black/30 p-3';
 const button = 'moria-button rounded-lg border px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40';
 const input = 'moria-input w-full rounded-lg border px-2 py-1.5 text-xs';
 
 export default function SocialHub({ player, inventory, social, onAction, onClose }: Props) {
-  const [tab, setTab] = useState<Tab>('party');
+  const [tab, setTab] = useState<Tab>('friends');
   const [guildName, setGuildName] = useState('');
   const [motd, setMotd] = useState(social?.guild?.motd || '');
   const [tradeGold, setTradeGold] = useState('0');
@@ -40,10 +40,16 @@ export default function SocialHub({ player, inventory, social, onAction, onClose
           <button onClick={onClose} className="text-xl text-slate-400 hover:text-white">✕</button>
         </div>
         <div className="flex gap-1 border-b border-slate-800 p-2">
-          {(['party', 'guild', 'trade'] as const).map(id => <button key={id} onClick={() => setTab(id)} className={`${button} ${tab === id ? 'border-cyan-300/50 text-cyan-100' : 'border-slate-700 text-slate-400'}`}>{id === 'party' ? '👥 Party' : id === 'guild' ? '🛡 Guild' : '🤝 Trade'}</button>)}
+          {(['friends', 'party', 'guild', 'trade'] as const).map(id => <button key={id} onClick={() => setTab(id)} className={`${button} ${tab === id ? 'border-cyan-300/50 text-cyan-100' : 'border-slate-700 text-slate-400'}`}>{id === 'friends' ? '⭐ Friends' : id === 'party' ? '👥 Party' : id === 'guild' ? '🛡 Guild' : '🤝 Trade'}</button>)}
         </div>
 
         <div className="moria-scrollbar flex-1 overflow-y-auto p-4 text-sm">
+          {tab === 'friends' && <div className="grid gap-4 lg:grid-cols-3">
+            <div className={card}><div className="moria-eyebrow text-amber-300">FRIENDS</div><div className="mt-3 space-y-2">{Array.isArray(social?.friends) && social.friends.length ? social.friends.map((friend: any) => <div key={friend.key} className="rounded-xl border border-slate-800 bg-slate-950/55 p-2"><div className="flex items-center justify-between gap-2"><span><b>{friend.online ? '🟢' : '⚫'} {friend.name}</b>{friend.online && friend.player ? <small className="ml-2 text-slate-400">Lv {friend.player.level} · {friend.player.mapId}</small> : null}</span><button onClick={() => act('friend_remove', { targetKey: friend.key })} className={button}>Remove</button></div></div>) : <span className="text-slate-500">Your friends list is empty.</span>}</div></div>
+            <div className={card}><div className="moria-eyebrow text-cyan-300">NEARBY ADVENTURERS</div><div className="mt-3 space-y-2">{nearby.length ? nearby.map((p: any) => <div key={p.id} className="rounded-xl bg-slate-900/60 p-2"><div className="flex items-center justify-between gap-2"><span><b>{p.name}</b> · Lv {p.level}</span><div className="flex gap-1"><button onClick={() => act('friend_add', { targetId: p.id })} className={button}>Add</button><button onClick={() => act('ignore_add', { targetId: p.id })} className={`${button} border-rose-500/40 text-rose-200`}>Ignore</button></div></div></div>) : <span className="text-slate-500">No nearby players.</span>}</div></div>
+            <div className={card}><div className="moria-eyebrow text-rose-300">IGNORED</div><p className="mt-2 text-[11px] text-slate-500">Ignored players cannot reach you through social invitations or chat. Their online presence is intentionally hidden.</p><div className="mt-3 space-y-2">{Array.isArray(social?.ignored) && social.ignored.length ? social.ignored.map((entry: any) => <div key={entry.key} className="flex items-center justify-between rounded-xl bg-slate-900/60 p-2"><span>🚫 {entry.name}</span><button onClick={() => act('ignore_remove', { targetKey: entry.key })} className={button}>Unignore</button></div>) : <span className="text-slate-500">Nobody ignored.</span>}</div></div>
+          </div>}
+
           {tab === 'party' && <div className="grid gap-4 lg:grid-cols-2">
             <div className={card}>
               <div className="moria-eyebrow text-sky-300">YOUR PARTY</div>
