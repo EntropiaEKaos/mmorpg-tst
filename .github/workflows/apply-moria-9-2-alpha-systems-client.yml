@@ -8,6 +8,7 @@ on:
       - tools/fix-moria-9-2-client-applicator.py
       - tools/fix-moria-9-2-client-intents.py
       - tools/fix-moria-9-2-game-screen-budget.py
+      - tools/fix-moria-9-2-client-test-contract.py
       - .github/workflows/apply-moria-9-2-alpha-systems-client.yml
 
 permissions:
@@ -38,6 +39,8 @@ jobs:
         run: python3 tools/fix-moria-9-2-client-intents.py
       - name: Keep GameScreen inside architecture budget
         run: python3 tools/fix-moria-9-2-game-screen-budget.py
+      - name: Align typed client intent guard
+        run: python3 tools/fix-moria-9-2-client-test-contract.py
       - name: Install client dependencies
         run: npm ci
       - name: Audit client dependencies
