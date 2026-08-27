@@ -5,6 +5,7 @@ on:
     branches: [moria-9.2-alpha-housing-outfits-mounts]
     paths:
       - tools/apply-moria-9-2-alpha-systems-client.py
+      - tools/fix-moria-9-2-client-applicator.py
       - .github/workflows/apply-moria-9-2-alpha-systems-client.yml
 
 permissions:
@@ -27,6 +28,8 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             server/package-lock.json
+      - name: Normalize client applicator
+        run: python3 tools/fix-moria-9-2-client-applicator.py
       - name: Apply 9.2 client systems
         run: python3 tools/apply-moria-9-2-alpha-systems-client.py
       - name: Install client dependencies
