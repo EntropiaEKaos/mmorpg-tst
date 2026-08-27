@@ -1,83 +1,57 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { WorldWeather } from '../game/worldAtmosphere';
 
-interface Props {
-  type: 'clear' | 'rain' | 'snow' | 'storm';
+interface Props { type: WorldWeather; }
+
+type Drop = { id: number; x: number; y: number; delay: number; duration: number; scale: number };
+
+function makeDrops(type: WorldWeather): Drop[] {
+  if (type === 'clear') return [];
+  const count = type === 'storm' ? 110 : type === 'rain' ? 82 : 68;
+  let seed = type === 'storm' ? 771 : type === 'rain' ? 421 : 197;
+  const random = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  return Array.from({ length: count }, (_, id) => ({
+    id,
+    x: random() * 104 - 2,
+    y: random() * 104 - 2,
+    delay: random() * 3,
+    duration: type === 'snow' ? 3 + random() * 2.5 : 0.55 + random() * 0.4,
+    scale: 0.65 + random() * 0.75,
+  }));
 }
 
 export default function Weather({ type }: Props) {
-  const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; delay: number; duration: number }>>([]);
+  const drops = useMemo(() => makeDrops(type), [type]);
+  const [flash, setFlash] = useState(false);
 
   useEffect(() => {
-    if (type === 'clear') {
-      setParticles([]);
-      return;
-    }
-    const count = type === 'storm' ? 150 : type === 'rain' ? 100 : 80;
-    const newParticles = Array.from({ length: count }, (_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      delay: Math.random() * 2,
-      duration: type === 'snow' ? 3 + Math.random() * 2 : 0.5 + Math.random() * 0.5,
-    }));
-    setParticles(newParticles);
+    if (type !== 'storm') { setFlash(false); return; }
+    const pulse = window.setInterval(() => {
+      setFlash(true);
+      window.setTimeout(() => setFlash(false), 110);
+    }, 7200);
+    return () => window.clearInterval(pulse);
   }, [type]);
 
   if (type === 'clear') return null;
 
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden z-5" style={{ zIndex: 5 }}>
-      {type === 'storm' && (
-        <div
-          className="absolute inset-0"
+    <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden" aria-hidden="true">
+      <div className={`absolute inset-0 transition-opacity duration-100 ${flash ? 'opacity-100' : 'opacity-0'}`} style={{ background: 'rgba(220,235,255,.26)' }} />
+      {(type === 'rain' || type === 'storm') && <div className="absolute inset-0 bg-gradient-to-b from-slate-950/12 via-transparent to-blue-950/10" />}
+      {drops.map((drop) => (
+        <span
+          key={drop.id}
+          className={type === 'snow' ? 'moria-snow-drop absolute rounded-full bg-white/80' : 'moria-rain-drop absolute bg-blue-100/65'}
           style={{
-            background: 'rgba(0,0,30,0.3)',
-            animation: 'storm-flash 8s infinite',
+            left: `${drop.x}%`, top: `${drop.y}%`,
+            animationDelay: `${drop.delay}s`, animationDuration: `${drop.duration}s`,
+            transform: `scale(${drop.scale})`,
+            width: type === 'snow' ? 5 : 1,
+            height: type === 'snow' ? 5 : type === 'storm' ? 22 : 14,
           }}
         />
-      )}
-      {particles.map((p) => (
-        <div
-          key={p.id}
-          className="absolute"
-          style={{
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-            animationDelay: `${p.delay}s`,
-            animationDuration: `${p.duration}s`,
-            animationName: type === 'snow' ? 'snow-fall' : 'rain-fall',
-            animationTimingFunction: 'linear',
-            animationIterationCount: 'infinite',
-          }}
-        >
-          {type === 'snow' ? (
-            <div className="w-1.5 h-1.5 rounded-full bg-white opacity-80" style={{ filter: 'blur(0.5px)' }} />
-          ) : (
-            <div
-              className="bg-blue-200 opacity-60"
-              style={{
-                width: '1px',
-                height: type === 'storm' ? '20px' : '12px',
-                filter: 'blur(0.3px)',
-              }}
-            />
-          )}
-        </div>
       ))}
-      <style>{`
-        @keyframes rain-fall {
-          0% { transform: translateY(-100vh) translateX(0); }
-          100% { transform: translateY(100vh) translateX(-20px); }
-        }
-        @keyframes snow-fall {
-          0% { transform: translateY(-100vh) translateX(0) rotate(0deg); }
-          100% { transform: translateY(100vh) translateX(-50px) rotate(360deg); }
-        }
-        @keyframes storm-flash {
-          0%, 95%, 100% { background: rgba(0,0,30,0.3); }
-          96%, 97% { background: rgba(255,255,255,0.5); }
-        }
-      `}</style>
     </div>
   );
 }

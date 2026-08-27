@@ -306,3 +306,21 @@ textarea:focus-visible {
 .moria-action-ready:not(:disabled) {
   animation: moria-action-ready-pulse 2.4s ease-in-out infinite;
 }
+
+
+/* Mor'ia 8.3 — living world */
+@keyframes moria-region-reveal {
+  0% { opacity: 0; transform: translate(-50%, -10px) scale(.96); filter: blur(5px); }
+  14% { opacity: 1; transform: translate(-50%, 0) scale(1); filter: blur(0); }
+  76% { opacity: 1; transform: translate(-50%, 0) scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: translate(-50%, -5px) scale(1.02); filter: blur(2px); }
+}
+@keyframes moria-rain-fall { from { translate: 18px -115vh; } to { translate: -30px 115vh; } }
+@keyframes moria-snow-fall { from { translate: 0 -110vh; rotate: 0deg; } to { translate: -45px 110vh; rotate: 240deg; } }
+.moria-region-banner { animation: moria-region-reveal 4.8s cubic-bezier(.2,.8,.2,1) both; text-shadow: 0 4px 24px rgba(0,0,0,.9); }
+.moria-rain-drop { animation: moria-rain-fall linear infinite; }
+.moria-snow-drop { animation: moria-snow-fall linear infinite; filter: blur(.35px) drop-shadow(0 0 3px rgba(255,255,255,.4)); }
+@media (prefers-reduced-motion: reduce) {
+  .moria-region-banner { animation-duration: 2.8s; }
+  .moria-rain-drop, .moria-snow-drop { animation-duration: 8s !important; opacity: .4; }
+}

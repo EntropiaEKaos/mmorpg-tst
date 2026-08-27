@@ -53,6 +53,8 @@ import { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeSe
 import { getTownBuildings } from '../game/world';
 import { drawBuilding, type Building } from '../game/render';
 import Weather from './Weather';
+import RegionBanner from './RegionBanner';
+import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import CastBar from './CastBar';
 import RaidWarning from './RaidWarning';
 import { triggerCast } from './CastBar';
@@ -214,7 +216,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [comboDisplay, setComboDisplay] = useState<{ count: number; mult: number } | null>(null);
 
   // Weather
-  const [weather, setWeather] = useState<'clear' | 'rain' | 'snow' | 'storm'>('clear');
+  const [weather, setWeather] = useState<WorldWeather>('clear');
 
   // Load or create player (using Unified Save System)
   const [player, setPlayer] = useState<Player>(() => {
@@ -401,6 +403,19 @@ export default function GameScreen({ account, onLogout }: Props) {
   // Restart music when changing maps
   useEffect(() => {
     audio.startMusic(MAPS[currentMapId]?.biome || 'plains');
+  }, [currentMapId]);
+
+
+  // Cosmetic realm weather is deterministic per map/time window so players in
+  // the same region see the same atmosphere without affecting server authority.
+  useEffect(() => {
+    const refreshWeather = () => {
+      const map = MAPS[currentMapId] || MAPS.eldoria;
+      setWeather(weatherForMap(map.id, map.biome));
+    };
+    refreshWeather();
+    const timer = window.setInterval(refreshWeather, 45_000);
+    return () => window.clearInterval(timer);
   }, [currentMapId]);
 
   // ===== NETWORK: connect to BroadcastChannel on mount (local multiplayer) =====
@@ -2461,44 +2476,16 @@ export default function GameScreen({ account, onLogout }: Props) {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // Biome overlay (shadowlands darkness, swamp fog, etc)
-    const overlayBiome = MAPS[currentMapIdRef.current]?.biome;
-    if (overlayBiome === 'shadow') {
-      ctx.fillStyle = 'rgba(10,0,20,0.45)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else if (overlayBiome === 'swamp') {
-      ctx.fillStyle = 'rgba(20,40,10,0.25)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else if (overlayBiome === 'snow') {
-      ctx.fillStyle = 'rgba(200,220,255,0.08)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    // Player torch light (warm glow around player at night)
-    const nightAmt = (MAPS[currentMapIdRef.current]?.biome === 'shadow')
-      ? 0.6 : Math.max(0, Math.min(0.6, nightAlpha * 1.3));
-    if (nightAmt > 0.15) {
-      const px = (p.pos.x - cam.x + 0.5) * TILE_SIZE;
-      const py = (p.pos.y - cam.y + 0.5) * TILE_SIZE;
-      const torch = ctx.createRadialGradient(px, py, TILE_SIZE * 0.5, px, py, TILE_SIZE * 6);
-      torch.addColorStop(0, 'rgba(255,200,120,0.0)');
-      torch.addColorStop(0.5, `rgba(255,180,80,${nightAmt * 0.15})`);
-      torch.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = torch;
-      ctx.fillRect(px - TILE_SIZE * 6, py - TILE_SIZE * 6, TILE_SIZE * 12, TILE_SIZE * 12);
-      ctx.globalCompositeOperation = 'source-over';
-    }
-
-    // Vignette
-    const vignette = ctx.createRadialGradient(
-      canvas.width / 2, canvas.height / 2, Math.min(canvas.width, canvas.height) / 3,
-      canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) / 1.3
+    drawWorldAtmosphere(
+      ctx,
+      canvas,
+      MAPS[currentMapIdRef.current]?.biome || 'plains',
+      nightAlpha,
+      p.pos,
+      cam,
+      TILE_SIZE,
+      now,
     );
-    vignette.addColorStop(0, 'rgba(0,0,0,0)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.5)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.restore();
   };
@@ -2613,6 +2600,8 @@ export default function GameScreen({ account, onLogout }: Props) {
               boxShadow: '0 28px 90px rgba(0,0,0,0.58), 0 0 0 1px rgba(164,184,216,0.10), 0 0 55px rgba(110,168,255,0.05)',
             }}
           />
+          <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
+
           {/* Zoom controls */}
           <div className="moria-panel absolute bottom-4 right-4 z-20 flex flex-col gap-1 rounded-xl p-1.5">
             <button onClick={() => { const nz = Math.min(2.5, zoomRef.current + 0.25); zoomRef.current = nz; setZoom(nz); }} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-base font-black">+</button>
