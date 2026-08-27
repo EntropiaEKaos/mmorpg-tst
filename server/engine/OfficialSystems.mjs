@@ -10,6 +10,7 @@ import { buildEquipmentLootPool } from './Items.mjs';
 import { executeOfficialAction, getOfficialActionService, hasOfficialAction } from './OfficialActionRegistry.mjs';
 import { officialCommerceDomain } from './OfficialCommerceDomain.mjs';
 import { officialProgressionDomain } from './OfficialProgressionDomain.mjs';
+import { officialPvpDomain } from './OfficialPvpDomain.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS, MYSTERIES, DUNGEON_WAVES, DEFAULT_EVENTS,
@@ -123,15 +124,6 @@ function consumeNamed(player, name, quantity) {
   }
   player.inventory = player.inventory.filter(item => Number(item.quantity) > 0 || item.type === 'equipment');
   return remaining === 0;
-}
-
-function skullForAggression(value) {
-  if (value >= 80) return 'black';
-  if (value >= 55) return 'red';
-  if (value >= 35) return 'orange';
-  if (value >= 15) return 'yellow';
-  if (value > 0) return 'white';
-  return 'none';
 }
 
 function publicMysteries() {
@@ -463,13 +455,8 @@ export class OfficialSystems {
   failDungeon(player) { return this.abandonDungeon(player); }
 
   tickPlayer(player, now = Date.now()) {
-    const s = this.ensurePlayer(player);
     officialProgressionDomain.tickStamina(this, player, now);
-    if (s.pvp.aggression > 0 && now - s.pvp.lastAggression > 5 * 60_000) {
-      s.pvp.aggression = Math.max(0, s.pvp.aggression - 1);
-      s.pvp.lastAggression = now;
-      s.pvp.skull = skullForAggression(s.pvp.aggression);
-    }
+    officialPvpDomain.tick(this, player, now);
     this.ensureWorldEvent(now);
   }
 
@@ -695,45 +682,15 @@ export class OfficialSystems {
   }
 
   pvpToggle(player) {
-    const s = this.ensurePlayer(player); s.pvp.enabled = !s.pvp.enabled; return s.pvp.enabled;
+    return officialPvpDomain.toggle(this, player);
   }
 
   pvpAttack(player, target, getDerivedStats = null) {
-    const now = Date.now();
-    const s = this.ensurePlayer(player);
-    const ts = target ? this.ensurePlayer(target) : null;
-    if (!target || target.id === player.id || !s.pvp.enabled || !ts.pvp.enabled || target.mapId !== player.mapId) return null;
-    if (now - s.lastPvpAttack < 900) return null;
-    if (Math.abs(target.x - player.x) + Math.abs(target.y - player.y) > 2) return null;
-    s.lastPvpAttack = now;
-    const attacker = typeof getDerivedStats === 'function' ? getDerivedStats(player) : null;
-    const defender = typeof getDerivedStats === 'function' ? getDerivedStats(target) : null;
-    const attack = Number(attacker?.totalAttack) || player.attack || 0;
-    const defense = Number(defender?.totalDefense) || target.defense || 0;
-    const reduction = clamp(defender?.damageReduction, 0, 80, 0);
-    const raw = Math.max(1, (attack + player.level * 0.8 - defense * 0.5) * 0.65);
-    const damage = Math.max(1, Math.floor(raw * (1 - reduction / 100)));
-    target.hp -= damage;
-    player.stats.damageDealt = (player.stats.damageDealt || 0) + damage;
-    target.stats.damageTaken = (target.stats.damageTaken || 0) + damage;
-    s.pvp.aggression = Math.min(100, s.pvp.aggression + 2);
-    s.pvp.lastAggression = now;
-    s.pvp.skull = skullForAggression(s.pvp.aggression);
-    let killed = false;
-    if (target.hp <= 0) {
-      killed = true;
-      target.hp = Number(defender?.totalMaxHp) || target.maxHp;
-      target.mana = Number(defender?.totalMaxMana) || target.maxMana;
-      target.mapId = 'eldoria'; target.x = 40; target.y = 40;
-      target.stats.deaths = (target.stats.deaths || 0) + 1;
-      s.pvp.aggression = Math.min(100, s.pvp.aggression + 18); s.pvp.skull = skullForAggression(s.pvp.aggression);
-    }
-    return { damage, killed, skull: s.pvp.skull };
+    return officialPvpDomain.attack(this, player, target, getDerivedStats);
   }
 
   publicPvp(player) {
-    const s = this.ensurePlayer(player);
-    return { enabled: s.pvp.enabled, skull: s.pvp.skull, title: s.titles.active };
+    return officialPvpDomain.publicState(this, player);
   }
 
   snapshot(player, nearbyPlayers = []) {
