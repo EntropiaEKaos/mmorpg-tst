@@ -3,9 +3,6 @@
 // Consolidates features that were previously browser/localStorage-only.
 // ===================================================================
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { executeOfficialAction, getOfficialActionService, hasOfficialAction } from './OfficialActionRegistry.mjs';
 import { officialCommerceDomain } from './OfficialCommerceDomain.mjs';
 import { officialProgressionDomain } from './OfficialProgressionDomain.mjs';
@@ -15,7 +12,8 @@ import { officialWorldEventDomain } from './OfficialWorldEventDomain.mjs';
 import { officialInventoryEconomyDomain } from './OfficialInventoryEconomyDomain.mjs';
 import { officialExplorationKnowledgeDomain } from './OfficialExplorationKnowledgeDomain.mjs';
 import { officialCombatAugmentationDomain } from './OfficialCombatAugmentationDomain.mjs';
-import { exportPlayerState, freshGlobalState, freshPlayerState, normalizeGlobalState, normalizePlayerState } from './OfficialStateSchema.mjs';
+import { exportPlayerState, freshGlobalState, freshPlayerState, normalizePlayerState } from './OfficialStateSchema.mjs';
+import { DEFAULT_OFFICIAL_STATE_FILE, OfficialStateRepository } from './OfficialStateRepository.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
@@ -25,10 +23,6 @@ export {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
 } from './OfficialCatalogs.mjs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DEFAULT_DB_FILE = process.env.MORIA_OFFICIAL_DB || path.join(__dirname, '..', 'moria-official.json');
 
 const clamp = (value, min, max, fallback = min) => {
   const n = Number(value);
@@ -42,38 +36,23 @@ const playerKey = (name) => String(name || '').trim().toLocaleLowerCase('en-US')
 
 
 export class OfficialSystems {
-  constructor(dbFile = DEFAULT_DB_FILE) {
+  constructor(dbFile = DEFAULT_OFFICIAL_STATE_FILE) {
     this.dbFile = dbFile;
+    this.repository = new OfficialStateRepository(dbFile);
     this.global = freshGlobalState();
     this.contentEvents = [];
     this.load();
   }
 
   load() {
-    try {
-      if (!fs.existsSync(this.dbFile)) return false;
-      const raw = JSON.parse(fs.readFileSync(this.dbFile, 'utf8'));
-      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
-      this.global = normalizeGlobalState(raw);
-      return true;
-    } catch (error) {
-      console.warn('⚠ Official systems DB load failed:', error?.message || error);
-      return false;
-    }
+    const loaded = this.repository.load();
+    if (!loaded) return false;
+    this.global = loaded;
+    return true;
   }
 
   save() {
-    const temp = `${this.dbFile}.tmp`;
-    try {
-      fs.mkdirSync(path.dirname(this.dbFile), { recursive: true });
-      fs.writeFileSync(temp, JSON.stringify(this.global, null, 2));
-      fs.renameSync(temp, this.dbFile);
-      return true;
-    } catch (error) {
-      try { fs.rmSync(temp, { force: true }); } catch {}
-      console.warn('⚠ Official systems DB save failed:', error?.message || error);
-      return false;
-    }
+    return this.repository.save(this.global);
   }
 
   syncWorldEvents(events = []) {
