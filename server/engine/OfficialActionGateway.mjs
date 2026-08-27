@@ -25,23 +25,28 @@ function serviceAccess(player, action, npcs = []) {
   if (!rule) return { ok: true, npc: null };
   if (!player || !Array.isArray(npcs)) return { ok: false, npc: null, error: `${rule.label} is unavailable.` };
 
-  const npc = npcs.find(entry => entry && entry.id === rule.npcId);
-  if (!npc) return { ok: false, npc: null, error: `${rule.label} is unavailable.` };
+  const candidates = npcs.filter(entry => entry && (
+    (rule.npcId && entry.id === rule.npcId)
+    || (rule.npcRole && entry.role === rule.npcRole)
+  ));
+  if (!candidates.length) return { ok: false, npc: null, error: `${rule.label} is unavailable.` };
 
-  const mapId = text(npc.mapId, OFFICIAL_ACTION_GATEWAY_RULES.npcMapMaxLength);
-  const x = Number(npc.posX);
-  const y = Number(npc.posY);
   const px = Number(player.x);
   const py = Number(player.y);
-  const near = mapId === player.mapId
-    && Number.isFinite(x) && Number.isFinite(y)
-    && Number.isFinite(px) && Number.isFinite(py)
-    && Math.abs(px - x) <= OFFICIAL_ACTION_GATEWAY_RULES.serviceRange
-    && Math.abs(py - y) <= OFFICIAL_ACTION_GATEWAY_RULES.serviceRange;
+  const nearNpc = candidates.find(npc => {
+    const mapId = text(npc.mapId, OFFICIAL_ACTION_GATEWAY_RULES.npcMapMaxLength);
+    const x = Number(npc.posX);
+    const y = Number(npc.posY);
+    return mapId === player.mapId
+      && Number.isFinite(x) && Number.isFinite(y)
+      && Number.isFinite(px) && Number.isFinite(py)
+      && Math.abs(px - x) <= OFFICIAL_ACTION_GATEWAY_RULES.serviceRange
+      && Math.abs(py - y) <= OFFICIAL_ACTION_GATEWAY_RULES.serviceRange;
+  });
 
-  return near
-    ? { ok: true, npc }
-    : { ok: false, npc: null, error: `Move near ${text(npc.name, OFFICIAL_ACTION_GATEWAY_RULES.npcNameMaxLength) || rule.label} to use this service.` };
+  return nearNpc
+    ? { ok: true, npc: nearNpc }
+    : { ok: false, npc: null, error: `Move near ${rule.label} to use this service.` };
 }
 
 export class OfficialActionGateway {

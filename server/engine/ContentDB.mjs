@@ -88,6 +88,7 @@ export class ContentDB {
     // Only seed a brand-new or unrecoverably corrupt database. A valid empty
     // collection is intentional admin state and must stay empty after restart.
     if (!this.load()) this.seedDefaults();
+    else this.migrateAlphaV2();
   }
 
   load() {
@@ -117,6 +118,29 @@ export class ContentDB {
       }
     }
     return false;
+  }
+
+  migrateAlphaV2() {
+    if (Number(this.data.version) >= 2) return false;
+    const hasExistingContent = COLLECTION_KEYS.some(key => Array.isArray(this.data[key]) && this.data[key].length > 0);
+    if (hasExistingContent) {
+      // Alpha records provide missing defaults while every existing admin value wins.
+      this.data.items = mergeById(ALPHA_CONTENT.items, this.data.items);
+      this.data.monsters = mergeById(ALPHA_CONTENT.monsters, this.data.monsters);
+      this.data.npcs = mergeById(ALPHA_CONTENT.npcs, this.data.npcs);
+      this.data.quests = mergeById(ALPHA_CONTENT.quests, this.data.quests);
+      this.data.spells = mergeById(ALPHA_CONTENT.spells, this.data.spells);
+      this.data.maps = mergeById(ALPHA_CONTENT.maps, this.data.maps);
+      this.data.worldEvents = mergeById(ALPHA_CONTENT.events, this.data.worldEvents);
+      this.data.shops = mergeById(ALPHA_CONTENT.shops, this.data.shops);
+      this.data.lootTables = mergeById(ALPHA_CONTENT.lootTables, this.data.lootTables);
+      this.data.gmRoster = mergeById(ALPHA_CONTENT.gmRoster, this.data.gmRoster);
+    }
+    // Empty v1 stores stay intentionally empty, but are marked migrated so a
+    // later admin-created record cannot unexpectedly trigger the alpha seed.
+    this.data.version = 2;
+    this.save();
+    return true;
   }
 
   save() {

@@ -23,7 +23,7 @@ test('official service proximity metadata is declarative and limited to NPC serv
   assert.deepEqual(getOfficialActionService('rest'), { npcId: 'innkeeper', label: 'Innkeeper' });
   assert.deepEqual(getOfficialActionService('train'), { npcId: 'trainer', label: 'Trainer' });
   assert.deepEqual(getOfficialActionService('food_buy'), { npcId: 'innkeeper', label: 'Innkeeper' });
-  assert.deepEqual(getOfficialActionService('shop_buy'), { npcId: 'merchant_gorn', label: 'Merchant' });
+  assert.deepEqual(getOfficialActionService('shop_buy'), { npcRole: 'merchant', label: 'Merchant' });
   assert.equal(getOfficialActionService('auction_buy'), null);
 });
 

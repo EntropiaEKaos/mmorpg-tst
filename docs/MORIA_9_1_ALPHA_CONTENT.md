@@ -18,3 +18,9 @@ The authoritative `/admin` Content Studio can create/edit/delete items, monsters
 - Quest chains and events resolve content targets by stable IDs.
 
 All 9.1 work remains subject to the normal audits, TypeScript/build gate, server syntax check and full server test suite.
+
+## Upgrade de servidores 9.0
+Bancos ContentDB v1 já populados são migrados uma única vez para v2. Registros existentes do admin têm precedência sobre defaults alpha; após a migração, edições e exclusões persistem normalmente entre reinícios. Bancos v1 intencionalmente vazios permanecem vazios e apenas recebem o marcador de schema v2.
+
+## Quartermasters regionais
+A proximidade de `shop_buy` agora aceita qualquer NPC autoritativo com `role: merchant`, então os quartermasters criados pelo Studio são serviços reais, sem abrir compra remota.

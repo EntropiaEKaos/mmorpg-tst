@@ -8,6 +8,7 @@ import { ALPHA_CONTENT_COUNTS } from '../engine/AlphaContent.mjs';
 import { CONTENT_STUDIO_SCHEMAS, validateStudioRecord } from '../engine/ContentStudio.mjs';
 import { canAccessMap, isGmCharacter } from '../engine/ContentAccess.mjs';
 import { rollContentLootTable, buildEquipmentLootPool } from '../engine/Items.mjs';
+import { officialActionGateway } from '../engine/OfficialActionGateway.mjs';
 
 function tempDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'moria-alpha-'));
@@ -66,5 +67,57 @@ test('content loot tables resolve server-side equipment and materials', () => {
     assert.ok(drops.length >= 2);
     assert.ok(drops.some(drop => drop.type === 'equipment'));
     assert.ok(buildEquipmentLootPool(db.get('items')).some(item => item.slot === 'relic' || item.slot === 'cloak'));
+  } finally { fs.rmSync(dir, { recursive:true, force:true }); }
+});
+
+
+test('9.0 content migrates to alpha v2 once while preserving admin edits across restart', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'moria-alpha-migrate-'));
+  const file = path.join(dir, 'content.json');
+  try {
+    fs.writeFileSync(file, JSON.stringify({
+      version: 1,
+      items: [{ id:'iron_sword', name:'Admin Iron Sword', slot:'weapon', attack:99, rarity:'epic', level:1, value:999 }],
+      monsters: [], npcs: [], quests: [], spells: [], maps: [], worldEvents: [], shops: [], lootTables: [],
+    }));
+    const migrated = new ContentDB(file);
+    assert.equal(migrated.data.version, 2);
+    assert.ok(migrated.get('maps').length >= 11);
+    assert.equal(migrated.get('items').find(item => item.id === 'iron_sword').name, 'Admin Iron Sword');
+    assert.equal(migrated.get('items').find(item => item.id === 'iron_sword').attack, 99);
+    const alphaItem = migrated.get('items').find(item => item.id.startsWith('eldoria_'));
+    assert.ok(alphaItem);
+    migrated.update('items', alphaItem.id, { name:'Admin Edited Alpha Item', attack:321 });
+    const restarted = new ContentDB(file);
+    assert.equal(restarted.get('items').find(item => item.id === alphaItem.id).name, 'Admin Edited Alpha Item');
+    assert.equal(restarted.get('items').find(item => item.id === alphaItem.id).attack, 321);
+  } finally { fs.rmSync(dir, { recursive:true, force:true }); }
+});
+
+test('intentionally empty legacy content remains empty after v2 migration marker', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'moria-alpha-empty-'));
+  const file = path.join(dir, 'content.json');
+  try {
+    fs.writeFileSync(file, JSON.stringify({ version:1, items:[], monsters:[], npcs:[], quests:[], spells:[], maps:[], worldEvents:[], shops:[], lootTables:[] }));
+    const db = new ContentDB(file);
+    assert.equal(db.data.version, 2);
+    assert.equal(db.get('items').length, 0);
+    db.add('items', { id:'admin_only_item', name:'Admin Only' });
+    const restarted = new ContentDB(file);
+    assert.equal(restarted.get('items').length, 1);
+    assert.equal(restarted.get('items')[0].id, 'admin_only_item');
+  } finally { fs.rmSync(dir, { recursive:true, force:true }); }
+});
+
+test('regional quartermasters satisfy authoritative shop proximity by merchant role', () => {
+  const { db, dir } = tempDb();
+  try {
+    const npc = db.get('npcs').find(entry => entry.id === 'merchant_frostpeak');
+    assert.ok(npc);
+    const player = { mapId:npc.mapId, x:npc.posX, y:npc.posY };
+    const result = officialActionGateway.serviceProximity(player, 'shop_buy', db.get('npcs'));
+    assert.equal(result.ok, true);
+    assert.equal(result.npc.id, 'merchant_frostpeak');
+    assert.equal(officialActionGateway.serviceProximity({ ...player, x:1, y:1 }, 'shop_buy', db.get('npcs')).ok, false);
   } finally { fs.rmSync(dir, { recursive:true, force:true }); }
 });
