@@ -3,6 +3,7 @@
 <div align="center">
   <img src="public/images/logo.png" alt="Mor'ia Logo" width="280" />
   <p><b>Um MMORPG completo com combate autoritativo, inspiração em Tibia & WoW, 100% no navegador.</b></p>
+  <p><b>Versão atual: Mor'ia 9.5 — Movable HUD & Classic World Polish</b></p>
 </div>
 
 ---
@@ -28,6 +29,28 @@ O gate oficial de qualidade executa `npm audit`, TypeScript, build de produção
 A linha 9.1 adiciona uma base de lançamento alpha orientada a conteúdo: **11 mapas** (10 regiões públicas + **Astra Sanctum, a Ilha dos GMs**), mais de **70 itens**, mais de **70 monstros**, mais de **40 NPCs**, mais de **45 quests**, novos feitiços para as 14 vocações, eventos regionais, lojas e loot tables autoritativas.
 
 Todo esse conteúdo é materializado no ContentDB e pode ser criado/editado/removido pelo `/admin`. Servidores 9.0 existentes migram uma única vez para a base 9.1 preservando valores já personalizados pelo admin. A Ilha GM usa acesso `gm` validado no servidor pela lista **GM Roster** do próprio Admin.
+
+---
+
+## 🎨 Mor'ia 9.5 — Movable HUD & Classic World Polish
+
+A 9.5 é a linha atual do `master`. Ela amplia o viewport para **31×19 tiles**, remove a sidebar que consumia largura do mundo, transforma HUD, chat e hotbar em janelas sobrepostas/movíveis com posição persistente e melhora a leitura 2D dos personagens e NPCs. O nameplate do jogador agora mostra **nome, HP e mana acima do avatar**, mantendo a autoridade de gameplay no servidor.
+
+### Gameplay atual — 9.5
+
+![Mor'ia 9.5 gameplay](docs/screenshots/moria-9-5-gameplay-after.png)
+
+### Comparação — antes da reforma visual (9.4)
+
+![Mor'ia 9.4 gameplay antes](docs/screenshots/moria-9-4-gameplay-before.png)
+
+### Tela de entrada
+
+![Mor'ia login](docs/screenshots/moria-9-4-login.png)
+
+Mais detalhes técnicos: **[Mor'ia 9.5 — HUD World Polish](docs/MORIA_9_5_HUD_WORLD_POLISH.md)**.
+
+---
 
 ## ✨ Principais Funcionalidades
 
@@ -122,6 +145,7 @@ Para instruções completas de deploy, publicação de servidor e como criar nov
 
 - 📖 **[Manual Completo e Lore de Mor'ia](docs/MORIA_DOCUMENTATION.md)** — Explicação detalhada sobre cada feitiço, classe, monstro, bênção, sistema de reputação e economia.
 - 🛠️ **[Guia do Servidor & Arquitetura](server/README.md)** — Detalhes sobre o protocolo WebSocket, Heartbeat, Rate-Limiting e estrutura de persistência.
+- 🎨 **[Mor'ia 9.5 — HUD World Polish](docs/MORIA_9_5_HUD_WORLD_POLISH.md)** — Reforma visual, janelas móveis, viewport e screenshots reais.
 
 ---
 
