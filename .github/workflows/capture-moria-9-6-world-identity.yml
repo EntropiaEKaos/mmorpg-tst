@@ -5,7 +5,7 @@ on:
     branches: [moria-9.6-world-identity-city-editor]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   capture:
@@ -73,3 +73,15 @@ jobs:
           name: moria-9-6-world-identity-screenshots
           path: /tmp/moria-9-6/*.png
           if-no-files-found: error
+      - name: Archive final screenshots and self-remove
+        run: |
+          mkdir -p docs/screenshots
+          cp /tmp/moria-9-6/moria-9-6-eldoria-gameplay.png docs/screenshots/
+          cp /tmp/moria-9-6/moria-9-6-city-designer-eldoria.png docs/screenshots/
+          cp /tmp/moria-9-6/moria-9-6-city-designer-frostpeak.png docs/screenshots/
+          rm .github/workflows/capture-moria-9-6-world-identity.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots .github/workflows/capture-moria-9-6-world-identity.yml
+          git commit -m "docs(9.6): add validated world identity screenshots"
+          git push
