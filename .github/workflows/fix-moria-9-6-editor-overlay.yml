@@ -1,0 +1,53 @@
+name: Fix Mor'ia 9.6 Editor Overlay
+
+on:
+  push:
+    branches: [moria-9.6-world-identity-city-editor]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Close Admin before opening the Game Editor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          screen_path = Path('src/components/GameScreen.tsx')
+          screen = screen_path.read_text(encoding='utf-8')
+          old = "onOpenEditor={() => { setShowEditor(true); refreshCustomContent(); }}"
+          new = "onOpenEditor={() => { setShowAdmin(false); setShowEditor(true); refreshCustomContent(); }}"
+          if screen.count(old) != 1:
+              raise SystemExit(f'editor overlay anchor count={screen.count(old)}')
+          screen_path.write_text(screen.replace(old, new, 1), encoding='utf-8')
+
+          test_path = Path('server/test/world-identity-9-6.test.mjs')
+          test = test_path.read_text(encoding='utf-8')
+          anchor = "  assert.match(screen, /mapId=\\{currentMapId\\}/);\n"
+          addition = anchor + "  assert.match(screen, /onOpenEditor=\\{\\(\\) => \\{ setShowAdmin\\(false\\); setShowEditor\\(true\\);/);\n"
+          if test.count(anchor) != 1:
+              raise SystemExit(f'9.6 test anchor count={test.count(anchor)}')
+          test_path.write_text(test.replace(anchor, addition, 1), encoding='utf-8')
+          PY
+      - name: Validate focused editor contract
+        run: |
+          npm ci
+          npm run typecheck
+          npm ci --prefix server --no-fund
+          node --test server/test/world-identity-9-6.test.mjs
+      - name: Commit fix and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-moria-9-6-editor-overlay.yml
+          git add src/components/GameScreen.tsx server/test/world-identity-9-6.test.mjs
+          git commit -m "fix(9.6): close admin overlay before opening editor"
+          git push origin HEAD:moria-9.6-world-identity-city-editor
