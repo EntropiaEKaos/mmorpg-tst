@@ -5,6 +5,7 @@ on:
     branches: [moria-9.2-alpha-housing-outfits-mounts]
     paths:
       - tools/apply-moria-9-2-alpha-systems-server.py
+      - tools/fix-moria-9-2-server-gate.py
       - .github/workflows/apply-moria-9-2-alpha-systems-server.yml
 
 permissions:
@@ -29,6 +30,8 @@ jobs:
             server/package-lock.json
       - name: Apply 9.2 server systems
         run: python3 tools/apply-moria-9-2-alpha-systems-server.py
+      - name: Upgrade legacy 9.2 gates
+        run: python3 tools/fix-moria-9-2-server-gate.py
       - name: Install client dependencies
         run: npm ci
       - name: Audit client dependencies
@@ -49,7 +52,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/engine/AlphaSystemsContent.mjs server/engine/AppearanceSystem.mjs server/engine/MountSystem.mjs server/engine/TibiaTaskEngine.mjs server/engine/HousingSystem.mjs server/engine/ContentDB.mjs server/engine/ContentStudio.mjs server/engine/ContentIntegrity.mjs server/engine/GameState.mjs server/server.js server/test/alpha-systems-9-2.test.mjs docs/MORIA_9_2_ALPHA_SYSTEMS.md
+          git add server/engine/AlphaSystemsContent.mjs server/engine/AppearanceSystem.mjs server/engine/MountSystem.mjs server/engine/TibiaTaskEngine.mjs server/engine/HousingSystem.mjs server/engine/ContentDB.mjs server/engine/ContentStudio.mjs server/engine/ContentIntegrity.mjs server/engine/GameState.mjs server/server.js server/test/alpha-systems-9-2.test.mjs server/test/alpha-content-9-1.test.mjs server/test/hardening.test.mjs docs/MORIA_9_2_ALPHA_SYSTEMS.md
           git diff --cached --quiet && exit 0
           git commit -m "feat(9.2): add authoritative housing tasks outfits and mounts"
           git fetch origin moria-9.2-alpha-housing-outfits-mounts
