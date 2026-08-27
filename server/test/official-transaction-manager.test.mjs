@@ -74,7 +74,10 @@ test('rejected official transaction rolls back partial runtime mutations without
   const fx = setup();
   try {
     const beforeDisk = fx.repository.load();
-    const beforePlayer = clone(fx.player);
+    // The runtime player intentionally carries a non-cloneable websocket-like
+    // handle. Capture only the serializable fields this assertion verifies,
+    // matching the transaction manager's own runtime snapshot boundary.
+    const beforePlayer = { gold: fx.player.gold, inventory: clone(fx.player.inventory) };
     const result = fx.manager.run(fx.host, {
       action: 'mail_send', adapter: fx.adapter, runtimePlayers: [fx.player],
     }, () => {
