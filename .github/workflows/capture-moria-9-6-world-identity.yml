@@ -1,0 +1,67 @@
+name: Capture Mor'ia 9.6 World Identity
+
+on:
+  push:
+    branches: [moria-9.6-world-identity-city-editor]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install project dependencies
+        run: npm ci
+      - name: Build client
+        run: npm run build
+      - name: Install browser driver
+        run: |
+          npm install --no-save --package-lock=false playwright@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Start production preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/moria-preview.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 0.5
+          done
+          cat /tmp/moria-preview.log
+          exit 1
+      - name: Capture real gameplay and City Designer
+        run: |
+          mkdir -p /tmp/moria-9-6
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1 });
+          await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
+          await page.getByRole('button', { name: /OFFLINE QUICK PLAY/i }).click();
+          await page.waitForTimeout(3200);
+          await page.screenshot({ path: '/tmp/moria-9-6/moria-9-6-eldoria-gameplay.png', fullPage: true });
+
+          await page.keyboard.press('Control+Shift+A');
+          await page.getByText('ADMIN PANEL').waitFor({ state: 'visible', timeout: 5000 });
+          await page.getByRole('button', { name: /Game Editor \(Items\/Spells\/Maps\/NPCs\/Monsters\/Books\)/i }).click();
+          await page.getByRole('button', { name: /City Designer · Live/i }).click();
+          await page.getByText(/CITY DESIGNER · LIVE OFFLINE PREVIEW/i).waitFor({ state: 'visible', timeout: 5000 });
+          await page.waitForTimeout(700);
+          await page.screenshot({ path: '/tmp/moria-9-6/moria-9-6-city-designer-eldoria.png', fullPage: true });
+
+          const mapSelect = page.locator('select').filter({ has: page.locator('option[value="frostpeak"]') }).first();
+          await mapSelect.selectOption('frostpeak');
+          await page.waitForTimeout(500);
+          await page.screenshot({ path: '/tmp/moria-9-6/moria-9-6-city-designer-frostpeak.png', fullPage: true });
+          await browser.close();
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moria-9-6-world-identity-screenshots
+          path: /tmp/moria-9-6/*.png
+          if-no-files-found: error
