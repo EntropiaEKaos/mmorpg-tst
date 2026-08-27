@@ -198,6 +198,12 @@ export class OfficialTransactionManager {
       if (typeof prepareCommit === 'function') prepareCommit();
     } catch (error) {
       rollbackRuntime();
+      // prepareCommit runs after the domain operation has returned ok=true. If
+      // that hook throws, `result.ok` is still true, so the finally block alone
+      // cannot distinguish the failed prepare phase from a valid commit path.
+      // Release the unit-of-work lock explicitly before propagating the error.
+      this.active = false;
+      this.saveRequested = false;
       throw error;
     } finally {
       // Keep the transaction active through durable commit below only when the
