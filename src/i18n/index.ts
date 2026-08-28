@@ -1,3 +1,4 @@
+import PT_BR_RELEASE_928 from './pt-BR.928.json';
 // Mor'ia 9.28 — internationalization foundation.
 // Canonical IDs/protocol values remain untranslated. Only presentation text is localized.
 export type MoriaLocale = 'pt-BR' | 'en-US';
@@ -253,7 +254,7 @@ export function translateGameText(value: unknown, locale: MoriaLocale = getLocal
   if (!source || locale === 'en-US') return source;
   const core = source.trim();
   if (!core) return source;
-  const exact = PT_BR_EXACT[core];
+  const exact = (PT_BR_RELEASE_928 as Record<string, string>)[core] ?? PT_BR_EXACT[core];
   if (exact) return preserveWhitespace(source, exact);
   for (const [pattern, replacement] of PT_BR_PATTERNS) {
     if (pattern.test(core)) return preserveWhitespace(source, core.replace(pattern, replacement));

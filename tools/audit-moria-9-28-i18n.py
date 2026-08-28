@@ -19,6 +19,7 @@ SOURCE_FALSE_POSITIVES={
 UNCHANGED_OK={
     'Road to 10 · 9.26',
     'ROAD TO 10 · 9.26',
+    '✦ Road to 10 · 9.26',
 }
 
 catalog=json.loads(CATALOG_PATH.read_text(encoding='utf-8'))
