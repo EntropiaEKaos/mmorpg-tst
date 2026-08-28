@@ -3,7 +3,7 @@
 <div align="center">
   <img src="public/images/logo.png" alt="Mor'ia Logo" width="280" />
   <p><b>Um MMORPG completo com combate autoritativo, inspiração em Tibia & WoW, 100% no navegador.</b></p>
-  <p><b>Versão atual: Mor'ia 9.6 — World Identity & City Designer</b></p>
+  <p><b>Versão atual: Mor'ia 9.10 — Elemental Reactions</b></p>
 </div>
 
 ---
@@ -29,6 +29,20 @@ O gate oficial de qualidade executa `npm audit`, TypeScript, build de produção
 A linha 9.1 adiciona uma base de lançamento alpha orientada a conteúdo: **11 mapas** (10 regiões públicas + **Astra Sanctum, a Ilha dos GMs**), mais de **70 itens**, mais de **70 monstros**, mais de **40 NPCs**, mais de **45 quests**, novos feitiços para as 14 vocações, eventos regionais, lojas e loot tables autoritativas.
 
 Todo esse conteúdo é materializado no ContentDB e pode ser criado/editado/removido pelo `/admin`. Servidores 9.0 existentes migram uma única vez para a base 9.1 preservando valores já personalizados pelo admin. A Ilha GM usa acesso `gm` validado no servidor pela lista **GM Roster** do próprio Admin.
+
+---
+
+## ⚡ Mor'ia 9.10 — Elemental Reactions
+
+A 9.10 transforma as escolas de dano da 9.9 em um sistema de estados e reações autoritativas. Água pode aplicar **Wet**; Raio sobre Wet dispara **Conductive Burst**; Gelo sobre Wet causa **Flash Freeze**; Físico quebra Frozen com **Shatter**; Terra cria **Fractured**; Arcano aplica **Unstable**; Morte aplica **Cursed**; Sagrado purifica Cursed e recebe bônus contra inimigos alinhados à Morte; Natureza e Veneno formam **Toxic/Venom Bloom**.
+
+Os multiplicadores são resolvidos no servidor antes da defesa final, os estados têm duração limitada e o tooltip da spell mostra as combinações possíveis em **Reactive combos**, junto da cadeia de atributos/equipamentos da 9.9.
+
+### Tooltip real — reações elementais
+
+![Mor'ia 9.10 Elemental Reactions tooltip](docs/screenshots/moria-9-10-elemental-reactions-tooltip.png)
+
+> Evidência visual versionada no próprio repositório: todo print final de evolução deve entrar no README antes do merge.
 
 ---
 
