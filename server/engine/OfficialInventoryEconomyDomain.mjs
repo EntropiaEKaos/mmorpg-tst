@@ -139,7 +139,8 @@ export class OfficialInventoryEconomyDomain {
     if (!item) return false;
     const effectiveQty = item.type === 'equipment' ? 1 : qty;
     const discount = typeof host.getReputationDiscount === 'function' ? host.getReputationDiscount(player) : 0;
-    const unitPrice = Math.max(1, Math.floor(item.price * (1 - discount)));
+    const marketMultiplier = typeof host.getRegionalMarketMultiplier === 'function' ? host.getRegionalMarketMultiplier(player) : 1;
+    const unitPrice = Math.max(1, Math.floor(item.price * (1 - discount) * marketMultiplier));
     if (player.level < (item.levelRequired || item.level || 1) || player.gold < unitPrice * effectiveQty) return false;
     player.gold -= unitPrice * effectiveQty;
     if (item.type === 'equipment') {
@@ -147,6 +148,7 @@ export class OfficialInventoryEconomyDomain {
     } else {
       addItem(player, { name:item.name, icon:item.icon, type:item.type, quantity:effectiveQty, value:unitPrice, description:item.description });
     }
+    if (typeof host.recordRegionalTrade === 'function') host.recordRegionalTrade(player, unitPrice * effectiveQty, 'buy', item.type === 'equipment' ? 'equipment' : item.type);
     return true;
   }
 

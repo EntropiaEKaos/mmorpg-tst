@@ -181,8 +181,9 @@ test('shop prices honor authoritative town reputation discounts', () => {
   const p = player(); systems.restorePlayer(p, null);
   p.reputation = { town: 42000 };
   const before = p.gold;
+  const market=systems.getRegionalMarketMultiplier(p);
   assert.equal(systems.buyShop(p, 'health_potion', 1), true);
-  assert.equal(p.gold, before - 37);
+  assert.equal(p.gold, before - Math.floor(50 * (1 - 0.25) * market));
   assert.equal(systems.getReputationDiscount(p), 0.25);
   fs.rmSync(dir, { recursive: true, force: true });
 });

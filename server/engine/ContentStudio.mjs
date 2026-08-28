@@ -131,6 +131,30 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('mapId','Habitat map'), field('temperament','Temperament','number'), field('favoriteFood','Favorite food'), field('breedable','Breedable','boolean'),
     field('roles','Roles','json'), field('baseTraits','Base traits','json'),
   ]),
+  professionSpecializations: Object.freeze([
+    field('id','ID'), field('name','Name'), field('profession','Profession'), field('icon','Icon'), field('requiredLevel','Required skill','number'), field('qualityBonus','Quality bonus','number'), field('tags','Recipe tags','json'),
+  ]),
+  economyPolicies: Object.freeze([
+    field('id','ID'), field('name','Name'), field('specialization','Node specialization'), field('buyMultiplier','Buy multiplier','number'), field('sellMultiplier','Sell multiplier','number'), field('craftDemand','Craft demand','number'), field('taxEfficiency','Tax efficiency','number'),
+  ]),
+  factionPrograms: Object.freeze([
+    field('id','ID'), field('factionId','Faction ID'), field('name','Program'), field('objective','Objective'), field('target','Weekly target','number'), field('rewardInfluence','Influence reward','number'), field('diplomacyStyle','Diplomacy style'),
+  ]),
+  siegeAssets: Object.freeze([
+    field('id','ID'), field('name','Name'), field('icon','Icon'), field('role','Role'), field('goldCost','Gold cost','number'), field('material','Material'), field('materialQty','Material qty','number'), field('power','Power','number'), field('durability','Durability','number'),
+  ]),
+  dynamicWorldRules: Object.freeze([
+    field('id','ID'), field('name','Name'), field('metric','Metric'), field('threshold','Threshold','number'), field('mode','Mode'), field('severity','Severity'), field('durationMs','Duration ms','number'), field('effects','Effects','json'),
+  ]),
+  dungeonBlueprints: Object.freeze([
+    field('id','ID'), field('name','Name'), field('icon','Icon'), field('mapId','Map'), field('minLevel','Min level','number'), field('requiredNodeStage','Required Node stage','number'), field('waves','Waves','number'), field('paths','Paths','json'), field('puzzle','Puzzle'), field('boss','Boss'), field('worldImpact','World impact','json'),
+  ]),
+  questConsequences: Object.freeze([
+    field('id','ID'), field('questId','Quest ID'), field('choice','Choice'), field('label','Player label'), field('nodeEffects','Node/world effects','json'), field('factionEffects','Faction effects','json'), field('chronicle','Chronicle headline','textarea'),
+  ]),
+  housingUpgrades: Object.freeze([
+    field('id','ID'), field('name','Name'), field('icon','Icon'), field('category','Category'), field('level','Upgrade level','number'), field('goldCost','Gold cost','number'), field('benefits','Functional benefits','json'),
+  ]),
   gmRoster: Object.freeze([
     field('id', 'ID'), field('name', 'Character name'), field('note', 'GM note', 'textarea'),
   ]),
@@ -403,6 +427,50 @@ export function validateStudioRecord(type, record) {
       if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max < min || max > 9999) return 'loot min/max are invalid';
     }
     return null;
+  }
+
+  if (type === 'professionSpecializations') {
+    if (!String(record.profession || '').trim()) return 'profession is required';
+    let e=numberIn(record,'requiredLevel',1,100,{required:true,integer:true}); if(e)return e;
+    e=numberIn(record,'qualityBonus',-20,50,{required:true}); if(e)return e;
+    if(record.tags!==undefined&&!Array.isArray(record.tags))return 'tags must be a JSON array';
+    return null;
+  }
+  if (type === 'economyPolicies') {
+    if(!NODE_SPECIALIZATIONS.includes(String(record.specialization||'')))return 'specialization is not supported';
+    for(const key of ['buyMultiplier','sellMultiplier','craftDemand','taxEfficiency']){const e=numberIn(record,key,.25,3,{required:true});if(e)return e;}
+    return null;
+  }
+  if (type === 'factionPrograms') {
+    if(!String(record.factionId||'').trim())return 'factionId is required';
+    let e=numberIn(record,'target',1,100000000,{required:true});if(e)return e;
+    return numberIn(record,'rewardInfluence',0,1000000,{required:true});
+  }
+  if (type === 'siegeAssets') {
+    for(const [key,min,max] of [['goldCost',0,100000000],['materialQty',0,999],['power',0,100000],['durability',1,100000]]){const e=numberIn(record,key,min,max,{required:true,integer:true});if(e)return e;}
+    return null;
+  }
+  if (type === 'dynamicWorldRules') {
+    if(!['above','below'].includes(String(record.mode||'')))return 'dynamic world mode must be above or below';
+    let e=numberIn(record,'threshold',0,100,{required:true});if(e)return e;
+    e=numberIn(record,'durationMs',60000,86400000,{required:true,integer:true});if(e)return e;
+    if(record.effects!==undefined&&(!record.effects||typeof record.effects!=='object'||Array.isArray(record.effects)))return 'effects must be a JSON object';
+    return null;
+  }
+  if (type === 'dungeonBlueprints') {
+    let e=numberIn(record,'minLevel',1,100000,{required:true,integer:true});if(e)return e;
+    e=numberIn(record,'requiredNodeStage',0,6,{required:true,integer:true});if(e)return e;
+    e=numberIn(record,'waves',1,10,{required:true,integer:true});if(e)return e;
+    if(!Array.isArray(record.paths)||record.paths.length<1||record.paths.length>6)return 'paths must contain 1-6 entries';
+    return null;
+  }
+  if (type === 'questConsequences') {
+    if(!String(record.questId||'').trim()||!String(record.choice||'').trim())return 'questId and choice are required';
+    return null;
+  }
+  if (type === 'housingUpgrades') {
+    let e=numberIn(record,'level',1,10,{required:true,integer:true});if(e)return e;
+    return numberIn(record,'goldCost',0,100000000,{required:true,integer:true});
   }
 
   if (type === 'gmRoster') {

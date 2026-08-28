@@ -103,6 +103,11 @@ function normalizeEventReward(raw) {
   };
 }
 
+function freshRoadPlayer(){return {version:'9.26.0',professions:{specializations:{},discoveries:[],workOrders:[]},beastCare:{animals:{}},politics:{influence:0,votes:0,bountiesPlaced:0},warfare:{assetsBuilt:0,repairs:0,damage:0},dungeon:{blueprintId:null,path:null,puzzle:null,puzzleProgress:0,puzzleSolved:false},quests:{choices:{}},housing:{upgrades:[],shopOpen:false,shopName:'',homeScore:0}};}
+function freshRoadGlobal(){return {version:'9.26.0',economy:{regions:{},ledger:[],inflationIndex:1},politics:{factions:{},diplomacy:{},bounties:[]},warfare:{nodes:{}},dynamicWorld:{regions:{},events:[],sequence:0},dungeons:{worldBosses:{},records:[]},questConsequences:{},housing:{shops:{}},sequence:0};}
+function normalizeRoadPlayer(raw){const b=freshRoadPlayer();if(!isRecord(raw))return b;const p=isRecord(raw.professions)?raw.professions:{};b.professions.specializations=isRecord(p.specializations)?Object.fromEntries(Object.entries(p.specializations).slice(0,40).map(([k,v])=>[slug(k),text(v,100)]).filter(x=>x[0]&&x[1])):{};b.professions.discoveries=Array.isArray(p.discoveries)?unique(p.discoveries.map(v=>text(v,100)).filter(Boolean)).slice(-100):[];b.professions.workOrders=Array.isArray(p.workOrders)?p.workOrders.filter(isRecord).slice(-30).map(clone):[];const bc=isRecord(raw.beastCare)?raw.beastCare:{};b.beastCare.animals=isRecord(bc.animals)?Object.fromEntries(Object.entries(bc.animals).slice(0,40).map(([id,v])=>[text(id,120),clone(v)]).filter(x=>x[0])):{};b.politics={influence:int(raw.politics?.influence,0,1000000,0),votes:int(raw.politics?.votes,0,100000,0),bountiesPlaced:int(raw.politics?.bountiesPlaced,0,100000,0)};b.warfare={assetsBuilt:int(raw.warfare?.assetsBuilt,0,1000000,0),repairs:int(raw.warfare?.repairs,0,100000000,0),damage:int(raw.warfare?.damage,0,100000000,0)};b.dungeon={blueprintId:text(raw.dungeon?.blueprintId,100)||null,path:text(raw.dungeon?.path,100)||null,puzzle:text(raw.dungeon?.puzzle,100)||null,puzzleProgress:int(raw.dungeon?.puzzleProgress,0,3,0),puzzleSolved:Boolean(raw.dungeon?.puzzleSolved)};b.quests.choices=isRecord(raw.quests?.choices)?Object.fromEntries(Object.entries(raw.quests.choices).slice(0,100).map(([k,v])=>[text(k,100),text(v,100)]).filter(x=>x[0]&&x[1])):{};b.housing={upgrades:Array.isArray(raw.housing?.upgrades)?unique(raw.housing.upgrades.map(v=>text(v,100)).filter(Boolean)).slice(-12):[],shopOpen:Boolean(raw.housing?.shopOpen),shopName:text(raw.housing?.shopName,80),homeScore:int(raw.housing?.homeScore,0,10000,0)};return b;}
+function normalizeRoadGlobal(raw){const b=freshRoadGlobal();if(!isRecord(raw))return b;const copyRecord=(v,max)=>isRecord(v)?Object.fromEntries(Object.entries(v).slice(0,max).map(([k,x])=>[text(k,120),clone(x)]).filter(x=>x[0])):{};b.economy.regions=copyRecord(raw.economy?.regions,200);b.economy.ledger=Array.isArray(raw.economy?.ledger)?raw.economy.ledger.filter(isRecord).slice(-200).map(clone):[];b.economy.inflationIndex=clamp(raw.economy?.inflationIndex,.75,1.5,1);b.politics.factions=copyRecord(raw.politics?.factions,100);b.politics.diplomacy=copyRecord(raw.politics?.diplomacy,300);b.politics.bounties=Array.isArray(raw.politics?.bounties)?raw.politics.bounties.filter(isRecord).slice(-100).map(clone):[];b.warfare.nodes=copyRecord(raw.warfare?.nodes,200);b.dynamicWorld.regions=copyRecord(raw.dynamicWorld?.regions,200);b.dynamicWorld.events=Array.isArray(raw.dynamicWorld?.events)?raw.dynamicWorld.events.filter(isRecord).slice(-80).map(clone):[];b.dynamicWorld.sequence=int(raw.dynamicWorld?.sequence,0,999999999,0);b.dungeons.worldBosses=copyRecord(raw.dungeons?.worldBosses,500);b.dungeons.records=Array.isArray(raw.dungeons?.records)?raw.dungeons.records.filter(isRecord).slice(-200).map(clone):[];b.questConsequences=copyRecord(raw.questConsequences,500);b.housing.shops=copyRecord(raw.housing?.shops,500);b.sequence=int(raw.sequence,0,999999999,0);return b;}
+
 export function freshPlayerState(now = Date.now()) {
   const timestamp = Number(now) > 0 ? Number(now) : Date.now();
   return {
@@ -126,6 +131,7 @@ export function freshPlayerState(now = Date.now()) {
     welcomeMailSent: false,
     lastGatherAt: 0, lastMailAt: 0, lastPvpAttack: 0,
     livingRealm: { faction:{id:null,reputation:0,rank:0,joinedAt:0,defectionUntil:0,history:[]}, crafting:{skills:{},crafted:0,masterworks:0,log:[]}, taming:{skill:1,xp:0,animals:[],activeId:null,breedingCount:0}, lastNodeAttackAt:0 },
+    roadToTen: freshRoadPlayer(),
   };
 }
 
@@ -134,6 +140,7 @@ export function freshGlobalState() {
     version: OFFICIAL_STATE_SCHEMA_VERSION,
     auctions: [], mail: [], credits: {}, eventRewards: {}, event: null, eventSequence: 0,
     livingRealm: { nodes:{}, chronicle:[], sequence:0 },
+    roadToTen: freshRoadGlobal(),
   };
 }
 
@@ -204,6 +211,7 @@ export function normalizePlayerState(saved, now = Date.now()) {
     base.livingRealm.taming={skill:int(lr.taming?.skill,1,100,1),xp:int(lr.taming?.xp,0,1000000,0),animals,activeId:animals.some(a=>a.id===lr.taming?.activeId)?lr.taming.activeId:null,breedingCount:int(lr.taming?.breedingCount,0,1000000,0)};
     base.livingRealm.lastNodeAttackAt=Math.max(0,Number(lr.lastNodeAttackAt)||0);
   }
+  base.roadToTen=normalizeRoadPlayer(saved.roadToTen);
   return base;
 }
 
@@ -241,6 +249,7 @@ export function normalizeGlobalState(raw) {
     if(isRecord(lr.nodes)) for(const [id,node] of Object.entries(lr.nodes).slice(0,200)){const key=text(id,100);if(key&&isRecord(node))nodes[key]=clone(node)}
     base.livingRealm={nodes,chronicle:Array.isArray(lr.chronicle)?lr.chronicle.filter(isRecord).slice(-250).map(clone):[],sequence:int(lr.sequence,0,999999999,0)};
   }
+  base.roadToTen=normalizeRoadGlobal(raw.roadToTen);
   return base;
 }
 
@@ -273,5 +282,6 @@ export function exportPlayerState(state) {
     dungeon: { highestWave: s.dungeon.highestWave, clears: s.dungeon.clears },
     welcomeMailSent: s.welcomeMailSent,
     livingRealm: s.livingRealm,
+    roadToTen: s.roadToTen,
   });
 }

@@ -71,6 +71,7 @@ export class OfficialDungeonDomain {
     if (s.dungeon.wave < s.dungeon.maxWaves) {
       s.dungeon.wave++;
       s.dungeon.killsRemaining = this.getWave(s.dungeon.wave, player.level).count;
+      if (s.dungeon.wave === s.dungeon.maxWaves && typeof host.isRoadDungeonPuzzlePending === 'function' && host.isRoadDungeonPuzzlePending(player)) return { nextDungeonWave: null, dungeonPuzzleRequired: true, dungeonComplete: null };
       return { nextDungeonWave: s.dungeon.wave, dungeonComplete: null };
     }
 
