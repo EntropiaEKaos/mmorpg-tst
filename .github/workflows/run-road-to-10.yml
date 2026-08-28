@@ -1,0 +1,58 @@
+name: Mor'ia 9.17-9.26 Road to 10
+on:
+  push:
+    branches: [moria-9.17-9.26-road-to-10]
+    paths:
+      - 'tools/road-to-10.trigger'
+      - '.github/workflows/run-road-to-10.yml'
+permissions:
+  contents: write
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.17-9.26-road-to-10
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - name: Apply Road to 10 integration
+        run: python tools/apply-road-to-10-integration.py
+      - name: Install client
+        run: npm ci
+      - name: Audit client
+        run: npm audit
+      - name: Typecheck client
+        run: npm run typecheck
+      - name: Build client
+        run: npm run build
+      - name: Architecture budget
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/components/GameScreen.tsx')
+          print(f'GameScreen bytes={p.stat().st_size}')
+          assert p.stat().st_size <= 155000
+          PY
+      - name: Install server
+        run: npm ci --prefix server --no-fund
+      - name: Audit server
+        run: npm audit --prefix server
+      - name: Check server
+        run: npm run check --prefix server
+      - name: Test server
+        run: npm test --prefix server
+      - name: Commit validated integration
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/engine/ContentDB.mjs server/engine/ContentStudio.mjs server/engine/OfficialStateSchema.mjs server/engine/OfficialSystems.mjs server/engine/OfficialInventoryEconomyDomain.mjs server/engine/OfficialActionRegistry.mjs server/engine/OfficialSnapshotReadModel.mjs server/engine/GameState.mjs src/components/GameEditor.tsx src/components/CharacterPanel.tsx package.json package-lock.json server/package.json server/package-lock.json
+          if git diff --cached --quiet; then echo 'No integration changes to commit'; exit 0; fi
+          git commit -m 'feat(9.17-9.26): integrate Road to 10 systems'
+          git push origin HEAD:moria-9.17-9.26-road-to-10
