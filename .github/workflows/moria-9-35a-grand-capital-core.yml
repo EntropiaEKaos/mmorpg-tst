@@ -1,0 +1,57 @@
+name: Mor'ia 9.35A Grand Capital Core
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-35a-grand-capital-core.py'
+      - '.github/workflows/moria-9-35a-grand-capital-core.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.35A grand-capital core
+        run: python tools/upgrade-moria-9-35a-grand-capital-core.py
+      - name: Verify 9.35A architecture and documentation
+        run: |
+          grep -q "MAX_MAP_DIMENSION = 192" server/engine/World.mjs
+          grep -q "settlementClass" server/engine/World.mjs
+          grep -q "urbanBounds" server/engine/World.mjs
+          grep -q "destination playable area" server/engine/ContentIntegrity.mjs
+          grep -q "settlementClasses" server/engine/ContentStudio.mjs
+          grep -q "validateStudioRecord(type, candidate, contentDB)" server/server.js
+          grep -q "legacy maps stay 80x80" server/test/grand-capital-foundation-9-35.test.mjs
+          grep -q "9.35B" docs/MORIA_9_35_GRAND_CAPITAL_FOUNDATION.md
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated Mor'ia 9.35A core
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/engine/World.mjs server/engine/ContentIntegrity.mjs server/engine/ContentStudio.mjs server/server.js server/test/grand-capital-foundation-9-35.test.mjs docs/MORIA_9_35_GRAND_CAPITAL_FOUNDATION.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.35a): add authoritative grand-capital dimensions'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr
