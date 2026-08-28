@@ -1,0 +1,55 @@
+name: Mor'ia 9.30 Adventure + Quests PT-BR
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-30-adventure-quests-ptbr.py'
+      - '.github/workflows/moria-9-30-adventure-quests-ptbr.yml'
+permissions:
+  contents: write
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.30 adventure and quest pass
+        run: python tools/upgrade-moria-9-30-adventure-quests-ptbr.py
+      - name: Verify upgrade anchors
+        run: |
+          grep -q "tr(active.title)" src/components/AdventureBoard.tsx
+          grep -q "tr(contract.description)" src/components/AdventureBoard.tsx
+          grep -q "tr(q.description)" src/components/QuestLog.tsx
+          grep -q "tr(a.description)" src/components/QuestLog.tsx
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated Mor'ia 9.30 pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/i18n/pt-BR.928.json src/components/AdventureBoard.tsx src/components/QuestLog.tsx
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.30): localize adventure board and quest journal'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr
