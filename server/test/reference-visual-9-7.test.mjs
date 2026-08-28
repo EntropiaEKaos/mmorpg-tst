@@ -77,3 +77,31 @@ test('9.7 city authoring exposes real houses and shared authoritative geometry',
   assert.match(world, /movement collision now share/);
   assert.match(studio, /house/);
 });
+
+
+test('9.7 world nameplates resolve distance fade, priority collisions and boss styling globally', async () => {
+  const labels = await read('src/game/worldNameplates.ts');
+  const screen = await read('src/components/GameScreen.tsx');
+  const render = await read('src/game/render.ts');
+  assert.match(labels, /collisionPadding/);
+  assert.match(labels, /bossAlwaysVisible/);
+  assert.match(labels, /sort\(\(a, b\) => priority\(b\) - priority\(a\)/);
+  assert.match(labels, /visibilityAlpha/);
+  assert.match(labels, /'BOSS'/);
+  assert.match(screen, /createWorldLabelQueue\(p\.pos,p\.targetId\)/);
+  assert.doesNotMatch(render, /const hpBarW = size \* 0\.9/);
+});
+
+test('9.7 city designer directly manipulates authoritative building footprints', async () => {
+  const designer = await read('src/components/CityDesigner.tsx');
+  const studio = await read('server/engine/ContentStudio.mjs');
+  const admin = await read('server/adminPanel.mjs');
+  assert.match(designer, /DIRECT MANIPULATION/);
+  assert.match(designer, /onPointerMove=\{dragMove\}/);
+  assert.match(designer, /SELECTED BUILDING/);
+  assert.match(designer, /'house'/);
+  assert.match(studio, /monsterNameplateMode/);
+  assert.match(studio, /bossNameplateAlwaysVisible/);
+  assert.match(admin, /meta\.kind === 'boolean'/);
+  assert.match(admin, /meta\.kind === 'json'/);
+});

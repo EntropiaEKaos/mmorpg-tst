@@ -42,6 +42,20 @@ export interface GameMap {
   nameplateShowValues?: boolean;
   residentialRingEnabled?: boolean;
   residentialRingDensity?: number;
+  npcNameplateMode?: 'nearby' | 'always' | 'hidden';
+  npcNameplateDistance?: number;
+  monsterNameplateMode?: 'nearby' | 'always' | 'hidden';
+  monsterNameplateDistance?: number;
+  monsterBarDistance?: number;
+  monsterNameplateFontSize?: number;
+  monsterNameplateBarWidth?: number;
+  monsterNameplateBarHeight?: number;
+  monsterNameplateShowLevel?: boolean;
+  monsterNameplateShowValues?: boolean;
+  bossNameplateScale?: number;
+  bossNameplateAlwaysVisible?: boolean;
+  nameplateCollisionPadding?: number;
+  nameplateFadeStart?: number;
 }
 
 const BIOME_SEEDS: Record<BiomeType, number> = { plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 };
@@ -211,6 +225,20 @@ export function syncServerMaps(rawMaps: unknown): void {
       nameplateShowValues: typeof raw.nameplateShowValues === 'boolean' ? raw.nameplateShowValues : base?.nameplateShowValues,
       residentialRingEnabled: typeof raw.residentialRingEnabled === 'boolean' ? raw.residentialRingEnabled : (base?.residentialRingEnabled ?? false),
       residentialRingDensity: integer(raw.residentialRingDensity, 0, 10, base?.residentialRingDensity ?? 0),
+      npcNameplateMode: ['nearby','always','hidden'].includes(String(raw.npcNameplateMode)) ? raw.npcNameplateMode : (base?.npcNameplateMode ?? 'nearby'),
+      npcNameplateDistance: Number.isFinite(Number(raw.npcNameplateDistance)) ? Math.max(2, Math.min(20, Number(raw.npcNameplateDistance))) : base?.npcNameplateDistance,
+      monsterNameplateMode: ['nearby','always','hidden'].includes(String(raw.monsterNameplateMode)) ? raw.monsterNameplateMode : (base?.monsterNameplateMode ?? 'nearby'),
+      monsterNameplateDistance: Number.isFinite(Number(raw.monsterNameplateDistance)) ? Math.max(2, Math.min(24, Number(raw.monsterNameplateDistance))) : base?.monsterNameplateDistance,
+      monsterBarDistance: Number.isFinite(Number(raw.monsterBarDistance)) ? Math.max(1, Math.min(20, Number(raw.monsterBarDistance))) : base?.monsterBarDistance,
+      monsterNameplateFontSize: Number.isFinite(Number(raw.monsterNameplateFontSize)) ? Math.max(7, Math.min(14, Number(raw.monsterNameplateFontSize))) : base?.monsterNameplateFontSize,
+      monsterNameplateBarWidth: Number.isFinite(Number(raw.monsterNameplateBarWidth)) ? Math.max(18, Math.min(72, Number(raw.monsterNameplateBarWidth))) : base?.monsterNameplateBarWidth,
+      monsterNameplateBarHeight: Number.isFinite(Number(raw.monsterNameplateBarHeight)) ? Math.max(2, Math.min(8, Number(raw.monsterNameplateBarHeight))) : base?.monsterNameplateBarHeight,
+      monsterNameplateShowLevel: typeof raw.monsterNameplateShowLevel === 'boolean' ? raw.monsterNameplateShowLevel : base?.monsterNameplateShowLevel,
+      monsterNameplateShowValues: typeof raw.monsterNameplateShowValues === 'boolean' ? raw.monsterNameplateShowValues : base?.monsterNameplateShowValues,
+      bossNameplateScale: Number.isFinite(Number(raw.bossNameplateScale)) ? Math.max(.8, Math.min(1.8, Number(raw.bossNameplateScale))) : base?.bossNameplateScale,
+      bossNameplateAlwaysVisible: typeof raw.bossNameplateAlwaysVisible === 'boolean' ? raw.bossNameplateAlwaysVisible : base?.bossNameplateAlwaysVisible,
+      nameplateCollisionPadding: Number.isFinite(Number(raw.nameplateCollisionPadding)) ? Math.max(0, Math.min(10, Number(raw.nameplateCollisionPadding))) : base?.nameplateCollisionPadding,
+      nameplateFadeStart: Number.isFinite(Number(raw.nameplateFadeStart)) ? Math.max(.2, Math.min(.95, Number(raw.nameplateFadeStart))) : base?.nameplateFadeStart,
       portals,
     });
   }

@@ -76,6 +76,7 @@ export function adminPanelHTML() {
   let currentTab = 'dashboard';
   let editing = null;
   let renderedItems = [];
+  let renderedSchema = [];
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, ch => ({
@@ -169,6 +170,7 @@ export function adminPanelHTML() {
     const fields = Array.isArray(data.fields) ? data.fields : [];
     const schema = Array.isArray(data.schema) ? data.schema : [];
     const schemaByField = new Map(schema.map(entry => [entry.id, entry]));
+    renderedSchema = schema;
     const options = data.options && typeof data.options === 'object' ? data.options : {};
     const readOnly = data.readOnly === true;
     renderedItems = items;
@@ -207,6 +209,8 @@ export function adminPanelHTML() {
           html += '<textarea id="fld_' + f + '" rows="5">' + escapeHtml(JSON.stringify(item[f] ?? [], null, 2)) + '</textarea>';
         } else if (meta.kind === 'textarea') {
           html += '<textarea id="fld_' + f + '" rows="2">' + escapeHtml(item[f] ?? '') + '</textarea>';
+        } else if (meta.kind === 'boolean') {
+          html += '<input id="fld_' + f + '" type="checkbox" ' + (item[f] === true ? 'checked' : '') + ' style="width:auto;transform:scale(1.2);margin:.55rem">';
         } else {
           html += '<input type="' + (meta.kind === 'number' ? 'number' : 'text') + '" value="' + escapeHtml(item[f] ?? '') + '" id="fld_' + f + '">';
         }
@@ -250,14 +254,14 @@ export function adminPanelHTML() {
     for (const f of fields) {
       const el = document.getElementById('fld_' + f);
       if (el) {
+        const meta = renderedSchema.find(entry => entry.id === f) || { kind: 'text' };
+        if (meta.kind === 'boolean') { body[f] = Boolean(el.checked); continue; }
         let v = el.value;
-        const numericFields = new Set(['hp','attack','defense','armor','mana','magic','critChance','lifesteal','thorns','moveSpeed','xpBonus','goldBonus','damageReduction','level','value','xp','size','goldMin','goldMax','count','posX','posY','speed','cooldown','damage','range','levelRequired','buffDuration','buffValue','scalingCoeff','rewardGold','rewardXp','rewardCoins','durationMs','seed','spawnX','spawnY','townX','townY','townRange']);
-        if (f === 'portals' || f === 'requires') {
+        if (meta.kind === 'json' || f === 'portals' || f === 'requires') {
           try { body[f] = JSON.parse(v || '[]'); } catch { alert(f + ' must be valid JSON.'); return; }
-          if (!Array.isArray(body[f])) { alert(f + ' must be a JSON array.'); return; }
           continue;
         }
-        if (numericFields.has(f)) v = parseFloat(v) || 0;
+        if (meta.kind === 'number') v = v === '' ? 0 : Number(v);
         body[f] = v;
       }
     }

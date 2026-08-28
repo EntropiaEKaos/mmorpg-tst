@@ -396,30 +396,8 @@ export function drawMonster(
 
   drawClassicMonsterSprite(ctx, cx, cy, entitySize, monster, time);
 
-  // Name + level
-  const nameColor = monster.type === 'boss' ? '#ffd700' : monster.type === 'elite' ? '#c832ff' : '#ff9090';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-  ctx.lineWidth = 2.5;
-  const nameStr = monster.level ? `${monster.name} [${monster.level}]` : monster.name;
-  ctx.strokeText(nameStr, cx, y - Math.round(size * 0.34));
-  ctx.fillStyle = nameColor;
-  ctx.fillText(nameStr, cx, y - Math.round(size * 0.34));
-
-  // HP bar
-  const hpBarW = size * 0.9;
-  const hpBarH = 3;
-  const hpX = cx - hpBarW / 2;
-  const hpY = y + size - 6;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(hpX - 1, hpY - 1, hpBarW + 2, hpBarH + 2);
-  ctx.fillStyle = '#3a1a1a';
-  ctx.fillRect(hpX, hpY, hpBarW, hpBarH);
-  const hpPct = Math.max(0, monster.hp / monster.maxHp);
-  ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(hpX, hpY, hpBarW * hpPct, hpBarH);
+  // World labels are rendered in a dedicated overlay pass so nearby entities
+  // can resolve collisions and distance fading as one layout problem.
 }
 
 export function drawNPC(
@@ -441,14 +419,7 @@ export function drawNPC(
 
   drawClassicNpcSprite(ctx, cx, cy, size, npc, time);
 
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-  ctx.lineWidth = 2.5;
-  ctx.strokeText(npc.name, cx, y - Math.round(size * 0.34));
-  ctx.fillStyle = '#9bd4ff';
-  ctx.fillText(npc.name, cx, y - Math.round(size * 0.34));
+  // NPC labels are also deferred to the shared world-nameplate pass.
 }
 
 // ===== BUILDINGS =====

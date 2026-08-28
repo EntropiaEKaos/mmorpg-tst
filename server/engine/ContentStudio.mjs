@@ -23,6 +23,7 @@ const ENEMY_EFFECTS = Object.freeze(['none', 'damage', 'drain']);
 const CITY_STYLES = Object.freeze(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
 const CITY_LANDMARK_KINDS = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower','house']);
 const CITY_PROP_KINDS = new Set(['banner','lamp','statue','brazier','crystal','grave','tent','sign','barrel','cart','pine','mushroom','anchor','rune']);
+const NAMEPLATE_MODES = Object.freeze(['nearby','always','hidden']);
 
 const field = (id, label = id, kind = 'text', extra = {}) => Object.freeze({ id, label, kind, ...extra });
 
@@ -76,6 +77,12 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('nameplateOffsetY', 'Nameplate Y offset', 'number'), field('nameplateScale', 'Nameplate scale', 'number'),
     field('nameplateBarWidth', 'Nameplate bar width', 'number'), field('nameplateBarHeight', 'Nameplate bar height', 'number'), field('nameplateFontSize', 'Name font size', 'number'),
     field('nameplateShowValues', 'Show HP/Mana values', 'boolean'), field('residentialRingEnabled', 'Decorative residential ring', 'boolean'), field('residentialRingDensity', 'Residential density', 'number'),
+    field('npcNameplateMode', 'NPC labels', 'select', { optionKey: 'nameplateModes' }), field('npcNameplateDistance', 'NPC label distance', 'number'),
+    field('monsterNameplateMode', 'Monster labels', 'select', { optionKey: 'nameplateModes' }), field('monsterNameplateDistance', 'Monster label distance', 'number'), field('monsterBarDistance', 'Monster HP bar distance', 'number'),
+    field('monsterNameplateFontSize', 'Monster name font', 'number'), field('monsterNameplateBarWidth', 'Monster HP width', 'number'), field('monsterNameplateBarHeight', 'Monster HP height', 'number'),
+    field('monsterNameplateShowLevel', 'Show monster level', 'boolean'), field('monsterNameplateShowValues', 'Show monster HP values', 'boolean'),
+    field('bossNameplateScale', 'Boss plate scale', 'number'), field('bossNameplateAlwaysVisible', 'Boss labels always visible', 'boolean'),
+    field('nameplateCollisionPadding', 'Label collision padding', 'number'), field('nameplateFadeStart', 'Label fade start ratio', 'number'),
     field('districts', 'Districts', 'json'), field('landmarks', 'Landmarks', 'json'), field('props', 'Street props', 'json'),
     field('access', 'Access', 'select', { optionKey: 'mapAccess' }), field('portals', 'Portals', 'json'),
   ]),
@@ -252,9 +259,12 @@ export function validateStudioRecord(type, record) {
     if (record.portals !== undefined && !Array.isArray(record.portals)) return 'portals must be a JSON array';
     if (record.cityStyle !== undefined && record.cityStyle !== '' && !CITY_STYLES.includes(String(record.cityStyle))) return 'cityStyle is not supported';
     for (const key of ['cityAccent','roofColor','wallColor','roadColor']) if (record[key] !== undefined && record[key] !== '' && !COLOR_RE.test(String(record[key]))) return `${key} must be a CSS hex color`;
-    for (const [key,min,max] of [['nameplateOffsetY',-32,12],['nameplateScale',0.55,1.5],['nameplateBarWidth',18,64],['nameplateBarHeight',2,8],['nameplateFontSize',7,14],['residentialRingDensity',0,10]]) { const e=numberIn(record,key,min,max,{required:false}); if(e)return e; }
+    for (const [key,min,max] of [['nameplateOffsetY',-32,12],['nameplateScale',0.55,1.5],['nameplateBarWidth',18,64],['nameplateBarHeight',2,8],['nameplateFontSize',7,14],['residentialRingDensity',0,10],['npcNameplateDistance',2,20],['monsterNameplateDistance',2,24],['monsterBarDistance',1,20],['monsterNameplateFontSize',7,14],['monsterNameplateBarWidth',18,72],['monsterNameplateBarHeight',2,8],['bossNameplateScale',0.8,1.8],['nameplateCollisionPadding',0,10],['nameplateFadeStart',0.2,0.95]]) { const e=numberIn(record,key,min,max,{required:false}); if(e)return e; }
+    if (record.npcNameplateMode !== undefined && !NAMEPLATE_MODES.includes(String(record.npcNameplateMode))) return 'npcNameplateMode is not supported';
+    if (record.monsterNameplateMode !== undefined && !NAMEPLATE_MODES.includes(String(record.monsterNameplateMode))) return 'monsterNameplateMode is not supported';
     if (record.nameplateShowValues !== undefined && typeof record.nameplateShowValues !== 'boolean') return 'nameplateShowValues must be boolean';
     if (record.residentialRingEnabled !== undefined && typeof record.residentialRingEnabled !== 'boolean') return 'residentialRingEnabled must be boolean';
+    for (const key of ['monsterNameplateShowLevel','monsterNameplateShowValues','bossNameplateAlwaysVisible']) if (record[key] !== undefined && typeof record[key] !== 'boolean') return `${key} must be boolean`;
     if (record.districts !== undefined) {
       if (!Array.isArray(record.districts) || record.districts.length > 8) return 'districts must be a JSON array with at most 8 entries';
       for (const entry of record.districts) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'district entries must be objects'; for (const key of ['x','y']) { const e=playableCoord(entry,key); if(e)return `district ${e}`; } const e=numberIn(entry,'radius',1,12,{required:true,integer:true}); if(e)return `district ${e}`; if(entry.color && !COLOR_RE.test(String(entry.color))) return 'district color must be a CSS hex color'; }
@@ -324,7 +334,7 @@ export function getContentStudioSchema(type, contentDB) {
   const options = {
     rarities: [...RARITIES], slots: [...ITEM_SLOTS], monsterTypes: [...MONSTER_TYPES], npcRoles: [...NPC_ROLES],
     spellTypes: [...SPELL_TYPES], buffTypes: [...BUFF_TYPES], spellTargetModes: [...SPELL_TARGET_MODES], allyEffects: [...ALLY_EFFECTS], enemyEffects: [...ENEMY_EFFECTS], vocations: Object.keys(VOCATIONS).sort(),
-    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], cityStyles: [...CITY_STYLES], eventTypes: [...EVENT_TYPES],
+    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], cityStyles: [...CITY_STYLES], eventTypes: [...EVENT_TYPES], nameplateModes: [...NAMEPLATE_MODES],
     npcs: contentDB.get('npcs').map(entry => entry.id).filter(Boolean).sort(),
     quests: contentDB.get('quests').map(entry => entry.id).filter(Boolean).sort(),
     items: contentDB.get('items').map(entry => entry.id).filter(Boolean).sort(),

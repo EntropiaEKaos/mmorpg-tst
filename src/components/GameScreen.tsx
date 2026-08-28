@@ -57,6 +57,7 @@ import Weather from './Weather';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawHousing } from '../game/housingPresentation';
+import { createWorldLabelQueue } from '../game/worldNameplates';
 import CastBar from './CastBar';
 import RaidWarning from './RaidWarning';
 import { triggerCast } from './CastBar';
@@ -2205,12 +2206,14 @@ export default function GameScreen({ account, onLogout }: Props) {
     // Houses and decoration are presentation-only projections of global server state.
     if (serverSync.isActive()) drawHousing(ctx, p.housing, cam, TILE_SIZE, now);
 
+    const worldLabels=createWorldLabelQueue(p.pos,p.targetId);
     // NPCs
     for (const n of npcsRef.current) {
       const sx = (n.pos.x - cam.x) * TILE_SIZE;
       const sy = (n.pos.y - cam.y) * TILE_SIZE;
       if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
       drawNPC(ctx, sx, sy, TILE_SIZE, n, now);
+      worldLabels.npc(n,sx,sy,TILE_SIZE);
     }
 
     // Portals (map transitions)
@@ -2283,6 +2286,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         color: m.color, emoji: m.emoji, msSize: m.size,
         level: m.level, type: m.type,
       }, now);
+      worldLabels.monster(m,mx,my,sx,sy,TILE_SIZE);
     }
 
     // Player
@@ -2482,6 +2486,8 @@ export default function GameScreen({ account, onLogout }: Props) {
       TILE_SIZE,
       now,
     );
+
+    worldLabels.draw(ctx,MAPS[currentMapIdRef.current]||MAPS.eldoria);
 
     ctx.restore();
   };
