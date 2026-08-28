@@ -1,0 +1,69 @@
+name: Mor'ia Road to 10 Visual Review
+on:
+  push:
+    branches: [moria-9.17-9.26-road-to-10]
+    paths:
+      - 'tools/capture-road-to-10.mjs'
+      - '.github/workflows/capture-road-to-10.yml'
+permissions:
+  contents: write
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.17-9.26-road-to-10
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install client
+        run: npm ci
+      - name: Install browser harness
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start Mor'ia client
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-vite.log 2>&1 &
+          echo $! > /tmp/moria-vite.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/moria-vite.log
+          exit 1
+      - name: Capture all ten Road to 10 surfaces
+        run: node tools/capture-road-to-10.mjs
+      - name: Validate visual evidence
+        run: |
+          test "$(find docs/screenshots -maxdepth 1 -name 'moria-9-1[7-9]-*.png' -o -name 'moria-9-2[0-6]-*.png' | wc -l)" -ge 10
+          test ! -s tmp/road-to-10-review/browser-console.txt
+          cat tmp/road-to-10-review/capture-manifest.json
+      - name: Upload visual review artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9-26-1-road-to-10-visual-review
+          path: |
+            docs/screenshots/moria-9-17-integration.png
+            docs/screenshots/moria-9-18-regional-economy.png
+            docs/screenshots/moria-9-19-profession-specialization.png
+            docs/screenshots/moria-9-20-beast-care.png
+            docs/screenshots/moria-9-21-faction-politics.png
+            docs/screenshots/moria-9-22-siege-warfare.png
+            docs/screenshots/moria-9-23-dynamic-world.png
+            docs/screenshots/moria-9-24-dungeon-blueprints.png
+            docs/screenshots/moria-9-25-quest-consequences.png
+            docs/screenshots/moria-9-26-housing-services.png
+            tmp/road-to-10-review/browser-console.txt
+            tmp/road-to-10-review/capture-manifest.json
+      - name: Commit visual evidence
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/screenshots/moria-9-17-integration.png docs/screenshots/moria-9-18-regional-economy.png docs/screenshots/moria-9-19-profession-specialization.png docs/screenshots/moria-9-20-beast-care.png docs/screenshots/moria-9-21-faction-politics.png docs/screenshots/moria-9-22-siege-warfare.png docs/screenshots/moria-9-23-dynamic-world.png docs/screenshots/moria-9-24-dungeon-blueprints.png docs/screenshots/moria-9-25-quest-consequences.png docs/screenshots/moria-9-26-housing-services.png
+          if git diff --cached --quiet; then echo 'Visual evidence already current'; exit 0; fi
+          git commit -m 'docs(9.26.1): add Road to 10 browser evidence'
+          git push origin HEAD:moria-9.17-9.26-road-to-10
