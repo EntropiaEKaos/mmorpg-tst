@@ -4,6 +4,7 @@ on:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
       - 'tools/upgrade-moria-9-40a-grand-shadowfen.py'
+      - 'tools/fix-moria-9-40a-fresh-shadowfen.py'
       - '.github/workflows/moria-9-40a-grand-shadowfen.yml'
 permissions:
   contents: write
@@ -22,8 +23,9 @@ jobs:
           cache: npm
       - name: Apply Mor'ia 9.40A Grand Shadowfen
         run: |
-          python -m py_compile tools/upgrade-moria-9-40a-grand-shadowfen.py
+          python -m py_compile tools/upgrade-moria-9-40a-grand-shadowfen.py tools/fix-moria-9-40a-fresh-shadowfen.py
           python tools/upgrade-moria-9-40a-grand-shadowfen.py
+          python tools/fix-moria-9-40a-fresh-shadowfen.py
       - name: Verify Grand Shadowfen source contract
         run: |
           set -euxo pipefail
@@ -36,7 +38,7 @@ jobs:
           grep -Fq "westCanal" server/engine/World.mjs
           grep -Fq "eastCanal" server/engine/World.mjs
           grep -Fq "crossCanal" server/engine/World.mjs
-          grep -Fq "marsh-wards" server/engine/ContentStudio.mjs || grep -Fq "urbanPlans" server/engine/ContentStudio.mjs
+          grep -Fq "urbanPlans" server/engine/ContentStudio.mjs
           grep -Fq "migrateGrandShadowfenData" server/engine/ContentDB.mjs
           test "$(grep -Fc 'migrateGrandShadowfenData(this.data);' server/engine/ContentDB.mjs)" -ge 2
           grep -Fq "GRAND_SHADOWFEN_MAP" server/engine/AlphaContent.mjs
