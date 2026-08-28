@@ -1,1 +1,1 @@
-moria 9.27 second-pass world graphics refinement
+moria 9.27 contract-safe second-pass world graphics refinement
