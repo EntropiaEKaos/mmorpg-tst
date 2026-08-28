@@ -18,7 +18,9 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply Mor'ia 9.9
-        run: python3 tools/apply-moria-9-9-elemental.py
+        run: |
+          python3 tools/apply-moria-9-9-elemental.py
+          python3 tools/fix-moria-9-9-legacy-energy.py
       - name: Validate client and server
         run: |
           npm ci
@@ -70,6 +72,6 @@ jobs:
       - name: Remove temporary release tooling
         run: |
           git pull --rebase origin moria-9.9-elemental-scaling-tooltips
-          git rm -f .github/workflows/run-moria-9-9-elemental.yml tools/apply-moria-9-9-elemental.py tools/moria-9-9.trigger
+          git rm -f .github/workflows/run-moria-9-9-elemental.yml tools/apply-moria-9-9-elemental.py tools/fix-moria-9-9-legacy-energy.py tools/moria-9-9.trigger
           git commit -m "chore(9.9): remove temporary release tooling"
           git push origin HEAD:moria-9.9-elemental-scaling-tooltips
