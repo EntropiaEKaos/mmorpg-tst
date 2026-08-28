@@ -1,0 +1,100 @@
+name: Mor'ia 9.36D Eldoria Urban Polish
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-36d-urban-polish.py'
+      - '.github/workflows/moria-9-36d-urban-polish.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 34
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.36D urban polish
+        run: python tools/upgrade-moria-9-36d-urban-polish.py
+      - name: Verify urban polish source contract
+        run: |
+          grep -q 'const royalAxes' server/engine/World.mjs
+          grep -q 'const civicPlaza' server/engine/World.mjs
+          grep -q 'const crownForecourt' server/engine/World.mjs
+          grep -q 'const marketSquare' src/game/maps.ts
+          grep -q 'const dawnSquare' src/game/maps.ts
+          grep -q 'const gardenPromenade' src/game/maps.ts
+          grep -q "Praça da Coroa" server/engine/GrandEldoria.mjs
+          grep -q 'blocos ocupados' src/components/CityDesigner.tsx
+          test -s server/test/grand-eldoria-urban-polish-9-36.test.mjs
+          grep -q '9.36D — Urban Polish' docs/MORIA_9_36_GRAND_ELDORIA.md
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate focused urban contract
+        run: |
+          npm ci --prefix server
+          node --test server/test/grand-eldoria-urban-polish-9-36.test.mjs
+      - name: Validate complete server suite
+        run: |
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Install stable visual QA browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npm audit --audit-level=high
+          npx playwright install --with-deps chromium
+      - name: Start authoritative QA server and client
+        run: |
+          rm -f /tmp/moria-936d-content.json /tmp/moria-936d-content.json.tmp
+          ADMIN_TOKEN=moria-visual-qa MORIA_CONTENT_DB=/tmp/moria-936d-content.json PORT=3000 npm start --prefix server > /tmp/moria-936d-server.log 2>&1 &
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-936d-vite.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null && curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/health >/dev/null
+          maps=$(curl -fsS 'http://127.0.0.1:3000/admin/api/maps?token=moria-visual-qa')
+          echo "$maps" | grep -q '"width":160'
+          echo "$maps" | grep -q 'Praça da Coroa'
+          curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null
+      - name: Capture and assert polished Grand Eldoria visuals
+        run: |
+          rm -rf artifacts/moria-9.36c-screenshots
+          node tools/capture-moria-9-36c.mjs
+          test -s artifacts/moria-9.36c-screenshots/eldoria-minimap.png
+          test -s artifacts/moria-9.36c-screenshots/eldoria-city-designer.png
+          test -s artifacts/moria-9.36c-screenshots/eldoria-panorama.png
+          test $(stat -c%s artifacts/moria-9.36c-screenshots/eldoria-minimap.png) -gt 25000
+          test $(stat -c%s artifacts/moria-9.36c-screenshots/eldoria-city-designer.png) -gt 120000
+          test $(stat -c%s artifacts/moria-9.36c-screenshots/eldoria-panorama.png) -gt 140000
+      - name: Upload Mor'ia 9.36D screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9.36d-screenshots
+          path: artifacts/moria-9.36c-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit validated Mor'ia 9.36D pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/engine/World.mjs src/game/maps.ts server/engine/GrandEldoria.mjs src/components/CityDesigner.tsx server/test/grand-eldoria-urban-polish-9-36.test.mjs docs/MORIA_9_36_GRAND_ELDORIA.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.36d): add civic plazas and royal urban hierarchy'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr
