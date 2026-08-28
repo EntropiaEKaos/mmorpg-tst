@@ -1,4 +1,4 @@
-name: "Mor'ia 9.16 Living Realm Visual Gate"
+name: "Mor'ia 9.16 Living Realm Cleanup"
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  capture:
+  cleanup:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -20,58 +20,21 @@ jobs:
           ref: moria-9.11-9.16-living-realm
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Validate production client
-        shell: bash
-        run: |
-          npm ci
-          npm audit
-          npm run typecheck
-          npm run build
-          bytes=$(wc -c < src/components/GameScreen.tsx)
-          echo "GameScreen bytes=$bytes"
-          test "$bytes" -le 155000
-
-      - name: Install browser harness
-        shell: bash
-        run: |
-          mkdir -p /tmp/moria916-shot
-          cd /tmp/moria916-shot
-          npm init -y
-          npm install playwright@latest --no-fund --no-audit
-          npx playwright install --with-deps chromium
-          cp "$GITHUB_WORKSPACE/tools/capture-moria-9-16.mjs" capture.mjs
-
-      - name: Capture Living Realm surfaces
-        shell: bash
-        run: |
-          python3 -m http.server 4173 -d dist >/tmp/moria916-http.log 2>&1 &
-          cd /tmp/moria916-shot
-          node capture.mjs
-          test ! -s /tmp/moria916-capture/browser-errors.txt
-
-      - name: Version screenshots and release documentation
-        shell: bash
-        run: |
-          python3 tools/finalize-moria-9-16-docs.py
-
-      - name: Upload browser review
-        uses: actions/upload-artifact@v4
-        with:
-          name: moria-9-16-living-realm-visual-review
-          path: /tmp/moria916-capture
-          retention-days: 7
-
-      - name: Commit visual evidence
+      - name: Remove temporary release tooling
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md docs/MORIA_9_11_9_16_LIVING_REALM.md docs/screenshots/moria-9-16-*.png
-          git commit -m "docs(9.16): version Living Realm browser evidence"
+          git rm -f \
+            .github/workflows/capture-moria-9-16-living-realm.yml \
+            .github/workflows/run-moria-9-11-16-living-realm.yml \
+            tools/apply-moria-9-11-16-living-realm.py \
+            tools/harden-moria-9-11-16-living-realm.py \
+            tools/fix-moria-9-16-client-map.py \
+            tools/fix-moria-9-16-compat.py \
+            tools/capture-moria-9-16.mjs \
+            tools/finalize-moria-9-16-docs.py \
+            tools/moria-9-16.trigger \
+            tools/moria-9-16-capture.trigger
+          git commit -m "chore(9.16): remove temporary release tooling"
           git push origin HEAD:moria-9.11-9.16-living-realm
