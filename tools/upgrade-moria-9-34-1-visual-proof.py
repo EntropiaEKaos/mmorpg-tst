@@ -18,86 +18,106 @@ visual.write_text(text, encoding='utf-8')
 
 tooltip = Path('src/components/Tooltip.tsx')
 text = tooltip.read_text(encoding='utf-8')
-old_bus = """// Singleton tooltip state
-let tooltipListeners: Array<(d: TooltipData | null) => void> = [];
 
-function showGlobalTooltip(data: TooltipData) {
-  tooltipListeners.forEach((fn) => fn(data));
+renderer_start = text.find('/** Portal-rendered tooltip that lives at the body level */')
+renderer_end_marker = 'export default GlobalTooltipRenderer;'
+renderer_end = text.find(renderer_end_marker)
+if renderer_start < 0 or renderer_end < 0:
+    raise SystemExit('Tooltip renderer block anchor not found')
+renderer_end += len(renderer_end_marker)
+new_renderer = r'''/** Shared body-level portal renderer used by both local triggers and the legacy global renderer. */
+function TooltipPortal({ data }: { data: TooltipData }) {
+  const padding = 12;
+  const tooltipW = 280;
+  const tooltipH = 200;
+  const r = data.rect;
+  let x = 0, y = 0;
+  const preferred = data.preferred || 'top';
+
+  if (preferred === 'top' && r.top - tooltipH - padding > 0) {
+    x = r.left + r.width / 2 - tooltipW / 2;
+    y = r.top - tooltipH - padding;
+  } else if (preferred === 'bottom' && r.bottom + tooltipH + padding < window.innerHeight) {
+    x = r.left + r.width / 2 - tooltipW / 2;
+    y = r.bottom + padding;
+  } else if (preferred === 'left' && r.left - tooltipW - padding > 0) {
+    x = r.left - tooltipW - padding;
+    y = r.top + r.height / 2 - tooltipH / 2;
+  } else if (preferred === 'right' && r.right + tooltipW + padding < window.innerWidth) {
+    x = r.right + padding;
+    y = r.top + r.height / 2 - tooltipH / 2;
+  } else {
+    x = r.left + r.width / 2 - tooltipW / 2;
+    y = r.bottom + padding;
+    if (y + tooltipH > window.innerHeight) y = Math.max(4, r.top - tooltipH - padding);
+  }
+
+  x = Math.max(4, Math.min(window.innerWidth - tooltipW - 4, x));
+  y = Math.max(4, Math.min(window.innerHeight - tooltipH - 4, y));
+
+  return createPortal(
+    <div
+      data-tooltip-portal="true"
+      style={{ position: 'fixed', left: `${x}px`, top: `${y}px`, maxWidth: `${tooltipW}px`, zIndex: 99999, pointerEvents: 'none' }}
+    >
+      <div
+        className="rounded-lg border-2 px-3 py-2 text-xs backdrop-blur-md shadow-2xl"
+        style={{
+          background: 'linear-gradient(180deg, rgba(40,20,40,0.98) 0%, rgba(20,10,20,0.98) 100%)',
+          borderColor: '#ff00ff',
+          boxShadow: '0 0 20px rgba(255,0,255,0.4), 0 4px 30px rgba(0,0,0,0.8)',
+          color: '#fff',
+          minWidth: '160px',
+        }}
+      >
+        {data.content}
+      </div>
+    </div>,
+    ensureRoot(),
+  );
 }
 
-function hideGlobalTooltip() {
-  tooltipListeners.forEach((fn) => fn(null));
-}
-"""
-new_bus = """// Browser-level tooltip event bus. This remains presentation-only while avoiding
-// module-instance coupling under HMR, split bundles and isolated visual-QA entrypoints.
-const TOOLTIP_SHOW_EVENT = 'moria-tooltip-show';
-const TOOLTIP_HIDE_EVENT = 'moria-tooltip-hide';
-
-function showGlobalTooltip(data: TooltipData) {
-  window.dispatchEvent(new CustomEvent<TooltipData>(TOOLTIP_SHOW_EVENT, { detail: data }));
-}
-
-function hideGlobalTooltip() {
-  window.dispatchEvent(new Event(TOOLTIP_HIDE_EVENT));
-}
-"""
-if new_bus not in text:
-    if old_bus not in text:
-        raise SystemExit('Tooltip singleton bus anchor not found')
-    text = text.replace(old_bus, new_bus, 1)
-
-old_effect = """  useEffect(() => {
+/** Legacy global renderer retained for compatibility with any direct global callers. */
+function GlobalTooltipRenderer() {
+  const [data, setData] = useState<TooltipData | null>(null);
+  useEffect(() => {
     tooltipListeners.push(setData);
     return () => {
       tooltipListeners = tooltipListeners.filter((fn) => fn !== setData);
     };
   }, []);
-"""
-new_effect = """  useEffect(() => {
-    const handleShow = (event: Event) => setData((event as CustomEvent<TooltipData>).detail);
-    const handleHide = () => setData(null);
-    window.addEventListener(TOOLTIP_SHOW_EVENT, handleShow);
-    window.addEventListener(TOOLTIP_HIDE_EVENT, handleHide);
-    return () => {
-      window.removeEventListener(TOOLTIP_SHOW_EVENT, handleShow);
-      window.removeEventListener(TOOLTIP_HIDE_EVENT, handleHide);
-    };
-  }, []);
-"""
-if new_effect not in text:
-    if old_effect not in text:
-        raise SystemExit('Tooltip renderer effect anchor not found')
-    text = text.replace(old_effect, new_effect, 1)
+  return data ? <TooltipPortal data={data} /> : null;
+}
 
-old_enter = """  const handleEnter = useCallback(() => {
-    if (disabled) return;
-    timerRef.current = setTimeout(() => {
-"""
-new_enter = """  const handleEnter = useCallback(() => {
+export default GlobalTooltipRenderer;'''
+text = text[:renderer_start] + new_renderer + text[renderer_end:]
+
+t_start = text.find("export function T({ content, children, position = 'top', delay = 150, disabled }: TriggerProps) {")
+t_end_marker = '/** Shorthand for T */'
+t_end = text.find(t_end_marker, t_start)
+if t_start < 0 or t_end < 0:
+    raise SystemExit('Tooltip trigger block anchor not found')
+new_t = r'''export function T({ content, children, position = 'top', delay = 150, disabled }: TriggerProps) {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [localData, setLocalData] = useState<TooltipData | null>(null);
+
+  const handleEnter = useCallback(() => {
     if (disabled) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-"""
-if new_enter not in text:
-    if old_enter not in text:
-        raise SystemExit('Tooltip enter anchor not found')
-    text = text.replace(old_enter, new_enter, 1)
+      const node = triggerRef.current;
+      if (!node) return;
+      setLocalData({ content, rect: node.getBoundingClientRect(), preferred: position });
+    }, delay);
+  }, [content, position, delay, disabled]);
 
-leave_anchor = """  const handleLeave = useCallback(() => {
+  const handleLeave = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    hideGlobalTooltip();
+    timerRef.current = undefined;
+    setLocalData(null);
   }, []);
 
-"""
-native_effect = """  const handleLeave = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    hideGlobalTooltip();
-  }, []);
-
-  // Native wrapper listeners deliberately use focusin/focusout because focus is
-  // owned by child controls. This is robust for mouse, pen, keyboard, HMR and
-  // isolated visual-QA entrypoints without changing any gameplay authority.
   useEffect(() => {
     const node = triggerRef.current;
     if (!node) return;
@@ -110,36 +130,22 @@ native_effect = """  const handleLeave = useCallback(() => {
       node.removeEventListener('pointerleave', handleLeave);
       node.removeEventListener('focusin', handleEnter);
       node.removeEventListener('focusout', handleLeave);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [handleEnter, handleLeave]);
 
-"""
-if native_effect not in text:
-    if leave_anchor not in text:
-        raise SystemExit('Tooltip native listener anchor not found')
-    text = text.replace(leave_anchor, native_effect, 1)
+  return (
+    <>
+      <div ref={triggerRef} data-tooltip-trigger="true" className="inline-flex">
+        {children}
+      </div>
+      {localData ? <TooltipPortal data={localData} /> : null}
+    </>
+  );
+}
 
-old_events = """      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
-      className=\"inline-flex\"
-"""
-old_events_2 = """      onPointerEnter={handleEnter}
-      onPointerLeave={handleLeave}
-      onFocusCapture={handleEnter}
-      onBlurCapture={handleLeave}
-      data-tooltip-trigger=\"true\"
-      className=\"inline-flex\"
-"""
-new_events = """      data-tooltip-trigger=\"true\"
-      className=\"inline-flex\"
-"""
-if new_events not in text:
-    if old_events in text:
-        text = text.replace(old_events, new_events, 1)
-    elif old_events_2 in text:
-        text = text.replace(old_events_2, new_events, 1)
-    else:
-        raise SystemExit('Tooltip event anchor not found')
+'''
+text = text[:t_start] + new_t + text[t_end:]
 tooltip.write_text(text, encoding='utf-8')
 
 capture = Path('tools/capture-moria-9-34.mjs')
@@ -161,30 +167,19 @@ new_action = """  if (panel === 'actionbar') {
       throw new Error(`Mor'ia 9.34 Action Bar is not visibly framed: ${JSON.stringify(box)}`);
     }
     const hudText = await hud.innerText();
-    const normalizedHudText = hudText.toLocaleUpperCase('pt-BR');
-    if (!normalizedHudText.includes('BARRA DE AÇÕES')) throw new Error(`Mor'ia 9.34 Action Bar title missing: ${hudText}`);
+    if (!hudText.toLocaleUpperCase('pt-BR').includes('BARRA DE AÇÕES')) throw new Error(`Mor'ia 9.34 Action Bar title missing: ${hudText}`);
     const spellSlot = page.locator('[data-qa-actionbar] .moria-hotbar-slot').first();
     const tooltipTrigger = spellSlot.locator('..');
     const triggerClass = await tooltipTrigger.getAttribute('class');
     const triggerQa = await tooltipTrigger.getAttribute('data-tooltip-trigger');
     if (!triggerClass?.includes('inline-flex') || triggerQa !== 'true') throw new Error(`Mor'ia 9.34 tooltip trigger wrapper not found: ${triggerClass} / ${triggerQa}`);
-    if (await spellSlot.isDisabled()) throw new Error(\"Mor'ia 9.34 spell proof slot is unexpectedly disabled\");
-    await page.evaluate(() => {
-      window.__moriaTooltipShowCount = 0;
-      window.addEventListener('moria-tooltip-show', () => { window.__moriaTooltipShowCount += 1; }, { once: false });
-    });
+    if (await spellSlot.isDisabled()) throw new Error("Mor'ia 9.34 spell proof slot is unexpectedly disabled");
     await spellSlot.focus();
     const focused = await spellSlot.evaluate((node) => node === document.activeElement);
-    if (!focused) throw new Error(\"Mor'ia 9.34 spell proof slot did not receive focus\");
-    await page.waitForTimeout(260);
-    const diagnostics = await page.evaluate(() => ({
-      showCount: window.__moriaTooltipShowCount || 0,
-      activeClass: document.activeElement?.getAttribute?.('class') || '',
-      rootExists: Boolean(document.getElementById('__global_tooltip_root__')),
-    }));
-    if (diagnostics.showCount < 1) throw new Error(`Mor'ia 9.34 tooltip trigger did not dispatch: ${JSON.stringify(diagnostics)}`);
-    await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });
-    const tooltipText = await page.locator('#__global_tooltip_root__').innerText();
+    if (!focused) throw new Error("Mor'ia 9.34 spell proof slot did not receive focus");
+    const portal = page.locator('#__global_tooltip_root__ [data-tooltip-portal=\"true\"]');
+    await portal.waitFor({ state: 'visible', timeout: 3000 });
+    const tooltipText = await portal.innerText();
     for (const required of ['Fúria', 'Atalho:', 'Custo de Mana:', 'Recarga:', 'Combos reativos']) {
       if (!tooltipText.includes(required)) throw new Error(`Mor'ia 9.34 Action Bar tooltip missing ${required}: ${tooltipText}`);
     }
@@ -192,59 +187,34 @@ new_action = """  if (panel === 'actionbar') {
 """
 if new_action not in text:
     if old_action not in text:
-        # Preserve already-hardened capture code from previous reruns, but add diagnostics if absent.
-        marker = "    await spellSlot.focus();\n"
-        diagnostic_block = """    await page.evaluate(() => {
-      window.__moriaTooltipShowCount = 0;
-      window.addEventListener('moria-tooltip-show', () => { window.__moriaTooltipShowCount += 1; }, { once: false });
-    });
-    await spellSlot.focus();
-"""
-        if diagnostic_block not in text:
-            if marker not in text:
-                raise SystemExit('capture Action Bar hardened anchor not found')
-            text = text.replace(marker, diagnostic_block, 1)
-        wait_marker = "    await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });\n"
-        diagnostic_wait = """    await page.waitForTimeout(260);
-    const diagnostics = await page.evaluate(() => ({
-      showCount: window.__moriaTooltipShowCount || 0,
-      activeClass: document.activeElement?.getAttribute?.('class') || '',
-      rootExists: Boolean(document.getElementById('__global_tooltip_root__')),
-    }));
-    if (diagnostics.showCount < 1) throw new Error(`Mor'ia 9.34 tooltip trigger did not dispatch: ${JSON.stringify(diagnostics)}`);
-    await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });
-"""
-        if diagnostic_wait not in text:
-            if wait_marker not in text:
-                raise SystemExit('capture tooltip wait anchor not found')
-            text = text.replace(wait_marker, diagnostic_wait, 1)
-    else:
-        text = text.replace(old_action, new_action, 1)
+        raise SystemExit('capture Action Bar anchor not found')
+    text = text.replace(old_action, new_action, 1)
 capture.write_text(text, encoding='utf-8')
 
 Path('docs/MORIA_9_34_1_VISUAL_PROOF.md').write_text("""# Mor'ia 9.34.1 — Visual Proof Hardening
 
 ## Motivo
 
-A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate textual não detectou: a Árvore de Talentos ainda exibia `You have` em inglês e `actionbar.png` podia ser aceito mesmo com a barra fora do enquadramento. O endurecimento posterior confirmou que o slot estava habilitado e recebia foco, isolando a fragilidade na ativação do tooltip sob o entrypoint de QA.
+A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate textual não detectou: a Árvore de Talentos ainda exibia `You have` em inglês e `actionbar.png` podia ser aceito mesmo com a barra fora do enquadramento. O endurecimento posterior provou que o slot estava habilitado e recebia foco; a fragilidade restante estava no acoplamento entre o trigger e o renderer singleton global no entrypoint isolado de QA.
 
 ## Correções
 
 - adiciona `You have -> Você tem` ao catálogo PT-BR;
-- fixa uma posição determinística da Action Bar apenas no `visual-qa.html`;
-- exige geometria real e enquadramento completo da Action Bar em 1440x1000;
-- valida o título em PT-BR sem depender da capitalização CSS;
-- substitui o singleton de listeners por eventos do navegador (`moria-tooltip-show` / `moria-tooltip-hide`);
-- o trigger real usa listeners nativos `pointerenter/pointerleave` e `focusin/focusout` no wrapper, incluindo foco de controles filhos;
-- cancela timers concorrentes antes de agendar nova abertura;
-- mantém `data-tooltip-trigger=\"true\"` como contrato estrutural de QA;
-- a captura prova que o slot está habilitado, recebe foco, dispara o evento real e abre o portal real;
-- o tooltip deve conter `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
-- `You have` passa a ser vazamento proibido no print de Talentos.
+- fixa posição determinística da Action Bar somente no `visual-qa.html`;
+- exige geometria real e enquadramento completo em 1440x1000;
+- valida o título PT-BR sem depender da capitalização CSS;
+- extrai `TooltipPortal`, preservando a renderização real no `body`;
+- cada componente `T` passa a possuir o próprio estado de abertura e usa o portal compartilhado diretamente, eliminando dependência do singleton no caminho principal;
+- mantém `GlobalTooltipRenderer` por compatibilidade com eventuais chamadores globais existentes;
+- trigger usa listeners nativos `pointerenter/pointerleave` e `focusin/focusout`, incluindo foco de controles filhos;
+- timers concorrentes são cancelados antes de novo agendamento;
+- `data-tooltip-trigger` e `data-tooltip-portal` fornecem contratos estruturais de QA sem alterar gameplay;
+- a captura prova slot habilitado, foco real, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
+- `You have` é vazamento proibido no print de Talentos.
 
 ## Escopo
 
-Nenhuma regra de combate, cooldown, dano, progressão, talento, item ou autoridade do servidor é alterada. A mudança é exclusivamente de apresentação, acessibilidade de interação e robustez da infraestrutura de tooltip/QA.
+Nenhuma regra de combate, cooldown, dano, progressão, talento, item ou autoridade do servidor é alterada. A mudança é de apresentação, acessibilidade e arquitetura do tooltip.
 
 ## Gate
 
