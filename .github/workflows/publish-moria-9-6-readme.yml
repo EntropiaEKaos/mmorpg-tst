@@ -16,9 +16,10 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import base64
+
           path = Path('README.md')
           text = path.read_text(encoding='utf-8')
-
           replacements = {
               "<p><b>Versão atual: Mor'ia 9.5 — Movable HUD & Classic World Polish</b></p>": "<p><b>Versão atual: Mor'ia 9.6 — World Identity & City Designer</b></p>",
               "ferramentas ingame para criação de itens, feitiços, monstros, NPCs e missões em tempo real!": "ferramentas ingame para criação de itens, feitiços, monstros, NPCs, missões e identidade urbana em tempo real.",
@@ -33,36 +34,7 @@ jobs:
           marker = "## 🎨 Mor'ia 9.5 — Movable HUD & Classic World Polish"
           if text.count(marker) != 1:
               raise SystemExit('9.5 section marker mismatch')
-
-          section = r'''## 🏙️ Mor'ia 9.6 — World Identity & City Designer
-
-A 9.6 transforma cidades e regiões em espaços reconhecíveis pela própria composição do mundo. Os **11 mapas** passam a ter identidade urbana data-driven própria — incluindo **Royal Capital, Harbor City, Alpine Fortress, Forge Citadel, Void Necropolis e Astral Sanctum** — com paletas, distritos, landmarks, ruas e props específicos.
-
-O minimapa deixou de representar uma Eldoria fixa: agora usa o `mapId` atual, terreno/bioma reais, distritos, landmarks, portais, monstros, elites, bosses e a posição do jogador. A malha do terreno é memoizada por mapa para evitar regeneração 80×80 a cada atualização da HUD.
-
-### Gameplay real — Eldoria 9.6
-
-![Mor'ia 9.6 Eldoria gameplay](docs/screenshots/moria-9-6-eldoria-gameplay.png)
-
-### City Designer — Eldoria / Royal Capital
-
-![Mor'ia 9.6 City Designer Eldoria](docs/screenshots/moria-9-6-city-designer-eldoria.png)
-
-### City Designer — Frostpeak / Alpine Fortress
-
-![Mor'ia 9.6 City Designer Frostpeak](docs/screenshots/moria-9-6-city-designer-frostpeak.png)
-
-### 🛠️ Ferramenta de edição urbana
-
-No **Quick Play**, abra `Ctrl + Shift + A` → **Game Editor** → **City Designer · Live**. A ferramenta permite selecionar qualquer mapa, aplicar presets de identidade urbana, editar cores de paredes/telhados/vias/accent, ajustar centro e raio urbano, clicar no preview para escolher coordenadas e criar/remover **landmarks**, **distritos** e **props**. No modo offline a alteração pode ser aplicada imediatamente ao mundo e o draft é persistido localmente.
-
-No servidor conectado, os mesmos campos (`cityStyle`, `cityAccent`, `roofColor`, `wallColor`, `roadColor`, `districts`, `landmarks` e `props`) fazem parte do **Content Studio autoritativo**, com limites e validação antes da publicação. A camada visual não transfere autoridade de movimento, colisão, teleporte ou acesso ao cliente.
-
-Mais detalhes técnicos: **[Mor'ia 9.6 — World Identity & City Designer](docs/MORIA_9_6_WORLD_IDENTITY_CITY_EDITOR.md)**.
-
----
-
-'''
+          section = base64.b64decode("IyMg8J+Pme+4jyBNb3InaWEgOS42IOKAlCBXb3JsZCBJZGVudGl0eSAmIENpdHkgRGVzaWduZXIKCkEgOS42IHRyYW5zZm9ybWEgY2lkYWRlcyBlIHJlZ2nDtWVzIGVtIGVzcGHDp29zIHJlY29uaGVjw612ZWlzIHBlbGEgcHLDs3ByaWEgY29tcG9zacOnw6NvIGRvIG11bmRvLiBPcyAqKjExIG1hcGFzKiogcGFzc2FtIGEgdGVyIGlkZW50aWRhZGUgdXJiYW5hIGRhdGEtZHJpdmVuIHByw7NwcmlhIOKAlCBpbmNsdWluZG8gKipSb3lhbCBDYXBpdGFsLCBIYXJib3IgQ2l0eSwgQWxwaW5lIEZvcnRyZXNzLCBGb3JnZSBDaXRhZGVsLCBWb2lkIE5lY3JvcG9saXMgZSBBc3RyYWwgU2FuY3R1bSoqIOKAlCBjb20gcGFsZXRhcywgZGlzdHJpdG9zLCBsYW5kbWFya3MsIHJ1YXMgZSBwcm9wcyBlc3BlY8OtZmljb3MuCgpPIG1pbmltYXBhIGRlaXhvdSBkZSByZXByZXNlbnRhciB1bWEgRWxkb3JpYSBmaXhhOiBhZ29yYSB1c2EgbyBgbWFwSWRgIGF0dWFsLCB0ZXJyZW5vL2Jpb21hIHJlYWlzLCBkaXN0cml0b3MsIGxhbmRtYXJrcywgcG9ydGFpcywgbW9uc3Ryb3MsIGVsaXRlcywgYm9zc2VzIGUgYSBwb3Npw6fDo28gZG8gam9nYWRvci4gQSBtYWxoYSBkbyB0ZXJyZW5vIMOpIG1lbW9pemFkYSBwb3IgbWFwYSBwYXJhIGV2aXRhciByZWdlbmVyYcOnw6NvIDgww5c4MCBhIGNhZGEgYXR1YWxpemHDp8OjbyBkYSBIVUQuCgojIyMgR2FtZXBsYXkgcmVhbCDigJQgRWxkb3JpYSA5LjYKCiFbTW9yJ2lhIDkuNiBFbGRvcmlhIGdhbWVwbGF5XShkb2NzL3NjcmVlbnNob3RzL21vcmlhLTktNi1lbGRvcmlhLWdhbWVwbGF5LnBuZykKCiMjIyBDaXR5IERlc2lnbmVyIOKAlCBFbGRvcmlhIC8gUm95YWwgQ2FwaXRhbAoKIVtNb3InaWEgOS42IENpdHkgRGVzaWduZXIgRWxkb3JpYV0oZG9jcy9zY3JlZW5zaG90cy9tb3JpYS05LTYtY2l0eS1kZXNpZ25lci1lbGRvcmlhLnBuZykKCiMjIyBDaXR5IERlc2lnbmVyIOKAlCBGcm9zdHBlYWsgLyBBbHBpbmUgRm9ydHJlc3MKCiFbTW9yJ2lhIDkuNiBDaXR5IERlc2lnbmVyIEZyb3N0cGVha10oZG9jcy9zY3JlZW5zaG90cy9tb3JpYS05LTYtY2l0eS1kZXNpZ25lci1mcm9zdHBlYWsucG5nKQoKIyMjIPCfm6DvuI8gRmVycmFtZW50YSBkZSBpZGnDp8OjbyB1cmJhbmEKCk5vICoqUXVpY2sgUGxheSoqLCBhYnJhIGBDdHJsICsgU2hpZnQgKyBBYCDihpIgKipHYW1lIEVkaXRvcioqIOKGkiAqKkNpdHkgRGVzaWduZXIgwrcgTGl2ZSoqLiBBIGZlcnJhbWVudGEgcGVybWl0ZSBzZWxlY2lvbmFyIHF1YWxxdWVyIG1hcGEsIGFwbGljYXIgcHJlc2V0cyBkZSBpZGVudGlkYWRlIHVyYmFuYSwgZWRpdGFyIGNvcmVzIGRlIHBhcmVkZXMvdGVsaGFkb3Mvdmlhcy9hY2NlbnQsIGFqdXN0YXIgY2VudHJvIGUgcmFpbyB1cmJhbm8sIGNsaWNhciBubyBwcmV2aWV3IHBhcmEgZXNjb2xoZXIgY29vcmRlbmFkYXMgZSBjcmlhci9yZW1vdmVyICoqbGFuZG1hcmtzKiosICoqZGlzdHJpdG9zKiogZSAqKnByb3BzKiouIE5vIG1vZG8gb2ZmbGluZSBhIGFsdGVyYcOnw6NvIHBvZGUgc2VyIGFwbGljYWRhIGltZWRpYXRhbWVudGUgYW8gbXVuZG8gZSBvIGRyYWZ0IMOpIHBlcnNpc3RpZG8gbG9jYWxtZW50ZS4KCk5vIHNlcnZpZG9yIGNvbmVjdGFkbywgb3MgbWVzbW9zIGNhbXBvcyAoYGNpdHlTdHlsZWAsIGBjaXR5QWNjZW50YCwgYHJvb2ZDb2xvcmAsIGB3YWxsQ29sb3JgLCBgcm9hZENvbG9yYCwgYGRpc3RyaWN0c2AsIGBsYW5kbWFya3NgIGUgYHByb3BzYCkgZmF6ZW0gcGFydGUgZG8gKipDb250ZW50IFN0dWRpbyBhdXRvcml0YXRpdm8qKiwgY29tIGxpbWl0ZXMgZSB2YWxpZGHDp8OjbyBhbnRlcyBkYSBwdWJsaWNhw6fDo28uIEEgY2FtYWRhIHZpc3VhbCBuw6NvIHRyYW5zZmVyZSBhdXRvcmlkYWRlIGRlIG1vdmltZW50bywgY29saXPDo28sIHRlbGVwb3J0ZSBvdSBhY2Vzc28gYW8gY2xpZW50ZS4KCk1haXMgZGV0YWxoZXMgdMOpY25pY29zOiAqKltNb3InaWEgOS42IOKAlCBXb3JsZCBJZGVudGl0eSAmIENpdHkgRGVzaWduZXJdKGRvY3MvTU9SSUFfOV82X1dPUkxEX0lERU5USVRZX0NJVFlfRURJVE9SLm1kKSoqLgoKLS0tCgo=").decode('utf-8')
           text = text.replace(marker, section + marker, 1)
 
           docs_anchor = "- 🎨 **[Mor'ia 9.5 — HUD World Polish](docs/MORIA_9_5_HUD_WORLD_POLISH.md)** — Reforma visual, janelas móveis, viewport e screenshots reais."
@@ -70,7 +42,6 @@ Mais detalhes técnicos: **[Mor'ia 9.6 — World Identity & City Designer](docs/
               raise SystemExit('documentation anchor mismatch')
           docs_96 = "- 🏙️ **[Mor'ia 9.6 — World Identity & City Designer](docs/MORIA_9_6_WORLD_IDENTITY_CITY_EDITOR.md)** — Identidades urbanas data-driven, minimapa real, editor visual e screenshots validados.\n"
           text = text.replace(docs_anchor, docs_96 + docs_anchor, 1)
-
           path.write_text(text, encoding='utf-8')
           PY
           test -f docs/screenshots/moria-9-6-eldoria-gameplay.png
