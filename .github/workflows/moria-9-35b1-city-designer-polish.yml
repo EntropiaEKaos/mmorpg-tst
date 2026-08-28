@@ -4,6 +4,7 @@ on:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
       - 'tools/upgrade-moria-9-35b1-city-designer-polish.py'
+      - 'tools/fix-moria-9-35b1-legacy-label-tests.py'
       - '.github/workflows/moria-9-35b1-city-designer-polish.yml'
 permissions:
   contents: write
@@ -21,7 +22,9 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply Mor'ia 9.35B.1 visual polish
-        run: python tools/upgrade-moria-9-35b1-city-designer-polish.py
+        run: |
+          python tools/upgrade-moria-9-35b1-city-designer-polish.py
+          python tools/fix-moria-9-35b1-legacy-label-tests.py
       - name: Verify PT-BR visual surface and focused proof
         run: |
           grep -q "DESIGNER DE CIDADE · EDIÇÃO DIRETA" src/components/CityDesigner.tsx
@@ -32,6 +35,8 @@ jobs:
           grep -q "minimapProof.screenshot" tools/capture-moria-9-35b.mjs
           grep -q "designerRoot.screenshot" tools/capture-moria-9-35b.mjs
           ! grep -q "fullPage: true" tools/capture-moria-9-35b.mjs
+          grep -q "DESIGNER DE CIDADE · EDIÇÃO DIRETA" server/test/reference-visual-9-7.test.mjs
+          grep -q "APLICAR AO MUNDO" server/test/world-identity-9-6.test.mjs
           grep -q "9.35B.1 — acabamento da prova visual" docs/MORIA_9_35_GRAND_CAPITAL_FOUNDATION.md
       - name: Verify PT-BR source coverage
         run: python tools/audit-moria-9-28-i18n.py
@@ -80,7 +85,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/components/CityDesigner.tsx src/visualQa.tsx tools/capture-moria-9-35b.mjs server/test/grand-capital-client-9-35.test.mjs docs/MORIA_9_35_GRAND_CAPITAL_FOUNDATION.md
+          git add src/components/CityDesigner.tsx src/visualQa.tsx tools/capture-moria-9-35b.mjs server/test/grand-capital-client-9-35.test.mjs server/test/reference-visual-9-7.test.mjs server/test/world-identity-9-6.test.mjs docs/MORIA_9_35_GRAND_CAPITAL_FOUNDATION.md
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'fix(9.35b.1): polish grand-capital visual proof'
           git push origin HEAD:moria-9.28-character-i18n-ptbr
