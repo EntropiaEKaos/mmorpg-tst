@@ -235,15 +235,15 @@ function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number,
       ctx.fillStyle='rgba(255,255,255,.24)';ctx.fillRect(cx+u*2,y+size*.22,u,u*4); break;
     case 'lamp':
       pixelRect(ctx,cx-u,y+size*.31,u*2,size*.52,'#42392d');
-      ctx.fillStyle=`rgba(255,211,104,${pulse*.25})`;ctx.fillRect(cx-u*5,y+size*.17,u*10,u*10);
+      const lampGlow=ctx.createRadialGradient(cx,y+size*.34,u,cx,y+size*.34,u*7);lampGlow.addColorStop(0,`rgba(255,218,126,${pulse*.34})`);lampGlow.addColorStop(1,'rgba(255,176,70,0)');ctx.fillStyle=lampGlow;ctx.fillRect(cx-u*7,y+size*.17,u*14,u*14);
       pixelRect(ctx,cx-u*2,y+size*.21,u*4,u*5,'#e7bd5c');
       ctx.fillStyle='#fff0a7';ctx.fillRect(cx-u,y+size*.23,u*2,u*2); break;
     case 'brazier':
       pixelRect(ctx,cx-u*4,cy,u*8,u*3,'#524438');
       ctx.fillStyle='#8f3926';ctx.fillRect(cx-u*3,cy-u*3,u*6,u*3);
-      ctx.fillStyle='#ff9737';ctx.fillRect(cx-u*2,cy-u*6,u*4,u*4);ctx.fillStyle='#ffd15e';ctx.fillRect(cx-u,cy-u*7,u*2,u*4); break;
+      const fireGlow=ctx.createRadialGradient(cx,cy-u*4,u,cx,cy-u*4,u*8);fireGlow.addColorStop(0,`rgba(255,145,48,${pulse*.32})`);fireGlow.addColorStop(1,'rgba(255,80,20,0)');ctx.fillStyle=fireGlow;ctx.fillRect(cx-u*8,cy-u*12,u*16,u*16);ctx.fillStyle='#ff9737';ctx.fillRect(cx-u*2,cy-u*6,u*4,u*4);ctx.fillStyle='#ffd15e';ctx.fillRect(cx-u,cy-u*7,u*2,u*4); break;
     case 'crystal':
-      ctx.fillStyle=prop.color || accent;ctx.fillRect(cx-u*2,y+size*.28,u*4,u*8);ctx.fillRect(cx-u,y+size*.18,u*2,u*12);
+      const crystalColor=prop.color||accent;const crystalGlow=ctx.createRadialGradient(cx,y+size*.46,u,cx,y+size*.46,u*7);crystalGlow.addColorStop(0,'rgba(125,210,255,.20)');crystalGlow.addColorStop(1,'rgba(90,130,255,0)');ctx.fillStyle=crystalGlow;ctx.fillRect(cx-u*7,y+size*.08,u*14,u*14);ctx.fillStyle=crystalColor;ctx.fillRect(cx-u*2,y+size*.28,u*4,u*8);ctx.fillRect(cx-u,y+size*.18,u*2,u*12);
       ctx.fillStyle='rgba(255,255,255,.52)';ctx.fillRect(cx-u,y+size*.22,u,u*5); break;
     case 'grave':
       pixelRect(ctx,cx-u*3,y+size*.40,u*6,u*7,'#77736d');ctx.fillStyle='#9b968c';ctx.fillRect(cx-u*2,y+size*.42,u*4,u);ctx.fillRect(cx-u*5,y+size*.47,u*10,u*2); break;
