@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 
+// Fourth-pass matrix: same deterministic camera/state, now reviewing reactive atmosphere.
 fs.mkdirSync('docs/screenshots', { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
