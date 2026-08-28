@@ -28,21 +28,20 @@ jobs:
           python tools/fix-moria-9-39a-terraced-snow.py
       - name: Verify Grand Frostpeak source contract
         run: |
-          test -s server/engine/GrandFrostpeak.mjs
-          test -s server/test/grand-frostpeak-9-39.test.mjs
-          test -s docs/MORIA_9_39_GRAND_FROSTPEAK.md
-          grep -q "GRAND_CAPITAL_SCHEMA_VERSION = 5" server/engine/GrandFrostpeak.mjs
-          grep -q "urbanPlan:'terraced-bastion'" server/engine/GrandFrostpeak.mjs
-          grep -q "terracedBastionTile" server/engine/World.mjs
-          grep -q "terracedBastionTile" src/game/maps.ts
-          grep -q "type:'snow'" server/engine/World.mjs
-          grep -q "type:'snow'" src/game/maps.ts
-          grep -q "'snow'" src/game/types.ts
-          grep -q 'tileCache.set(`snow_' src/game/render.ts
-          grep -q "frostpeak_glacier_golem:{from:\[42,62\]" server/engine/GrandFrostpeak.mjs
-          grep -q "frostpeak_yeti_warmaster:{from:\[50,69\]" server/engine/GrandFrostpeak.mjs
-          grep -q "targetMap:'ironwood'" server/engine/GrandFrostpeak.mjs
-          grep -q "migrateGrandFrostpeakData" server/engine/ContentDB.mjs
+          set -euxo pipefail
+          for file in server/engine/GrandFrostpeak.mjs server/test/grand-frostpeak-9-39.test.mjs docs/MORIA_9_39_GRAND_FROSTPEAK.md; do test -s "$file"; done
+          grep -Fq "GRAND_CAPITAL_SCHEMA_VERSION = 5" server/engine/GrandFrostpeak.mjs
+          grep -Fq "urbanPlan:'terraced-bastion'" server/engine/GrandFrostpeak.mjs
+          grep -Fq "terracedBastionTile" server/engine/World.mjs
+          grep -Fq "terracedBastionTile" src/game/maps.ts
+          grep -Fq "type:'snow'" server/engine/World.mjs
+          grep -Fq "type:'snow'" src/game/maps.ts
+          grep -Fq "| 'snow'" src/game/types.ts
+          grep -Fq 'tileCache.set(`snow_' src/game/render.ts
+          grep -Fq "frostpeak_glacier_golem:{from:[42,62]" server/engine/GrandFrostpeak.mjs
+          grep -Fq "frostpeak_yeti_warmaster:{from:[50,69]" server/engine/GrandFrostpeak.mjs
+          grep -Fq "targetMap:'ironwood'" server/engine/GrandFrostpeak.mjs
+          grep -Fq "migrateGrandFrostpeakData" server/engine/ContentDB.mjs
           node --check server/engine/GrandFrostpeak.mjs
           node --check server/engine/World.mjs
           node --check server/engine/ContentDB.mjs
