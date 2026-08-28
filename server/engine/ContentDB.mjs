@@ -18,7 +18,8 @@ import { migrateGrandIronwoodData } from './GrandIronwood.mjs';
 import { migrateGrandFrostpeakData } from './GrandFrostpeak.mjs';
 import { migrateGrandShadowfenData } from './GrandShadowfen.mjs';
 import { migrateGrandEmberholdData } from './GrandEmberhold.mjs';
-import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandCrystalDeepData } from './GrandCrystalDeep.mjs';
+import { migrateGrandCrystalDeepData } from './GrandCrystalDeep.mjs';
+import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandStormwatchData } from './GrandStormwatch.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -204,7 +205,7 @@ export class ContentDB {
 
   migrateGrandCapitalV1() {
     if (Number(this.data.grandCapitalVersion) >= GRAND_CAPITAL_SCHEMA_VERSION) return false;
-    // Every capital migration is idempotent and exact-default-only. Schema 8 adds Crystal Deep.
+    // Every capital migration is idempotent and exact-default-only. Schema 9 adds Stormwatch Isle.
     migrateGrandEldoriaData(this.data);
     migrateGrandSunreachData(this.data);
     migrateGrandIronwoodData(this.data);
@@ -212,6 +213,7 @@ export class ContentDB {
     migrateGrandShadowfenData(this.data);
     migrateGrandEmberholdData(this.data);
     migrateGrandCrystalDeepData(this.data);
+    migrateGrandStormwatchData(this.data);
     this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
     this.save();
     return true;
@@ -347,6 +349,7 @@ export class ContentDB {
     migrateGrandShadowfenData(this.data);
     migrateGrandEmberholdData(this.data);
     migrateGrandCrystalDeepData(this.data);
+    migrateGrandStormwatchData(this.data);
     this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
 
     this.save();

@@ -11,6 +11,7 @@ import { GRAND_FROSTPEAK_MAP } from './GrandFrostpeak.mjs';
 import { GRAND_SHADOWFEN_MAP } from './GrandShadowfen.mjs';
 import { GRAND_EMBERHOLD_MAP } from './GrandEmberhold.mjs';
 import { GRAND_CRYSTAL_DEEP_MAP } from './GrandCrystalDeep.mjs';
+import { GRAND_STORMWATCH_MAP } from './GrandStormwatch.mjs';
 
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const slug = value => String(value).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -113,6 +114,7 @@ const maps = REGIONS.map(region => {
   if (region.id === 'shadowfen') return { ...GRAND_SHADOWFEN_MAP, portals: GRAND_SHADOWFEN_MAP.portals.map(portal => ({ ...portal })), districts: GRAND_SHADOWFEN_MAP.districts.map(entry => ({ ...entry })), landmarks: GRAND_SHADOWFEN_MAP.landmarks.map(entry => ({ ...entry })), props: GRAND_SHADOWFEN_MAP.props.map(entry => ({ ...entry })) };
   if (region.id === 'emberhold') return { ...GRAND_EMBERHOLD_MAP, portals: GRAND_EMBERHOLD_MAP.portals.map(portal => ({ ...portal })), districts: GRAND_EMBERHOLD_MAP.districts.map(entry => ({ ...entry })), landmarks: GRAND_EMBERHOLD_MAP.landmarks.map(entry => ({ ...entry })), props: GRAND_EMBERHOLD_MAP.props.map(entry => ({ ...entry })) };
   if (region.id === 'crystal_deep') return { ...GRAND_CRYSTAL_DEEP_MAP, portals: GRAND_CRYSTAL_DEEP_MAP.portals.map(portal => ({ ...portal })), districts: GRAND_CRYSTAL_DEEP_MAP.districts.map(entry => ({ ...entry })), landmarks: GRAND_CRYSTAL_DEEP_MAP.landmarks.map(entry => ({ ...entry })), props: GRAND_CRYSTAL_DEEP_MAP.props.map(entry => ({ ...entry })) };
+  if (region.id === 'stormwatch_isle') return { ...GRAND_STORMWATCH_MAP, portals: GRAND_STORMWATCH_MAP.portals.map(portal => ({ ...portal })), districts: GRAND_STORMWATCH_MAP.districts.map(entry => ({ ...entry })), landmarks: GRAND_STORMWATCH_MAP.landmarks.map(entry => ({ ...entry })), props: GRAND_STORMWATCH_MAP.props.map(entry => ({ ...entry })) };
   const [townX,townY] = mapCenters[region.id];
   return {
     id:region.id, name:region.name, biome:region.biome,

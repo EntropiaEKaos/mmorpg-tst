@@ -10,6 +10,7 @@ import { GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG } from './GrandFrostpeak.mjs';
 import { GRAND_SHADOWFEN_BUILTIN_WORLD_CONFIG } from './GrandShadowfen.mjs';
 import { GRAND_EMBERHOLD_BUILTIN_WORLD_CONFIG } from './GrandEmberhold.mjs';
 import { GRAND_CRYSTAL_DEEP_BUILTIN_WORLD_CONFIG } from './GrandCrystalDeep.mjs';
+import { GRAND_STORMWATCH_BUILTIN_WORLD_CONFIG } from './GrandStormwatch.mjs';
 
 class Monster {
   constructor(data) {
@@ -23,7 +24,7 @@ const MIN_MAP_DIMENSION = 40;
 const MAX_MAP_DIMENSION = 192;
 const SETTLEMENT_CLASSES = Object.freeze(['wilderness','town','city','capital']);
 const SETTLEMENT_CLASS_SET = new Set(SETTLEMENT_CLASSES);
-const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings','terraced-bastion','marsh-wards','caldera-radials','geode-chambers']);
+const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings','terraced-bastion','marsh-wards','caldera-radials','geode-chambers','tempest-archipelago']);
 const BIOMES = new Set(['plains', 'snow', 'swamp', 'desert', 'shadow']);
 const BIOME_SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
 const CITY_STYLES = new Set(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
@@ -52,6 +53,7 @@ const MAP_CONFIG = Object.freeze({
   shadowfen: GRAND_SHADOWFEN_BUILTIN_WORLD_CONFIG,
   emberhold: GRAND_EMBERHOLD_BUILTIN_WORLD_CONFIG,
   crystal_deep: GRAND_CRYSTAL_DEEP_BUILTIN_WORLD_CONFIG,
+  stormwatch_isle: GRAND_STORMWATCH_BUILTIN_WORLD_CONFIG,
   voidlands: {
     id: 'voidlands', name: 'Voidlands', description: 'The end of the world. Pure darkness and ancient evil.', biome: 'shadow',
     spawnPoint: { x: 70, y: 70 }, townCenter: { x: 40, y: 40 }, townRange: 6, levelRequired: 25, seed: 666,
@@ -155,7 +157,7 @@ function normalizeConfig(record, base = null) {
   const height = integer(record?.height, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, base?.height || MAP_HEIGHT);
   const requestedSettlement = String(record?.settlementClass || base?.settlementClass || (id === 'eldoria' ? 'capital' : 'city'));
   const settlementClass = SETTLEMENT_CLASS_SET.has(requestedSettlement) ? requestedSettlement : 'city';
-  const defaultUrbanPlan = id === 'sunreach_coast' ? 'harbor-crescent' : id === 'ironwood' ? 'forest-rings' : id === 'frostpeak' ? 'terraced-bastion' : id === 'shadowfen' ? 'marsh-wards' : 'royal-grid';
+  const defaultUrbanPlan = id === 'sunreach_coast' ? 'harbor-crescent' : id === 'ironwood' ? 'forest-rings' : id === 'frostpeak' ? 'terraced-bastion' : id === 'shadowfen' ? 'marsh-wards' : id === 'emberhold' ? 'caldera-radials' : id === 'crystal_deep' ? 'geode-chambers' : id === 'stormwatch_isle' ? 'tempest-archipelago' : 'royal-grid';
   const requestedUrbanPlan = String(record?.urbanPlan || base?.urbanPlan || defaultUrbanPlan);
   const urbanPlan = settlementClass === 'capital' && URBAN_PLANS.has(requestedUrbanPlan) ? requestedUrbanPlan : 'royal-grid';
   const baseSpawn = base?.spawnPoint || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
@@ -363,6 +365,21 @@ function geodeChambersTile(config,x,y){
   const gallery=galleries.some(segment=>nearGeodeGallery(x,y,...segment));if(gallery)return {type:'path',walkable:true,blocksSight:false};const chamber=chambers.some(([cx,cy,r])=>(x-cx)*(x-cx)+(y-cy)*(y-cy)<=r*r);if(chamber)return {type:'floor',walkable:true,blocksSight:false};return {type:'wall',walkable:false,blocksSight:true};
 }
 
+
+function nearStormCauseway(x,y,ax,ay,bx,by,width=2){const vx=bx-ax,vy=by-ay,wx=x-ax,wy=y-ay,length=vx*vx+vy*vy;const t=length?Math.max(0,Math.min(1,(wx*vx+wy*vy)/length)):0;const px=ax+t*vx,py=ay+t*vy;return (x-px)*(x-px)+(y-py)*(y-py)<=width*width;}
+function tempestArchipelagoTile(config,x,y){
+  const bounds=config.urbanBounds;if(!bounds)return null;const minX=Number(bounds.x),minY=Number(bounds.y),maxX=minX+Number(bounds.width)-1,maxY=minY+Number(bounds.height)-1;if(x<minX||x>maxX||y<minY||y>maxY)return null;
+  const stormIslands=[[80,80,26,25],[80,34,24,16],[34,82,19,24],[126,82,19,24],[80,128,27,17],[128,130,16,13]];
+  const inside=(entry,scale=1)=>{const [cx,cy,rx,ry]=entry;return Math.pow((x-cx)/(rx*scale),2)+Math.pow((y-cy)/(ry*scale),2)<=1;};
+  const land=stormIslands.some(entry=>inside(entry)),inner=stormIslands.some(entry=>inside(entry,.82));
+  const causeways=[[80,14,80,55],[14,82,55,82],[105,82,145,82],[80,105,80,145],[105,96,128,130],[128,130,145,140]];
+  const causeway=causeways.some(segment=>nearStormCauseway(x,y,...segment));if(causeway)return {type:land?'path':'bridge',walkable:true,blocksSight:false};
+  if(!land)return {type:'water',walkable:false,blocksSight:false};if(!inner)return {type:'rock',walkable:false,blocksSight:true};
+  const dx=x-80,dy=y-80,central=Math.pow(dx/26,2)+Math.pow(dy/25,2)<=Math.pow(.82,2);const ring=central&&Math.abs(Math.sqrt(Math.pow(dx/26,2)+Math.pow(dy/25,2))-.55)<=.05;const axes=central&&(Math.abs(dx)<=1||Math.abs(dy)<=1);
+  const local=(inside(stormIslands[1],.82)&&Math.abs(x-80)<=1)||(inside(stormIslands[2],.82)&&Math.abs(y-82)<=1)||(inside(stormIslands[3],.82)&&Math.abs(y-82)<=1)||(inside(stormIslands[4],.82)&&Math.abs(x-80)<=1)||(inside(stormIslands[5],.82)&&Math.abs((y-130)-.6*(x-128))<=1);
+  return {type:(ring||axes||local)?'path':'snow',walkable:true,blocksSight:false};
+}
+
 function capitalUrbanTile(config, x, y) {
   if (config?.settlementClass !== 'capital') return null;
   if (config.urbanPlan === 'harbor-crescent') return harborCapitalTile(config, x, y);
@@ -371,6 +388,7 @@ function capitalUrbanTile(config, x, y) {
   if (config.urbanPlan === 'marsh-wards') return marshWardsTile(config, x, y);
   if (config.urbanPlan === 'caldera-radials') return calderaRadialsTile(config, x, y);
   if (config.urbanPlan === 'geode-chambers') return geodeChambersTile(config, x, y);
+  if (config.urbanPlan === 'tempest-archipelago') return tempestArchipelagoTile(config, x, y);
   const bounds = config.urbanBounds;
   if (!bounds) return null;
   const minX = Number(bounds.x), minY = Number(bounds.y);

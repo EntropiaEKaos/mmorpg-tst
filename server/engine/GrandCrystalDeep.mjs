@@ -94,7 +94,7 @@ export const GRAND_CRYSTAL_DEEP_MAP=Object.freeze({
   portals:Object.freeze([
     {x:80,y:141,targetMap:'frostpeak',targetX:80,targetY:20,label:'❄ Ascensão de Frostpeak'},
     {x:18,y:84,targetMap:'shadowfen',targetX:138,targetY:82,label:'🍄 Galeria de Shadowfen'},
-    {x:141,y:84,targetMap:'stormwatch_isle',targetX:10,targetY:40,label:'⚡ Elevador de Stormwatch'},
+    {x:141,y:84,targetMap:'stormwatch_isle',targetX:18,targetY:82,label:'⚡ Elevador de Stormwatch'},
   ]),
 });
 

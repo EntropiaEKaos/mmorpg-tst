@@ -98,7 +98,7 @@ export const GRAND_EMBERHOLD_MAP=Object.freeze({
   districts,landmarks:Object.freeze([...landmarks,...GRAND_EMBERHOLD_MINOR_ARCHITECTURE]),props:Object.freeze(buildProps()),access:'public',
   portals:Object.freeze([
     {x:80,y:18,targetMap:'frostpeak',targetX:130,targetY:112,label:'❄ Passagem de Frostpeak'},
-    {x:80,y:141,targetMap:'stormwatch_isle',targetX:40,targetY:10,label:'⚡ Estrada de Stormwatch'},
+    {x:80,y:141,targetMap:'stormwatch_isle',targetX:80,targetY:18,label:'⚡ Estrada de Stormwatch'},
   ]),
 });
 
