@@ -19,13 +19,29 @@ visual.write_text(text, encoding='utf-8')
 tooltip = Path('src/components/Tooltip.tsx')
 text = tooltip.read_text(encoding='utf-8')
 
+singleton = """// Singleton tooltip state
+let tooltipListeners: Array<(d: TooltipData | null) => void> = [];
+
+function showGlobalTooltip(data: TooltipData) {
+  tooltipListeners.forEach((fn) => fn(data));
+}
+
+function hideGlobalTooltip() {
+  tooltipListeners.forEach((fn) => fn(null));
+}
+
+"""
+if singleton not in text:
+    raise SystemExit('Tooltip singleton anchor not found')
+text = text.replace(singleton, '', 1)
+
 renderer_start = text.find('/** Portal-rendered tooltip that lives at the body level */')
 renderer_end_marker = 'export default GlobalTooltipRenderer;'
 renderer_end = text.find(renderer_end_marker)
 if renderer_start < 0 or renderer_end < 0:
     raise SystemExit('Tooltip renderer block anchor not found')
 renderer_end += len(renderer_end_marker)
-new_renderer = r'''/** Shared body-level portal renderer used by both local triggers and the legacy global renderer. */
+new_renderer = r'''/** Shared body-level portal renderer used by real tooltip triggers. */
 function TooltipPortal({ data }: { data: TooltipData }) {
   const padding = 12;
   const tooltipW = 280;
@@ -77,16 +93,9 @@ function TooltipPortal({ data }: { data: TooltipData }) {
   );
 }
 
-/** Legacy global renderer retained for compatibility with any direct global callers. */
+/** Compatibility mount retained while trigger-owned portals handle real tooltips. */
 function GlobalTooltipRenderer() {
-  const [data, setData] = useState<TooltipData | null>(null);
-  useEffect(() => {
-    tooltipListeners.push(setData);
-    return () => {
-      tooltipListeners = tooltipListeners.filter((fn) => fn !== setData);
-    };
-  }, []);
-  return data ? <TooltipPortal data={data} /> : null;
+  return null;
 }
 
 export default GlobalTooltipRenderer;'''
@@ -204,8 +213,8 @@ A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate
 - exige geometria real e enquadramento completo em 1440x1000;
 - valida o título PT-BR sem depender da capitalização CSS;
 - extrai `TooltipPortal`, preservando a renderização real no `body`;
-- cada componente `T` passa a possuir o próprio estado de abertura e usa o portal compartilhado diretamente, eliminando dependência do singleton no caminho principal;
-- mantém `GlobalTooltipRenderer` por compatibilidade com eventuais chamadores globais existentes;
+- cada componente `T` passa a possuir o próprio estado de abertura e usa o portal compartilhado diretamente;
+- remove o singleton obsoleto e mantém `GlobalTooltipRenderer` apenas como mount de compatibilidade;
 - trigger usa listeners nativos `pointerenter/pointerleave` e `focusin/focusout`, incluindo foco de controles filhos;
 - timers concorrentes são cancelados antes de novo agendamento;
 - `data-tooltip-trigger` e `data-tooltip-portal` fornecem contratos estruturais de QA sem alterar gameplay;
