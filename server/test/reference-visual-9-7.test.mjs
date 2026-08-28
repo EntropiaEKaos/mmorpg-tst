@@ -4,18 +4,26 @@ import fs from 'node:fs';
 
 const read = path => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
-test('9.7 player presentation is pixel-first and materially larger than one-tile legacy figure', () => {
+test('9.7 player presentation uses authored native-pixel frames instead of block-built legacy figures', () => {
   const avatar = read('src/game/playerAvatar.ts');
   assert.match(avatar, /PIXEL_SPRITE_SCALE = 1\.30/);
-  assert.match(avatar, /drawPixelHuman/);
-  assert.match(avatar, /drawPixelOutline|function block/);
+  assert.match(avatar, /18 × 24 native-pixel frames/);
+  assert.match(avatar, /const KNIGHT_FRAME: SpriteFrame/);
+  assert.match(avatar, /const CASTER_FRAME: SpriteFrame/);
+  assert.match(avatar, /const RANGER_FRAME: SpriteFrame/);
+  assert.match(avatar, /const ROGUE_FRAME: SpriteFrame/);
+  assert.match(avatar, /function drawSpriteMatrix/);
+  assert.match(avatar, /export function drawPixelHuman/);
+  assert.match(avatar, /inferVocationStyle/);
   assert.doesNotMatch(avatar, /createRadialGradient/);
 });
 
-test('9.7 NPC and monster silhouettes use original outlined pixel construction', () => {
+test('9.7 NPC and monster silhouettes use original pixel construction', () => {
   const entities = read('src/game/classicEntityPresentation.ts');
-  assert.match(entities, /pixel-first 2D entity presentation/);
-  assert.match(entities, /drawPixelOutline/);
+  assert.match(entities, /classic grid MMORPG readability/);
+  assert.match(entities, /drawClassicNpcSprite/);
+  assert.match(entities, /drawClassicMonsterSprite/);
+  assert.match(entities, /drawPixelOutline|drawPixelHuman/);
   assert.match(entities, /role === 'guard'/);
   assert.match(entities, /rat\|wolf\|boar/);
 });
