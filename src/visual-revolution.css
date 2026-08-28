@@ -1,0 +1,170 @@
+/* Mor'ia 9.27 — Visual Revolution
+   Presentation-only layer. No gameplay authority lives here. */
+
+:root {
+  --moria-void: #030507;
+  --moria-obsidian: #070a0f;
+  --moria-charcoal: #0d1118;
+  --moria-iron: #1a2230;
+  --moria-bone: #eee5d6;
+  --moria-parchment: #cdbb98;
+  --moria-brass: #bc9450;
+  --moria-brass-hot: #f0c979;
+  --moria-cold: #79a6c9;
+  --moria-blood: #a9363d;
+}
+
+body {
+  background:
+    radial-gradient(circle at 50% -18%, rgba(99, 121, 151, .12), transparent 34%),
+    linear-gradient(180deg, #070a0f, #020304 76%);
+}
+
+/* World viewport framing: less "web app", more carved game frame. */
+.moria-world-canvas {
+  filter: saturate(.94) contrast(1.06) brightness(.96);
+  box-shadow:
+    inset 0 0 0 1px rgba(232, 215, 182, .06),
+    inset 0 0 70px rgba(0, 0, 0, .28),
+    0 0 0 1px rgba(0, 0, 0, .7);
+}
+
+.moria-panel {
+  border-color: rgba(186, 154, 98, .22);
+  background:
+    linear-gradient(180deg, rgba(18, 22, 29, .95), rgba(5, 8, 12, .97)),
+    radial-gradient(circle at 18% 0%, rgba(188, 148, 80, .07), transparent 30%),
+    radial-gradient(circle at 86% 4%, rgba(121, 166, 201, .06), transparent 28%);
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, .52),
+    inset 0 1px rgba(255, 245, 224, .045),
+    inset 0 -1px rgba(0, 0, 0, .68);
+}
+
+.moria-panel::before {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.035), transparent 22%, transparent 78%, rgba(188,148,80,.035)),
+    repeating-linear-gradient(90deg, transparent 0 34px, rgba(255,255,255,.007) 35px 36px);
+}
+
+.moria-card {
+  border-color: rgba(171, 151, 119, .15);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012)),
+    radial-gradient(circle at top left, rgba(188,148,80,.035), transparent 42%);
+}
+
+.moria-title {
+  color: var(--moria-bone);
+  text-shadow: 0 2px 1px rgba(0,0,0,.72), 0 0 22px rgba(188,148,80,.08);
+}
+
+.moria-eyebrow {
+  color: var(--moria-brass-hot);
+  text-shadow: 0 0 14px rgba(240,201,121,.13);
+}
+
+.moria-button {
+  border-color: rgba(177, 148, 96, .28);
+  background:
+    linear-gradient(180deg, rgba(37,43,52,.98), rgba(12,16,22,.98)),
+    linear-gradient(90deg, rgba(188,148,80,.03), transparent 50%, rgba(121,166,201,.025));
+}
+
+.moria-button:hover:not(:disabled) {
+  border-color: rgba(240,201,121,.58);
+  background: linear-gradient(180deg, rgba(49,56,67,.99), rgba(17,22,30,.99));
+  box-shadow: inset 0 1px rgba(255,255,255,.075), 0 10px 26px rgba(0,0,0,.4), 0 0 18px rgba(188,148,80,.07);
+}
+
+.moria-button-primary {
+  border-color: rgba(255, 222, 151, .72);
+  background: linear-gradient(180deg, #e7c477 0%, #ba8f43 52%, #765324 100%);
+  box-shadow: inset 0 1px rgba(255,255,255,.45), inset 0 -2px rgba(70,42,12,.4), 0 10px 26px rgba(120,83,32,.28);
+}
+
+.moria-slot {
+  border-color: rgba(184,157,108,.2);
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255,255,255,.055), transparent 38%),
+    linear-gradient(180deg, rgba(27,33,43,.96), rgba(5,8,12,.98));
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.04), 0 8px 24px rgba(0,0,0,.34);
+}
+
+/* Region reveal becomes a cinematic title card without obscuring gameplay. */
+.moria-region-banner {
+  padding: 14px 22px 16px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(3,5,8,.42), rgba(3,5,8,.08));
+  mask-image: linear-gradient(90deg, transparent, black 14%, black 86%, transparent);
+  text-shadow: 0 3px 22px rgba(0,0,0,.95);
+}
+
+/* Diegetic top bar. */
+.moria-topbar-95 {
+  border-bottom-color: rgba(188,148,80,.24) !important;
+  background:
+    linear-gradient(180deg, rgba(16,17,17,.98), rgba(7,9,12,.97)),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.012) 0 1px, transparent 1px 48px) !important;
+  box-shadow: 0 8px 30px rgba(0,0,0,.38), inset 0 -1px rgba(0,0,0,.7);
+}
+
+/* Weather lens layers */
+.moria-weather-lens {
+  background: radial-gradient(circle at 50% 38%, transparent 32%, rgba(0,0,0,.2) 100%);
+  mix-blend-mode: multiply;
+}
+
+.moria-weather-haze {
+  background: linear-gradient(180deg, rgba(160,185,205,.045), transparent 42%, rgba(15,24,34,.12));
+  backdrop-filter: blur(.15px);
+}
+
+.moria-lightning-flash {
+  background:
+    radial-gradient(circle at 68% 10%, rgba(235,246,255,.5), transparent 26%),
+    linear-gradient(180deg, rgba(202,225,255,.18), rgba(255,255,255,.03));
+  mix-blend-mode: screen;
+}
+
+@keyframes moria-rain-fall-v2 {
+  from { transform: translate3d(22px,-115vh,0) rotate(8deg); }
+  to { transform: translate3d(-28px,115vh,0) rotate(8deg); }
+}
+
+@keyframes moria-snow-fall-v2 {
+  0% { transform: translate3d(0,-110vh,0) rotate(0deg); }
+  50% { transform: translate3d(-18px,0,0) rotate(120deg); }
+  100% { transform: translate3d(22px,110vh,0) rotate(260deg); }
+}
+
+.moria-rain-drop-v2 {
+  animation: moria-rain-fall-v2 linear infinite;
+  transform-origin: center;
+  box-shadow: 0 0 2px rgba(205,228,255,.2);
+}
+
+.moria-snow-drop-v2 {
+  animation: moria-snow-fall-v2 linear infinite;
+  filter: blur(.2px) drop-shadow(0 0 4px rgba(255,255,255,.28));
+}
+
+/* Combat/UI micro-polish */
+.moria-target-frame,
+.moria-target-boss {
+  backdrop-filter: blur(12px) saturate(120%);
+}
+
+.moria-action-ready:not(:disabled) {
+  box-shadow: 0 0 0 1px rgba(240,201,121,.13), 0 0 18px rgba(240,201,121,.08), inset 0 1px rgba(255,255,255,.05);
+}
+
+@media (max-width: 900px) {
+  .moria-panel { backdrop-filter: blur(12px) saturate(112%); }
+  .moria-region-banner { padding-inline: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moria-rain-drop-v2,
+  .moria-snow-drop-v2 { animation-duration: 8s !important; opacity: .35; }
+}
