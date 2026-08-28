@@ -113,6 +113,7 @@ function normalizeLandmarks(raw: unknown, width: number, height: number, settlem
     id: String(entry.id || `landmark_${index + 1}`).slice(0, 60), name: String(entry.name || `Landmark ${index + 1}`).slice(0, 60),
     kind: (kinds.has(String(entry.kind)) ? String(entry.kind) : 'market') as CityLandmark['kind'], icon: String(entry.icon || '◆').slice(0, 8),
     x: cityCoord(entry.x, Math.floor(width / 2), width), y: cityCoord(entry.y, Math.floor(height / 2), height), w: Math.max(1, Math.min(landmarkSizeLimit, Math.round(Number(entry.w) || 4))), h: Math.max(1, Math.min(landmarkSizeLimit, Math.round(Number(entry.h) || 4))),
+    ...(entry.showOnMinimap === false ? { showOnMinimap: false } : {}),
   }));
 }
 function normalizeProps(raw: unknown, width: number, height: number, settlementClass: SettlementClass): CityProp[] {

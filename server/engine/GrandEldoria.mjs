@@ -4,7 +4,7 @@
 // administrator-authored coordinates and architecture always win.
 // ===================================================================
 
-export const GRAND_ELDORIA_VERSION = 1;
+export const GRAND_ELDORIA_VERSION = 2;
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function samePoint(record, x, y, xKey = 'posX', yKey = 'posY') { return Number(record?.[xKey]) === x && Number(record?.[yKey]) === y; }
@@ -42,6 +42,29 @@ const landmarks = Object.freeze([
   { id:'eldoria_royal_stables', name:'Estábulos Reais', kind:'lodge', icon:'♞', x:98, y:108, w:14, h:10 },
 ]);
 
+export const GRAND_ELDORIA_RESIDENTIAL = Object.freeze([
+  { id:'eldoria_residence_01', name:'Residência da Coroa I', kind:'house', icon:'⌂', x:54, y:42, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_02', name:'Residência da Coroa II', kind:'house', icon:'⌂', x:62, y:42, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_03', name:'Vila dos Escribas I', kind:'house', icon:'⌂', x:54, y:56, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_04', name:'Vila dos Escribas II', kind:'house', icon:'⌂', x:62, y:56, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_05', name:'Vila dos Escribas III', kind:'house', icon:'⌂', x:70, y:56, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_06', name:'Casario da Vigília', kind:'house', icon:'⌂', x:44, y:58, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_07', name:'Solar dos Sábios I', kind:'house', icon:'⌂', x:84, y:54, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_08', name:'Solar dos Sábios II', kind:'house', icon:'⌂', x:92, y:54, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_09', name:'Casario da Aurora I', kind:'house', icon:'⌂', x:110, y:56, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_10', name:'Casario da Aurora II', kind:'house', icon:'⌂', x:86, y:66, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_11', name:'Casario da Aurora III', kind:'house', icon:'⌂', x:88, y:72, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_12', name:'Vila Mercantil I', kind:'house', icon:'⌂', x:54, y:88, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_13', name:'Vila Mercantil II', kind:'house', icon:'⌂', x:54, y:96, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_14', name:'Vila Mercantil III', kind:'house', icon:'⌂', x:62, y:96, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_15', name:'Casario dos Artesãos I', kind:'house', icon:'⌂', x:44, y:114, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_16', name:'Casario dos Artesãos II', kind:'house', icon:'⌂', x:52, y:116, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_17', name:'Casario dos Artesãos III', kind:'house', icon:'⌂', x:62, y:118, w:6, h:3, showOnMinimap:false },
+  { id:'eldoria_residence_18', name:'Residência Nobre I', kind:'house', icon:'⌂', x:90, y:100, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_19', name:'Residência Nobre II', kind:'house', icon:'⌂', x:110, y:100, w:6, h:5, showOnMinimap:false },
+  { id:'eldoria_residence_20', name:'Residência dos Jardins', kind:'house', icon:'⌂', x:90, y:116, w:6, h:5, showOnMinimap:false },
+]);
+
 function buildProps() {
   const props = [];
   let serial = 1;
@@ -62,8 +85,8 @@ export const GRAND_ELDORIA_MAP = Object.freeze({
   width:160, height:160, settlementClass:'capital', urbanBounds:{ x:28, y:24, width:105, height:113 },
   levelRequired:1, seed:42, spawnX:80, spawnY:88, townX:80, townY:80, townRange:18,
   cityStyle:'royal', cityAccent:'#d8b45a', roofColor:'#7e2f34', wallColor:'#c9b68d', roadColor:'#9b8764',
-  residentialRingEnabled:true, residentialRingDensity:5,
-  districts, landmarks, props:Object.freeze(buildProps()), access:'public',
+  residentialRingEnabled:false, residentialRingDensity:0,
+  districts, landmarks:Object.freeze([...landmarks, ...GRAND_ELDORIA_RESIDENTIAL]), props:Object.freeze(buildProps()), access:'public',
   portals:Object.freeze([
     { x:28, y:80, targetMap:'frostpeak', targetX:70, targetY:40, label:'❄ Passagem de Frostpeak' },
     { x:80, y:24, targetMap:'sunreach_coast', targetX:40, targetY:68, label:'🌊 Portão de Sunreach' },
@@ -154,6 +177,20 @@ export function migrateGrandEldoriaData(data) {
   const eligible = (width === 80 && height === 80) || (width === 160 && height === 160);
   if (!eligible) return false;
   let changed = patchMap(eldoria);
+
+  // 9.36C density upgrade. Only the untouched 9.36A/B landmark set is
+  // expanded; administrator-authored architecture is never auto-filled.
+  const currentLandmarks = Array.isArray(eldoria.landmarks) ? eldoria.landmarks : [];
+  const untouchedV1Architecture = currentLandmarks.length === landmarks.length
+    && currentLandmarks.every((entry, index) => JSON.stringify(entry) === JSON.stringify(landmarks[index]));
+  if (untouchedV1Architecture) {
+    eldoria.landmarks = [...currentLandmarks, ...clone(GRAND_ELDORIA_RESIDENTIAL)];
+    if (eldoria.residentialRingEnabled === true && Number(eldoria.residentialRingDensity) === 5) {
+      eldoria.residentialRingEnabled = false;
+      eldoria.residentialRingDensity = 0;
+    }
+    changed = true;
+  }
 
   for (const map of maps) {
     if (!map || map.id === 'eldoria' || !Array.isArray(map.portals)) continue;

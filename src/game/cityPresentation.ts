@@ -1,4 +1,4 @@
-import type { GameMap } from './maps';
+import { getMapDimensions, type GameMap } from './maps';
 import type { Building } from './render';
 import { getCityPalette, type CityLandmark, type CityProp, type CityPropKind } from './cityIdentity';
 
@@ -63,14 +63,15 @@ export function getCityBuildings(map: GameMap): Building[] {
   // decorative houses must never masquerade as authoritative collision geometry.
   // Admins may deliberately enable a bounded density from Content Studio.
   const tc = map.townCenter;
+  const { width: mapWidth, height: mapHeight } = getMapDimensions(map);
   const homes: Array<[number, number, number, number]> = [
     [-13,-6,4,3], [-13,3,3,3], [-9,7,4,3], [-4,8,3,3], [2,8,4,3],
     [8,7,4,3], [11,3,3,3], [11,-3,4,3], [8,-10,4,3], [1,-12,3,3],
   ];
   const density = map.residentialRingEnabled === true ? Math.max(0, Math.min(homes.length, Math.round(Number(map.residentialRingDensity) || homes.length))) : 0;
   for (const [dx, dy, w, h] of homes.slice(0, density)) {
-    const x = Math.max(1, Math.min(78 - w, tc.x + dx));
-    const y = Math.max(1, Math.min(78 - h, tc.y + dy));
+    const x = Math.max(1, Math.min(mapWidth - w - 2, tc.x + dx));
+    const y = Math.max(1, Math.min(mapHeight - h - 2, tc.y + dy));
     if (overlapsLandmark(map, x, y, w, h, 1)) continue;
     buildings.push({ x, y, w, h, type: 'house', roofColor: palette.roof, wallColor: palette.wall, accentColor: palette.accent });
   }
@@ -80,7 +81,7 @@ export function getCityBuildings(map: GameMap): Building[] {
 export function getCityMinimapMarkers(map: GameMap): CityMinimapMarker[] {
   const palette = getCityPalette({ id: map.id, style: map.cityStyle, biome: map.biome, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor });
   return [
-    ...map.landmarks.map((entry) => ({ id: entry.id, name: entry.name, icon: entry.icon, x: entry.x + entry.w / 2, y: entry.y + entry.h / 2, color: palette.accent, kind: 'landmark' as const })),
+    ...map.landmarks.filter((entry) => entry.showOnMinimap !== false).map((entry) => ({ id: entry.id, name: entry.name, icon: entry.icon, x: entry.x + entry.w / 2, y: entry.y + entry.h / 2, color: palette.accent, kind: 'landmark' as const })),
     ...map.districts.map((entry) => ({ id: entry.id, name: entry.name, icon: entry.icon, x: entry.x, y: entry.y, color: entry.color || palette.accent, kind: 'district' as const })),
     ...map.portals.map((portal, index) => ({ id: `${map.id}_portal_${index}`, name: portal.label || portal.targetMap, icon: '◉', x: portal.pos.x, y: portal.pos.y, color: '#7fe7ff', kind: 'portal' as const })),
   ];
@@ -201,11 +202,12 @@ function ambientKinds(map: GameMap): CityPropKind[] {
 
 export function getAmbientCityProps(map: GameMap): CityProp[] {
   const kinds = ambientKinds(map);
+  const { width: ambientWidth, height: ambientHeight } = getMapDimensions(map);
   const existing = new Set(map.props.map((prop) => `${prop.x}:${prop.y}`));
   const props: CityProp[] = [];
   AMBIENT_OFFSETS.forEach(([dx, dy], index) => {
-    const x = Math.max(2, Math.min(77, Math.round(map.townCenter.x + dx)));
-    const y = Math.max(2, Math.min(77, Math.round(map.townCenter.y + dy)));
+    const x = Math.max(2, Math.min(ambientWidth - 3, Math.round(map.townCenter.x + dx)));
+    const y = Math.max(2, Math.min(ambientHeight - 3, Math.round(map.townCenter.y + dy)));
     if (existing.has(`${x}:${y}`)) return;
     if (overlapsLandmark(map, x, y, 1, 1, 0)) return;
     props.push({ id: `${map.id}_ambient_${index}`, kind: kinds[index % kinds.length], x, y });

@@ -34,3 +34,12 @@ A aceitação visual de Grand Eldoria não usa uma cidade sintética. O `visual-
 - panorama urbano renderizado com `generateMap`, `drawTile` e `drawBuilding` de produção, recortado pelos `urbanBounds` reais.
 
 O workflow usa banco de conteúdo temporário para que a prova comece de uma instalação limpa, roda a suíte completa antes do navegador e publica os PNGs somente depois das asserções geométricas e de conteúdo.
+
+
+## 9.36C — densidade urbana autoritativa
+
+A revisão humana do primeiro panorama 9.36B detectou que a geometria monumental estava correta, porém a massa construída ainda parecia esparsa. A correção foi feita no mundo, não no screenshot.
+
+Grand Eldoria v2 passa de 16 para 36 footprints arquitetônicos autoritativos. Vinte residências de bairro são `house` reais: bloqueiam movimento e visão pela mesma geometria consumida pelo servidor, aparecem no City Designer e são renderizadas pelo jogo. Elas usam `showOnMinimap:false` para que o minimapa continue legível.
+
+A antiga camada `residentialRing` de apresentação foi desativada em Eldoria, eliminando casas visuais atravessáveis. A migração v2 só adiciona a malha residencial quando o conjunto 9.36A/B estiver exatamente intacto; qualquer arquitetura editada pelo administrador é preservada. Também foram removidos clamps 77/78 restantes de `cityPresentation.ts`, tornando edifícios e props ambientais dimension-aware para futuras capitais.

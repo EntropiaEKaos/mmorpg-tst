@@ -47,7 +47,7 @@ test('9.36A capital generation creates a walled city, gate openings, avenues and
   assert.equal(map.tiles[60][28].type,'wall'); assert.equal(map.tiles[60][28].walkable,false);
   assert.equal(map.tiles[80][28].type,'path'); assert.equal(map.tiles[80][28].walkable,true);
   assert.equal(map.tiles[60][80].type,'path');
-  assert.equal(map.tiles[60][70].type,'floor'); assert.equal(map.tiles[60][70].walkable,true);
+  assert.equal(map.tiles[64][72].type,'floor'); assert.equal(map.tiles[64][72].walkable,true);
   assert.equal(map.tiles[88][80].type,'path'); assert.deepEqual(map.spawnPoint,{x:80,y:88});
 });
 
@@ -96,5 +96,5 @@ test('9.36A ContentDB exposes a separate Grand Capital migration marker without 
   const source=fs.readFileSync(path.join(root,'server/engine/ContentDB.mjs'),'utf8');
   assert.match(source,/grandCapitalVersion/); assert.match(source,/migrateGrandCapitalV1/); assert.match(source,/GRAND_ELDORIA_VERSION/);
   assert.match(source,/this\.data\.version = 3/);
-  assert.equal(GRAND_ELDORIA_VERSION,1);
+  assert.equal(GRAND_ELDORIA_VERSION,2);
 });
