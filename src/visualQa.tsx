@@ -1,4 +1,4 @@
-import { StrictMode, useState } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import BookLibrary from './components/BookLibrary';
@@ -8,16 +8,31 @@ import Inventory from './components/Inventory';
 import Depot from './components/Depot';
 import AuctionHouse from './components/AuctionHouse';
 import CoinShop from './components/CoinShop';
+import TalentTree from './components/TalentTree';
+import ActionBar from './components/ActionBar';
+import CastBar, { triggerCast } from './components/CastBar';
+import DPSMeter from './components/DPSMeter';
+import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge from './components/LocaleBridge';
 import { saveBook, sendSystemMail } from './game/content';
 import type { Item, Player } from './game/types';
 import { saveAuctionListings, setCoins } from './game/economy';
+import { VOCATIONS } from './game/classes';
+import { dpsMeter } from './game/dpsMeter';
 
 const QA_PLAYER = {
   name: 'Aurora',
   level: 14,
   gold: 9480,
   bankGold: 12650,
+  vocation: 'knight',
+  hp: 420,
+  maxHp: 460,
+  mana: 115,
+  maxMana: 140,
+  attack: 52,
+  defense: 31,
+  magic: 12,
   activeQuests: [],
 } as unknown as Player;
 
@@ -51,6 +66,10 @@ function seedVisualQa() {
   ]));
   saveAuctionListings([]);
   setCoins(QA_PLAYER.name, 850);
+  dpsMeter.clear();
+  dpsMeter.record(QA_PLAYER.name, 'Orc Warrior', 184, 'physical', false);
+  dpsMeter.record(QA_PLAYER.name, 'Orc Warrior', 332, 'physical', true);
+  dpsMeter.record(QA_PLAYER.name, QA_PLAYER.name, 146, 'heal', false);
 }
 
 seedVisualQa();
@@ -69,6 +88,15 @@ const socialFixture = {
   guild: null,
   trade: null,
 };
+
+
+function CastVisualQa() {
+  useEffect(() => {
+    const id = window.setTimeout(() => triggerCast('Fierce Berserk', '🔥', 4000, '#ff6a00'), 60);
+    return () => window.clearTimeout(id);
+  }, []);
+  return <CastBar />;
+}
 
 function VisualQa() {
   const panel = new URLSearchParams(window.location.search).get('panel') || 'library';
@@ -90,6 +118,10 @@ function VisualQa() {
       {panel === 'depot' && <Depot player={qaPlayer} inventory={inventory} setInventory={setInventory} onClose={() => {}} />}
       {panel === 'auction' && <AuctionHouse player={qaPlayer} inventory={inventory} setInventory={setInventory} setPlayer={setQaPlayer} onClose={() => {}} addMessage={() => {}} />}
       {panel === 'coinshop' && <CoinShop player={qaPlayer} onClose={() => {}} addMessage={() => {}} onPurchase={() => true} />}
+      {panel === 'talents' && <TalentTree player={qaPlayer} setPlayer={setQaPlayer} onClose={() => {}} />}
+      {panel === 'actionbar' && <div data-qa-actionbar><GlobalTooltipRenderer /><ActionBar player={qaPlayer} spells={VOCATIONS.knight.spells} potions={{ hp: 4, mp: 3, hpg: 1 }} onCastSpell={() => {}} onUsePotion={() => {}} /></div>}
+      {panel === 'castbar' && <CastVisualQa />}
+      {panel === 'dps' && <DPSMeter onClose={() => {}} />}
     </div>
   );
 }

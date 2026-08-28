@@ -236,7 +236,6 @@ patch('src/components/TalentTree.tsx', [
 patch('src/components/ActionBar.tsx', [
     ("import MovableHudWindow from './MovableHudWindow';", "import MovableHudWindow from './MovableHudWindow';\nimport { t as tr } from '../i18n';"),
     ('      title="Action Bar"', "      title={tr('Action Bar')}"),
-    ('>{locked && <div', '>{locked && <div'),
     ('>LV {spell.levelRequired}</div>', ">{tr('Lv')} {spell.levelRequired}</div>"),
     ('content={<div className="text-xs"><b>{label}</b><br/><span style={{ color: accent }}>{detail}</span></div>}', 'content={<div className="text-xs"><b>{tr(label)}</b><br/><span style={{ color: accent }}>{tr(detail)}</span></div>}'),
 ])

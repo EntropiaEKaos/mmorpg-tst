@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from 'react';
 import type { Player, Spell } from '../game/types';
 import { T as Tooltip, SpellTooltip } from './Tooltip';
 import MovableHudWindow from './MovableHudWindow';
+import { t as tr } from '../i18n';
 
 interface Props {
   player: Player;
@@ -24,7 +25,7 @@ function ActionBarInner({ player, spells, potions, onCastSpell, onUsePotion }: P
   return (
     <MovableHudWindow
       id="action-bar"
-      title="Action Bar"
+      title={tr('Action Bar')}
       className="moria-hotbar-window"
       contentClassName="p-1.5"
       defaultStyle={{ left: '50%', bottom: 10, transform: 'translateX(-50%)' }}
@@ -66,7 +67,7 @@ function ActionBarInner({ player, spells, potions, onCastSpell, onUsePotion }: P
                   </>
                 )}
                 {noMana && !locked && !onCd && <div className="pointer-events-none absolute inset-x-1 bottom-1 h-1 bg-blue-500/80" />}
-                {locked && <div className="absolute inset-x-0 bottom-0 bg-rose-950/90 py-0.5 text-center text-[8px] font-bold text-rose-200">LV {spell.levelRequired}</div>}
+                {locked && <div className="absolute inset-x-0 bottom-0 bg-rose-950/90 py-0.5 text-center text-[8px] font-bold text-rose-200">{tr('Lv')} {spell.levelRequired}</div>}
               </button>
             </Tooltip>
           );
@@ -100,7 +101,7 @@ function PotionSlot({ hotkey, icon, count, accent, label, detail, onClick }: {
   onClick: () => void;
 }) {
   return (
-    <Tooltip position="top" content={<div className="text-xs"><b>{label}</b><br/><span style={{ color: accent }}>{detail}</span></div>}>
+    <Tooltip position="top" content={<div className="text-xs"><b>{tr(label)}</b><br/><span style={{ color: accent }}>{tr(detail)}</span></div>}>
       <button
         onClick={() => count > 0 && onClick()}
         disabled={count <= 0}

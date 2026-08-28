@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Player } from '../game/types';
 import { VOCATIONS } from '../game/classes';
 import { serverSync } from '../game/ServerSync';
+import { t as tr } from '../i18n';
 
 interface Props {
   player: Player;
@@ -151,10 +152,10 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
           <div>
             <h2 className="text-xl font-bold tracking-widest text-transparent bg-clip-text"
                 style={{ backgroundImage: `linear-gradient(180deg, ${vocation?.color || '#f4e04d'} 0%, #8b6914 100%)` }}>
-              🌟 TALENT TREE
+              🌟 {tr('TALENT TREE')}
             </h2>
             <div className="text-xs text-amber-200/60 mt-1">
-              {vocation?.icon} {vocation?.name} · Points: <span className="text-amber-300 font-bold">{availablePoints}</span> / {totalPoints}
+              {vocation?.icon} {tr(vocation?.name || '')} · {tr('Points:')} <span className="text-amber-300 font-bold">{availablePoints}</span> / {totalPoints}
             </div>
           </div>
           <div className="flex gap-2">
@@ -162,17 +163,17 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
               onClick={resetTalents}
               disabled={player.gold < 500}
               className="moria-button rounded-lg px-3 py-1.5 text-[10px] font-bold text-rose-200 disabled:opacity-40"
-              title="Reset all talents (500 gold)"
+              title={tr('Reset all talents (500 gold)')}
             >
-              🔄 Reset (500🪙)
+              🔄 {tr('Reset')} (500🪙)
             </button>
-            <button onClick={onClose} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400" aria-label="Close talent tree">✕</button>
+            <button onClick={onClose} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400" aria-label={tr('Close talent tree')}>✕</button>
           </div>
         </div>
 
         {availablePoints > 0 && (
           <div className="mb-3 p-2 rounded border border-green-700/50 bg-green-900/20 text-center text-xs text-green-300 animate-pulse">
-            ✨ You have {availablePoints} talent point(s) to spend!
+            ✨ {tr('You have')} {availablePoints} {tr(availablePoints === 1 ? 'talent point to spend' : 'talent points to spend')}!
           </div>
         )}
 
@@ -180,7 +181,7 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
           {tiers.map((tier, tierIdx) => (
             <div key={tierIdx}>
               <div className="text-[10px] text-amber-200/50 tracking-widest mb-2 border-b border-amber-900/30 pb-1">
-                TIER {tierIdx + 1} {tierIdx === 3 ? '(ULTIMATE)' : tierIdx >= 2 ? '(ADVANCED)' : tierIdx === 1 ? '(IMPROVED)' : '(BASIC)'}
+                {tr('TIER')} {tierIdx + 1} {tierIdx === 3 ? `(${tr('ULTIMATE')})` : tierIdx >= 2 ? `(${tr('ADVANCED')})` : tierIdx === 1 ? `(${tr('IMPROVED')})` : `(${tr('BASIC')})`}
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {tier.map((talent) => {
@@ -202,17 +203,17 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-2xl">{talent.icon}</span>
                         <div>
-                          <div className={`font-bold text-xs ${maxed ? 'text-amber-300' : 'text-amber-100'}`}>{talent.name}</div>
+                          <div className={`font-bold text-xs ${maxed ? 'text-amber-300' : 'text-amber-100'}`}>{tr(talent.name)}</div>
                           <div className="text-[10px] text-amber-200/70">{talent.currentRank}/{talent.maxRank}</div>
                         </div>
                       </div>
-                      <div className="text-[10px] text-amber-200/70">{talent.description}</div>
+                      <div className="text-[10px] text-amber-200/70">{tr(talent.description)}</div>
                       {talent.requires && (
                         <div className="text-[9px] text-amber-200/40 mt-1">
-                          Requires: {talents.find((t) => t.id === talent.requires)?.name}
+                          {tr('Requires:')} {tr(talents.find((t) => t.id === talent.requires)?.name || '')}
                         </div>
                       )}
-                      {maxed && <div className="text-[10px] text-amber-400 font-bold mt-1">★ MAXED</div>}
+                      {maxed && <div className="text-[10px] text-amber-400 font-bold mt-1">★ {tr('MAXED')}</div>}
                     </button>
                   );
                 })}
@@ -222,7 +223,7 @@ export default function TalentTree({ player, setPlayer, onClose }: Props) {
         </div>
 
         <div className="mt-4 text-center text-[10px] text-amber-200/40">
-          1 talent point per level · Reset costs 500 gold · Effects are permanent until reset
+          {tr('1 talent point per level · Reset costs 500 gold · Effects are permanent until reset')}
         </div>
       </div>
     </div>

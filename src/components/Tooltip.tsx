@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Player, Spell, SchoolValues } from '../game/types';
 import { buildSpellScalingBreakdown, normalizeSchool, SCHOOL_META } from '../game/elementalScaling';
 import { reactionHintsForSchool } from '../game/elementalReactions';
+import { t as tr } from '../i18n';
 
 interface TooltipData {
   content: React.ReactNode;
@@ -212,41 +213,41 @@ export function ItemTooltip({
         <span className="text-2xl">{item.icon}</span>
         <div>
           <div className="font-bold text-sm" style={{ color: item.equipment ? rarityColors[item.equipment.rarity] : '#f4e04d' }}>
-            {item.name}
+            {tr(item.name)}
           </div>
           {item.equipment && (
             <div className="text-[10px] uppercase tracking-wider" style={{ color: rarityColors[item.equipment.rarity] }}>
-              {item.equipment.rarity} · Lv {item.equipment.level} · {item.equipment.slot}
+              {tr(item.equipment.rarity)} · {tr('Lv')} {item.equipment.level} · {tr(item.equipment.slot)}
             </div>
           )}
         </div>
       </div>
       {item.equipment && (
         <div className="space-y-0.5 text-[11px] border-t border-purple-700/40 pt-1">
-          {item.equipment.attack ? <div style={{ color: '#ff6060' }}>⚔ +{item.equipment.attack} Attack</div> : null}
-          {item.equipment.defense ? <div style={{ color: '#6090ff' }}>🛡 +{item.equipment.defense} Defense</div> : null}
-          {item.equipment.armor ? <div style={{ color: '#a0a0a0' }}>🎽 +{item.equipment.armor} Armor</div> : null}
+          {item.equipment.attack ? <div style={{ color: '#ff6060' }}>⚔ +{item.equipment.attack} {tr('Attack')}</div> : null}
+          {item.equipment.defense ? <div style={{ color: '#6090ff' }}>🛡 +{item.equipment.defense} {tr('Defense')}</div> : null}
+          {item.equipment.armor ? <div style={{ color: '#a0a0a0' }}>🎽 +{item.equipment.armor} {tr('Armor')}</div> : null}
           {item.equipment.hp ? <div style={{ color: '#2ecc71' }}>❤ +{item.equipment.hp} HP</div> : null}
           {item.equipment.mana ? <div style={{ color: '#3498db' }}>✦ +{item.equipment.mana} Mana</div> : null}
-          {item.equipment.magic ? <div style={{ color: '#9b59ff' }}>🔮 +{item.equipment.magic} Magic</div> : null}
-          {item.equipment.critChance ? <div style={{ color: '#ff4444' }}>🎯 +{item.equipment.critChance}% Crit</div> : null}
-          {item.equipment.lifesteal ? <div style={{ color: '#c13030' }}>🩸 +{item.equipment.lifesteal}% Lifesteal</div> : null}
-          {item.equipment.thorns ? <div style={{ color: '#4a7c3a' }}>🌵 +{item.equipment.thorns} Thorns</div> : null}
-          {item.equipment.moveSpeed ? <div style={{ color: '#9bd4ff' }}>💨 +{item.equipment.moveSpeed}% Speed</div> : null}
+          {item.equipment.magic ? <div style={{ color: '#9b59ff' }}>🔮 +{item.equipment.magic} {tr('Magic')}</div> : null}
+          {item.equipment.critChance ? <div style={{ color: '#ff4444' }}>🎯 +{item.equipment.critChance}% {tr('Crit')}</div> : null}
+          {item.equipment.lifesteal ? <div style={{ color: '#c13030' }}>🩸 +{item.equipment.lifesteal}% {tr('Lifesteal')}</div> : null}
+          {item.equipment.thorns ? <div style={{ color: '#4a7c3a' }}>🌵 +{item.equipment.thorns} {tr('Thorns')}</div> : null}
+          {item.equipment.moveSpeed ? <div style={{ color: '#9bd4ff' }}>💨 +{item.equipment.moveSpeed}% {tr('Speed')}</div> : null}
           {item.equipment.xpBonus ? <div style={{ color: '#f4e04d' }}>⭐ +{item.equipment.xpBonus}% XP</div> : null}
-          {item.equipment.goldBonus ? <div style={{ color: '#f4e04d' }}>🪙 +{item.equipment.goldBonus}% Gold</div> : null}
-          {item.equipment.damageReduction ? <div style={{ color: '#4a90e2' }}>🛡 -{item.equipment.damageReduction}% Dmg Taken</div> : null}
-          {Object.entries(item.equipment.damageBonuses || {}).map(([school,value]) => <div key={`power-${school}`} style={{ color: SCHOOL_META[normalizeSchool(school)].color }}>{SCHOOL_META[normalizeSchool(school)].icon} +{value}% {SCHOOL_META[normalizeSchool(school)].label} Power</div>)}
-          {Object.entries(item.equipment.resistances || {}).map(([school,value]) => <div key={`res-${school}`} className="text-cyan-200">🛡 +{value}% {SCHOOL_META[normalizeSchool(school)].label} Resistance</div>)}
-          {Object.entries(item.equipment.weaknesses || {}).map(([school,value]) => <div key={`weak-${school}`} className="text-rose-300">⚠ +{value}% {SCHOOL_META[normalizeSchool(school)].label} Vulnerability</div>)}
-          {Object.entries(item.equipment.skillBonuses || {}).map(([skill,value]) => <div key={`skill-${skill}`} className="text-emerald-300">📈 +{value} {skill} skill</div>)}
-          {Object.entries(item.equipment.resistancePierce || {}).map(([school,value]) => <div key={`pierce-${school}`} className="text-orange-300">✦ {value}% {SCHOOL_META[normalizeSchool(school)].label} resist pierce</div>)}
+          {item.equipment.goldBonus ? <div style={{ color: '#f4e04d' }}>🪙 +{item.equipment.goldBonus}% {tr('Gold')}</div> : null}
+          {item.equipment.damageReduction ? <div style={{ color: '#4a90e2' }}>🛡 -{item.equipment.damageReduction}% {tr('Dmg Taken')}</div> : null}
+          {Object.entries(item.equipment.damageBonuses || {}).map(([school,value]) => <div key={`power-${school}`} style={{ color: SCHOOL_META[normalizeSchool(school)].color }}>{SCHOOL_META[normalizeSchool(school)].icon} +{value}% {tr(SCHOOL_META[normalizeSchool(school)].label)} {tr('Power')}</div>)}
+          {Object.entries(item.equipment.resistances || {}).map(([school,value]) => <div key={`res-${school}`} className="text-cyan-200">🛡 +{value}% {tr(SCHOOL_META[normalizeSchool(school)].label)} {tr('Resistance')}</div>)}
+          {Object.entries(item.equipment.weaknesses || {}).map(([school,value]) => <div key={`weak-${school}`} className="text-rose-300">⚠ +{value}% {tr(SCHOOL_META[normalizeSchool(school)].label)} {tr('Vulnerability')}</div>)}
+          {Object.entries(item.equipment.skillBonuses || {}).map(([skill,value]) => <div key={`skill-${skill}`} className="text-emerald-300">📈 +{value} {tr(skill)} {tr('skill')}</div>)}
+          {Object.entries(item.equipment.resistancePierce || {}).map(([school,value]) => <div key={`pierce-${school}`} className="text-orange-300">✦ {value}% {tr(SCHOOL_META[normalizeSchool(school)].label)} {tr('resist pierce')}</div>)}
           {(item.equipment.affixes || []).length > 0 && (
             <div className="mt-1 border-t border-fuchsia-500/30 pt-1 space-y-1">
               {(item.equipment.affixes || []).map((affix) => (
                 <div key={affix.id}>
-                  <div className="font-black text-fuchsia-300">✦ {affix.name}</div>
-                  <div className="text-[9px] text-fuchsia-100/65">{affix.description}</div>
+                  <div className="font-black text-fuchsia-300">✦ {tr(affix.name)}</div>
+                  <div className="text-[9px] text-fuchsia-100/65">{tr(affix.description)}</div>
                 </div>
               ))}
             </div>
@@ -255,10 +256,10 @@ export function ItemTooltip({
       )}
       {item.description && (
         <div className="text-[10px] italic text-amber-200/70 border-t border-purple-700/40 pt-1">
-          {item.description}
+          {tr(item.description)}
         </div>
       )}
-      <div className="text-[10px] text-amber-400 border-t border-purple-700/40 pt-1">💰 Value: {item.value} gold</div>
+      <div className="text-[10px] text-amber-400 border-t border-purple-700/40 pt-1">💰 {tr('Value:')} {item.value} {tr('gold')}</div>
     </div>
   );
 }
@@ -308,99 +309,99 @@ export function SpellTooltip({
       <div className="flex items-center gap-2">
         <span className="text-2xl" style={{ filter: `drop-shadow(0 0 6px ${spell.color})` }}>{locked ? '🔒' : spell.icon}</span>
         <div>
-          <div className="font-bold text-sm" style={{ color: locked ? '#ff6060' : spell.color }}>{spell.name}</div>
+          <div className="font-bold text-sm" style={{ color: locked ? '#ff6060' : spell.color }}>{tr(spell.name)}</div>
           <div className="text-[10px] uppercase tracking-wider text-amber-200/60">
-            {spell.type} · Hotkey: {idx + 1}
+            {tr(spell.type)} · {tr('Hotkey:')} {idx + 1}
           </div>
         </div>
       </div>
       <div className="border-t border-purple-700/40 pt-1 space-y-0.5 text-[11px]">
         {(spell.levelRequired ?? 1) > 1 && (
           <div className="flex justify-between">
-            <span className="text-amber-200/70">Required Level:</span>
-            <span className={locked ? 'text-red-400 font-bold' : 'text-green-400'}>Lv {spell.levelRequired}</span>
+            <span className="text-amber-200/70">{tr('Required Level:')}</span>
+            <span className={locked ? 'text-red-400 font-bold' : 'text-green-400'}>{tr('Lv')} {spell.levelRequired}</span>
           </div>
         )}
         <div className="flex justify-between">
-          <span className="text-amber-200/70">Mana Cost:</span>
+          <span className="text-amber-200/70">{tr('Mana Cost:')}</span>
           <span className={noMana ? 'text-red-400 font-bold' : 'text-blue-300'}>{spell.mana}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-amber-200/70">{spell.type === 'heal' ? 'Base Heal' : 'Base Damage'}:</span>
+          <span className="text-amber-200/70">{tr(spell.type === 'heal' ? 'Base Heal' : 'Base Damage')}:</span>
           <span className="text-amber-100">{spell.damage}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-amber-200/70">Cooldown:</span>
+          <span className="text-amber-200/70">{tr('Cooldown:')}</span>
           <span className="text-amber-100">{(spell.cooldown / 1000).toFixed(1)}s</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-amber-200/70">Range:</span>
-          <span className="text-amber-100">{spell.range === 0 ? 'Self' : spell.range <= 1.5 ? 'Melee' : `${spell.range} tiles`}</span>
+          <span className="text-amber-200/70">{tr('Range:')}</span>
+          <span className="text-amber-100">{spell.range === 0 ? tr('Self') : spell.range <= 1.5 ? tr('Melee') : `${spell.range} ${tr('tiles')}`}</span>
         </div>
       </div>
       {/* Detailed formula */}
       <div className="border-t border-purple-700/40 pt-1 space-y-0.5 text-[10px]">
         {spell.damageType && (
           <div className="flex justify-between">
-            <span className="text-amber-200/70">Element:</span>
-            <span className="capitalize" style={{ color: meta.color }}>{meta.icon} {meta.label}</span>
+            <span className="text-amber-200/70">{tr('Element:')}</span>
+            <span className="capitalize" style={{ color: meta.color }}>{meta.icon} {tr(meta.label)}</span>
           </div>
         )}
         {spell.scalingCoeff && (
-          <div className="flex justify-between"><span className="text-amber-200/70">Scaling:</span><span className="text-purple-300">×{spell.scalingCoeff} {(spell.scalingStat || (school==='physical'?'attack':'magic')).toUpperCase()}</span></div>
+          <div className="flex justify-between"><span className="text-amber-200/70">{tr('Scaling:')}</span><span className="text-purple-300">×{spell.scalingCoeff} {(spell.scalingStat || (school==='physical'?'attack':'magic')).toUpperCase()}</span></div>
         )}
         {scaling && (
           <div className="mt-1 space-y-1 border-t border-fuchsia-400/20 pt-1">
-            <div className="font-black uppercase tracking-wider text-fuchsia-200">Influence chain</div>
-            <div className="flex justify-between"><span className="text-slate-400">{scaling.statKind} stat</span><span className="text-purple-200">{scaling.stat.toFixed(0)} × {scaling.coeff}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">{scaling.skillId} skill</span><span className="text-emerald-300">Lv {scaling.effectiveSkill.toFixed(0)} → ×{scaling.skillMultiplier.toFixed(3)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">gear · {meta.label}</span><span style={{color:meta.color}}>+{scaling.itemBonus.toFixed(1)}% → ×{scaling.itemMultiplier.toFixed(3)}</span></div>
-            {scaling.pierce > 0 && <div className="flex justify-between"><span className="text-slate-400">resistance pierce</span><span className="text-orange-300">{scaling.pierce.toFixed(0)}%</span></div>}
-            <div className="flex justify-between border-t border-white/10 pt-1 font-black"><span className="text-amber-100">Estimated power</span><span className="text-white">{scaling.estimated}</span></div>
+            <div className="font-black uppercase tracking-wider text-fuchsia-200">{tr('Influence chain')}</div>
+            <div className="flex justify-between"><span className="text-slate-400">{tr(scaling.statKind)} {tr('stat')}</span><span className="text-purple-200">{scaling.stat.toFixed(0)} × {scaling.coeff}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">{tr(scaling.skillId)} {tr('skill')}</span><span className="text-emerald-300">Lv {scaling.effectiveSkill.toFixed(0)} → ×{scaling.skillMultiplier.toFixed(3)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">{tr('gear')} · {tr(meta.label)}</span><span style={{color:meta.color}}>+{scaling.itemBonus.toFixed(1)}% → ×{scaling.itemMultiplier.toFixed(3)}</span></div>
+            {scaling.pierce > 0 && <div className="flex justify-between"><span className="text-slate-400">{tr('resistance pierce')}</span><span className="text-orange-300">{scaling.pierce.toFixed(0)}%</span></div>}
+            <div className="flex justify-between border-t border-white/10 pt-1 font-black"><span className="text-amber-100">{tr('Estimated power')}</span><span className="text-white">{scaling.estimated}</span></div>
           </div>
         )}
         <div className="mt-1 space-y-1 border-t border-cyan-300/20 pt-1">
-          <div className="font-black uppercase tracking-wider text-cyan-200">Reactive combos</div>
+          <div className="font-black uppercase tracking-wider text-cyan-200">{tr('Reactive combos')}</div>
           {reactionHints.slice(0,3).map((hint) => (
             <div key={`${hint.when}-${hint.name}`} className="rounded border border-white/5 bg-black/20 px-1.5 py-1">
-              <div className="flex justify-between gap-2"><span className="text-slate-400">{hint.when}</span><span className="font-bold" style={{color:meta.color}}>{hint.name}{hint.multiplier ? ` ×${hint.multiplier.toFixed(2)}` : ''}</span></div>
-              <div className="text-[9px] text-cyan-100/65">{hint.result}</div>
+              <div className="flex justify-between gap-2"><span className="text-slate-400">{tr(hint.when)}</span><span className="font-bold" style={{color:meta.color}}>{tr(hint.name)}{hint.multiplier ? ` ×${hint.multiplier.toFixed(2)}` : ''}</span></div>
+              <div className="text-[9px] text-cyan-100/65">{tr(hint.result)}</div>
             </div>
           ))}
         </div>
         {(spell.critChance ?? 0) > 0 && (
-          <div className="flex justify-between"><span className="text-amber-200/70">Crit:</span><span className="text-red-300">{spell.critChance}% (×{spell.critMult})</span></div>
+          <div className="flex justify-between"><span className="text-amber-200/70">{tr('Crit')}:</span><span className="text-red-300">{spell.critChance}% (×{spell.critMult})</span></div>
         )}
         {(spell.lifestealPercent ?? 0) > 0 && (
-          <div className="flex justify-between"><span className="text-amber-200/70">Lifesteal:</span><span className="text-pink-300">{spell.lifestealPercent}%</span></div>
+          <div className="flex justify-between"><span className="text-amber-200/70">{tr('Lifesteal')}:</span><span className="text-pink-300">{spell.lifestealPercent}%</span></div>
         )}
         {(spell.piercePercent ?? 0) > 0 && (
-          <div className="flex justify-between"><span className="text-amber-200/70">Pierce:</span><span className="text-orange-300">{spell.piercePercent}% DEF</span></div>
+          <div className="flex justify-between"><span className="text-amber-200/70">{tr('Pierce:')}</span><span className="text-orange-300">{spell.piercePercent}% DEF</span></div>
         )}
         {(spell.hitCount ?? 1) > 1 && (
-          <div className="flex justify-between"><span className="text-amber-200/70">Hits:</span><span className="text-amber-100">×{spell.hitCount}</span></div>
+          <div className="flex justify-between"><span className="text-amber-200/70">{tr('Hits:')}</span><span className="text-amber-100">×{spell.hitCount}</span></div>
         )}
         {(spell.variance ?? 0) > 0 && (
-          <div className="flex justify-between"><span className="text-amber-200/70">Variance:</span><span className="text-amber-100">±{((spell.variance ?? 0) * 100).toFixed(0)}%</span></div>
+          <div className="flex justify-between"><span className="text-amber-200/70">{tr('Variance:')}</span><span className="text-amber-100">±{((spell.variance ?? 0) * 100).toFixed(0)}%</span></div>
         )}
         {(spell.allyEffect || spell.enemyEffect) && (
           <div className="mt-1 border-t border-cyan-400/20 pt-1 space-y-0.5">
-            <div className="font-bold text-cyan-200">Contextual skill</div>
-            {spell.allyEffect && spell.allyEffect !== 'none' && <div>🤝 Ally: {spell.allyEffect} ×{(spell.allyMultiplier ?? 1).toFixed(2)}</div>}
-            {spell.enemyEffect && spell.enemyEffect !== 'none' && <div>⚔ Enemy: {spell.enemyEffect} ×{(spell.enemyMultiplier ?? 1).toFixed(2)}</div>}
+            <div className="font-bold text-cyan-200">{tr('Contextual skill')}</div>
+            {spell.allyEffect && spell.allyEffect !== 'none' && <div>🤝 {tr('Ally:')} {tr(spell.allyEffect)} ×{(spell.allyMultiplier ?? 1).toFixed(2)}</div>}
+            {spell.enemyEffect && spell.enemyEffect !== 'none' && <div>⚔ {tr('Enemy:')} {tr(spell.enemyEffect)} ×{(spell.enemyMultiplier ?? 1).toFixed(2)}</div>}
             {((spell.dayMultiplier ?? 1) !== 1 || (spell.nightMultiplier ?? 1) !== 1) && <div>☀ ×{(spell.dayMultiplier ?? 1).toFixed(2)} · 🌙 ×{(spell.nightMultiplier ?? 1).toFixed(2)}</div>}
-            {(spell.drainPercent ?? 0) > 0 && <div>🩸 Drain: {spell.drainPercent}%</div>}
+            {(spell.drainPercent ?? 0) > 0 && <div>🩸 {tr('Drain:')} {spell.drainPercent}%</div>}
           </div>
         )}
       </div>
       {locked && (
-        <div className="text-red-400 text-center pt-1 font-bold border-t border-purple-700/40">🔒 Locked - Level {spell.levelRequired} required</div>
+        <div className="text-red-400 text-center pt-1 font-bold border-t border-purple-700/40">🔒 {tr('Locked - Level')} {spell.levelRequired} {tr('required')}</div>
       )}
       {!locked && onCd && (
-        <div className="text-red-400 text-center pt-1 font-bold border-t border-purple-700/40">⏱ On Cooldown</div>
+        <div className="text-red-400 text-center pt-1 font-bold border-t border-purple-700/40">⏱ {tr('On Cooldown')}</div>
       )}
       {!locked && !onCd && noMana && (
-        <div className="text-red-400 text-center font-bold">Not enough mana</div>
+        <div className="text-red-400 text-center font-bold">{tr('Not enough mana')}</div>
       )}
     </div>
   );
@@ -463,10 +464,10 @@ export function MonsterTooltip({
         <span className="text-3xl">{monster.emoji}</span>
         <div>
           <div className="font-bold text-sm" style={{ color: tColor }}>
-            {monster.name}
+            {tr(monster.name)}
           </div>
           <div className="text-[10px] uppercase tracking-wider" style={{ color: tColor }}>
-            {monster.type || 'normal'} · Lv {monster.level}
+            {tr(monster.type || 'normal')} · {tr('Lv')} {monster.level}
           </div>
         </div>
       </div>
@@ -476,21 +477,21 @@ export function MonsterTooltip({
           <span className="text-red-300">{monster.hp} / {monster.maxHp}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-amber-200/70">Attack:</span>
+          <span className="text-amber-200/70">{tr('Attack')}:</span>
           <span className="text-red-300">{monster.attack}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-amber-200/70">Defense:</span>
+          <span className="text-amber-200/70">{tr('Defense')}:</span>
           <span className="text-blue-300">{monster.defense}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-amber-200/70">XP Reward:</span>
+          <span className="text-amber-200/70">{tr('XP Reward:')}</span>
           <span className="text-yellow-300">{monster.xp}</span>
         </div>
         {monster.damageType && (
           <div className="flex justify-between">
-            <span className="text-amber-200/70">Damage Type:</span>
-            <span className="text-purple-300 capitalize">{monster.damageType}</span>
+            <span className="text-amber-200/70">{tr('Damage Type:')}</span>
+            <span className="text-purple-300 capitalize">{tr(monster.damageType)}</span>
           </div>
         )}
       </div>
