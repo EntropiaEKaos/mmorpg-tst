@@ -1,0 +1,55 @@
+name: Apply Mor'ia 9.7 Entity Labels City Designer V3
+on:
+  push:
+    branches: [moria-9.7-reference-visual-convergence]
+    paths:
+      - '.github/workflows/apply-moria-9-7-entity-labels-city-designer-v3.yml'
+permissions:
+  contents: write
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.7-reference-visual-convergence
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply and tighten entity label pass
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/apply-moria-9-7-entity-labels-city-designer.py')
+          s=p.read_text()
+          s=s.replace("import { drawBuilding, type Building } from '../game/render';", "import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/render';")
+          p.write_text(s)
+          PY
+          python3 tools/apply-moria-9-7-entity-labels-city-designer.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/game/entityNameplates.ts'); s=p.read_text()
+          s=s.replace('cx: number, spriteY: number, size: number, npc:', 'cx: number, spriteY: number, npc:')
+          s=s.replace('cx: number, spriteY: number, size: number, monster:', 'cx: number, spriteY: number, monster:')
+          p.write_text(s)
+          p=Path('src/game/render.ts'); s=p.read_text()
+          s=s.replace('queueMonsterNameplate(ctx, labelLayout, cx, y, size, monster,', 'queueMonsterNameplate(ctx, labelLayout, cx, y, monster,')
+          s=s.replace('queueNpcNameplate(ctx, labelLayout, cx, y, size, npc,', 'queueNpcNameplate(ctx, labelLayout, cx, y, npc,')
+          p.write_text(s)
+          PY
+      - name: Validate client
+        run: npm ci && npm audit && npm run typecheck && npm run build
+      - name: Validate server
+        run: npm ci --prefix server --no-fund && npm audit --prefix server && npm run check --prefix server && npm test --prefix server
+      - name: Commit validated pass and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f tools/apply-moria-9-7-entity-labels-city-designer.py
+          rm -f .github/workflows/apply-moria-9-7-entity-labels-city-designer.yml
+          rm -f .github/workflows/apply-moria-9-7-entity-labels-city-designer-v2.yml
+          rm -f .github/workflows/apply-moria-9-7-entity-labels-city-designer-v3.yml
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(9.7): add smart entity labels and visual city authoring"
+          git push origin HEAD:moria-9.7-reference-visual-convergence
