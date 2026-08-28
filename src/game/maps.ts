@@ -337,10 +337,16 @@ function capitalUrbanTile(map: GameMap, x: number, y: number): Tile | null {
   if (x < minX || x > maxX || y < minY || y > maxY) return null;
   if (x === minX || x === maxX || y === minY || y === maxY) return { type:'wall', walkable:false, blocksSight:true };
   const cx = map.townCenter.x, cy = map.townCenter.y;
-  const major = Math.abs(x - cx) <= 1 || Math.abs(y - cy) <= 1;
-  const secondary = Math.abs(x - (cx - 28)) <= 1 || Math.abs(x - (cx + 28)) <= 1 || Math.abs(y - (cy - 28)) <= 1 || Math.abs(y - (cy + 28)) <= 1;
+  const royalAxes = Math.abs(x - cx) <= 2 || Math.abs(y - cy) <= 2;
+  const secondaryBoulevards = Math.abs(x - (cx - 28)) <= 1 || Math.abs(x - (cx + 28)) <= 1 || Math.abs(y - (cy - 28)) <= 1 || Math.abs(y - (cy + 28)) <= 1;
   const innerRing = Math.abs(x - (minX + 14)) <= 1 || Math.abs(x - (maxX - 14)) <= 1 || Math.abs(y - (minY + 14)) <= 1 || Math.abs(y - (maxY - 14)) <= 1;
-  return { type:(major || secondary || innerRing) ? 'path' : 'floor', walkable:true, blocksSight:false };
+  const civicPlaza = Math.abs(x - cx) <= 7 && Math.abs(y - cy) <= 7;
+  const crownForecourt = x >= cx - 12 && x <= cx + 12 && y >= cy - 28 && y <= cy - 20;
+  const marketSquare = x >= cx - 36 && x <= cx - 14 && y >= cy - 14 && y <= cy + 8;
+  const dawnSquare = x >= cx + 14 && x <= cx + 36 && y >= cy - 22 && y <= cy + 6;
+  const gardenPromenade = x >= cx - 16 && x <= cx + 22 && y >= cy + 28 && y <= cy + 32;
+  const ceremonial = royalAxes || secondaryBoulevards || innerRing || civicPlaza || crownForecourt || marketSquare || dawnSquare || gardenPromenade;
+  return { type:ceremonial ? 'path' : 'floor', walkable:true, blocksSight:false };
 }
 
 export function generateMap(mapId: string): Tile[][] {

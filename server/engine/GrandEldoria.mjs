@@ -76,7 +76,9 @@ function buildProps() {
   for (const [x,y] of [[44,116],[48,116],[68,108],[70,108],[116,104],[120,104]]) add('cart',x,y,'#8f704d');
   for (const [x,y] of [[52,84],[56,84],[60,84],[54,102],[58,102],[104,120],[108,120]]) add('barrel',x,y,'#8a6546');
   for (const [x,y] of [[70,122],[74,124],[88,124],[92,122],[90,116],[70,116]]) add('pine',x,y,'#6e9b5a');
-  return props.slice(0, 96);
+  for (const [x,y,label] of [[72,72,'Praça da Coroa'],[88,72,'Praça da Coroa'],[72,88,'Praça da Coroa'],[88,88,'Praça da Coroa'],[46,68,'Grande Mercado'],[114,60,'Bairro da Aurora'],[68,110,'Passeio dos Jardins'],[96,110,'Passeio dos Jardins']]) add('sign',x,y,'#d8b45a',label);
+  for (const [x,y] of [[74,74],[86,74],[74,86],[86,86]]) add('statue',x,y,'#c9b68d','Guarda da Coroa');
+  return props.slice(0, 112);
 }
 
 export const GRAND_ELDORIA_MAP = Object.freeze({

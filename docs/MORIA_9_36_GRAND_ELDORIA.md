@@ -48,3 +48,10 @@ A antiga camada `residentialRing` de apresentação foi desativada em Eldoria, e
 ### 9.36C.1 — acabamento do City Designer
 
 A revisão humana da prova 9.36C aprovou a densidade urbana, mas detectou compressão no rótulo **CONSTRUIR** da barra de ferramentas. A barra foi reorganizada de quatro colunas estreitas para uma grade 2×2, com alvos maiores, borda de estado e tipografia legível. A alteração é exclusivamente de apresentação do editor; IDs, ferramentas e autoridade do mapa permanecem inalterados.
+
+
+### 9.36D — Urban Polish
+
+A densidade da 9.36C foi preservada, mas a capital passou a ter **hierarquia urbana legível**. Os eixos reais agora têm cinco tiles de largura, o centro cívico forma uma praça ampla e o plano inclui adro da Coroa, praça mercantil, praça da Aurora e passeio dos Jardins. Tudo continua usando apenas tiles autoritativos `path/floor/wall`: não existe colisão decorativa paralela nem divergência entre cliente e servidor.
+
+A orientação urbana também ganhou placas e guardas-estátua em pontos cívicos, mantendo o orçamento de props da classe `capital`. No City Designer, o contador de ocupação passou de “tiles bloqueados” para **blocos ocupados**.
