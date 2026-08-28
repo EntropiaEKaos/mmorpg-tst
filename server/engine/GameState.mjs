@@ -24,6 +24,10 @@ import { contextualizeSpell, effectForRelation, multiplierForRelation } from './
 import { applyClassDerivedStats, classBasicAttackRules, classSpellMultiplier, applyClassKillSustain } from './ClassIdentity.mjs';
 import { buildBossDefeatEvent, buildLootRewardEvent } from './RewardFeedback.mjs';
 import { buildBossIntroEvent, buildRegionDiscoveryEvent, buildAchievementUnlockEvent, buildCosmeticUnlockEvent, buildRewardChestEvent } from './CinematicRewards.mjs';
+import { livingWorldAI } from './LivingWorldAI.mjs';
+import { beginTelegraph, resolveTelegraph, addStagger, publicCombatState, hasStatus } from './CombatDepth.mjs';
+import { interiorSystem } from './InteriorSystem.mjs';
+import { worldEventDirector } from './WorldEventDirector.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -90,6 +94,7 @@ class GameEngine {
       this.pendingEvents.set(mapId, []);
     }
     questEngine.registerPlayers(this.players);
+    livingWorldAI.sync(contentDB); interiorSystem.sync(contentDB);
     console.log(`🌍 World Init: ${WORLD.getMapIds().length} maps`);
   }
 
@@ -537,6 +542,8 @@ class GameEngine {
     if (crit) dmg = Math.floor(dmg * classRules.critMultiplier);
 
     monster.hp -= dmg;
+    const stagger = addStagger(monster, Math.max(4, Math.floor(dmg / Math.max(1, monster.maxHp) * 120)), Number(monster.staggerThreshold) || (monster.type === 'boss' ? 160 : 100), now);
+    if (stagger.staggered) this.emitEvent(player.mapId, { kind:'combat_interrupt', targetId:monster.id, text:'INTERRUPTED', color:'#ffd166', pos:{x:monster.x,y:monster.y} });
     player.stats.damageDealt += dmg;
     const attackSkill = (player.vocation === 'paladin' || player.vocation === 'ranger') ? 'distance' : (player.equipment?.weapon ? 'sword' : 'fist');
     this.progressSkill(player, attackSkill, 1);
@@ -586,6 +593,7 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind:update.ready ? 'task_ready' : 'task_progress', targetId:player.id, text:`${update.name}: ${update.current}/${update.needed}${update.ready ? ' · return to task master' : ''}`, color:update.ready ? '#f4e04d' : '#9bd4ff', pos:{ x:player.x, y:player.y }, vocation:player.vocation });
     }
     const officialKill = officialSystems.onMonsterKill(player, monster);
+    for (const event98 of worldEventDirector.recordKill(player.mapId, monster)) this.emitEvent(player.mapId,{kind:'world_event_98',targetId:player.id,text:`🌍 ${event98.name}: ${event98.progress}/${event98.needed}`,color:'#ff9b4d',pos:{x:player.x,y:player.y}});
     const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100) * adventureKill.xpMultiplier * officialKill.xpMultiplier);
     player.xp += xpGain;
     this.emitEvent(player.mapId, { kind: 'xp', targetId: player.id, amount: xpGain, pos: { x: monster.x, y: monster.y }, color: '#f4e04d', text: `+${xpGain} XP` });
@@ -1294,49 +1302,18 @@ class GameEngine {
   updateMonsters(mapId, now) {
     const monsters = this.monstersByMap.get(mapId) || [];
     const players = this.getPlayersOnMap(mapId);
+    const map = WORLD.getMap(mapId);
     for (const m of monsters) {
-      if (m.dead) { if (!m.noRespawn && now >= m.respawnAt) { m.dead = false; m.hp = m.maxHp; m.x = m.spawnX; m.y = m.spawnY; } continue; }
-      if (players.length === 0) continue;
-
-      let nearest = null, minDist = 8;
-      for (const p of players) {
-        if (m.dungeonOwnerId && p.id !== m.dungeonOwnerId) continue;
-        if (this.getActiveBuffs(p, now).some(buff => buff.type === 'invisible')) continue;
-        const d = Math.abs(p.x - m.x) + Math.abs(p.y - m.y);
-        if (d < minDist) { minDist = d; nearest = p; }
-      }
-
-      if (nearest && minDist <= 1 && now - m.lastAttack > 1200) {
-        m.lastAttack = now;
-        const derived = this.computeDerivedStats(nearest);
-        let dmg = Math.max(1, m.attack + Math.floor(Math.random() * 4) - derived.totalDefense);
-        dmg = Math.max(1, Math.floor(dmg * (1 - derived.damageReduction / 100)));
-        nearest.hp -= dmg; nearest.stats.damageTaken += dmg;
-        this.progressSkill(nearest, 'shielding', 1);
-        this.emitEvent(mapId, { kind: 'damage', targetId: nearest.id, amount: dmg, pos: { x: nearest.x, y: nearest.y }, color: '#ff6060' });
-        if (nearest.hp <= 0) {
-          nearest.hp = derived.totalMaxHp; nearest.mana = derived.totalMaxMana;
-          const deathLoss = officialSystems.getDeathLossMultiplier(nearest);
-          nearest.xp = Math.max(0, nearest.xp - Math.floor(nearest.xpNext * 0.1 * deathLoss));
-          if (nearest.official?.dungeon?.active) { officialSystems.failDungeon(nearest); this.clearOfficialDungeon(nearest); }
-          nearest.x = 40; nearest.y = 40; nearest.mapId = 'eldoria';
-          nearest.stats.deaths++;
-          this.emitEvent(nearest.mapId, { kind: 'death', targetId: nearest.id, text: 'You died!', color: '#ff0000', pos: { x: nearest.x, y: nearest.y } });
-        }
-      } else if (nearest && minDist > 1 && minDist < 8 && now - m.lastMove > m.speed) {
-        m.lastMove = now;
-        const dx = Math.sign(nearest.x - m.x), dy = Math.sign(nearest.y - m.y);
-        const map = WORLD.getMap(mapId);
-        const canOccupy = (x, y) => Boolean(
-          map?.tiles?.[y]?.[x]?.walkable &&
-          !players.some(p => p.x === x && p.y === y) &&
-          !monsters.some(other => other.id !== m.id && !other.dead && other.x === x && other.y === y)
-        );
-        if (Math.abs(nearest.x - m.x) > Math.abs(nearest.y - m.y)) {
-          if (canOccupy(m.x + dx, m.y)) m.x += dx;
-        } else {
-          if (canOccupy(m.x, m.y + dy)) m.y += dy;
-        }
+      if (m.dead) { if (!m.noRespawn && now >= m.respawnAt) { m.dead=false; m.hp=m.maxHp; m.x=m.spawnX; m.y=m.spawnY; m.combat98=undefined; } continue; }
+      let nearest=null,minDist=Number(m.aggroRadius)||8;
+      for (const p of players) { if (m.dungeonOwnerId&&p.id!==m.dungeonOwnerId) continue; if (this.getActiveBuffs(p,now).some(b=>b.type==='invisible')) continue; const d=Math.abs(p.x-m.x)+Math.abs(p.y-m.y); if(d<minDist){minDist=d;nearest=p;} }
+      const phase=livingWorldAI.phase(m); if(!m.combat98)m.combat98={stagger:0,status:[],telegraph:null,phase}; else m.combat98.phase=phase;
+      if (nearest && minDist<=1) {
+        if (!m.combat98.telegraph && now-m.lastAttack>1200 && !hasStatus(m,'stun',now)) { const t=beginTelegraph(m,nearest,now); this.emitEvent(mapId,{kind:'combat_telegraph',targetId:nearest.id,sourceId:m.id,telegraph:t,pos:{x:nearest.x,y:nearest.y},color:t.color}); }
+        const resolved=resolveTelegraph(m,nearest,now);
+        if(resolved.ready&&resolved.targetMatches){m.lastAttack=now;const derived=this.computeDerivedStats(nearest);let dmg=Math.max(1,m.attack+Math.floor(Math.random()*4)-derived.totalDefense);dmg=Math.max(1,Math.floor(dmg*(1-derived.damageReduction/100)));nearest.hp-=dmg;nearest.stats.damageTaken+=dmg;this.progressSkill(nearest,'shielding',1);this.emitEvent(mapId,{kind:'damage',targetId:nearest.id,amount:dmg,pos:{x:nearest.x,y:nearest.y},color:'#ff6060'});if(nearest.hp<=0){nearest.hp=derived.totalMaxHp;nearest.mana=derived.totalMaxMana;nearest.xp=Math.max(0,nearest.xp-Math.floor(nearest.xpNext*.1*officialSystems.getDeathLossMultiplier(nearest)));if(nearest.official?.dungeon?.active){officialSystems.failDungeon(nearest);this.clearOfficialDungeon(nearest)}nearest.x=40;nearest.y=40;nearest.mapId='eldoria';nearest.stats.deaths++;this.emitEvent(nearest.mapId,{kind:'death',targetId:nearest.id,text:'You died!',color:'#ff0000',pos:{x:nearest.x,y:nearest.y}})}}
+      } else if (now-m.lastMove>(Number(m.speed)||900)) {
+        m.lastMove=now;const occupied=new Set(players.map(p=>`${p.x},${p.y}`));for(const other of monsters)if(other.id!==m.id&&!other.dead)occupied.add(`${other.x},${other.y}`);const next=livingWorldAI.decideMonsterMove(m,nearest,{map,occupied,now,allies:monsters});if(map?.tiles?.[next.y]?.[next.x]?.walkable){m.x=next.x;m.y=next.y;m.aiMode=next.mode;}
       }
     }
   }
@@ -1344,6 +1321,10 @@ class GameEngine {
   tick() {
     const now = Date.now();
     this.tickCount++;
+    const worldClock98 = createWorldClockSnapshot();
+    livingWorldAI.tickNpcs({contentDB,world:WORLD,clock:worldClock98,players:[...this.players.values()],monstersByMap:this.monstersByMap,now});
+    worldEventDirector.tick({contentDB,clock:worldClock98,now});
+    interiorSystem.sync(contentDB);
     for (const p of this.players.values()) {
       officialSystems.tickPlayer(p, now);
       if (now - p.lastRegen > 2000) {
@@ -1405,7 +1386,7 @@ class GameEngine {
 
     const allMonsters = this.monstersByMap.get(player.mapId) || [];
     const monsters = allMonsters.filter(m => !m.dead && (!m.dungeonOwnerId || m.dungeonOwnerId === playerId) && Math.abs(m.x - player.x) < 15 && Math.abs(m.y - player.y) < 15)
-      .map(m => ({ id: m.id, name: m.name, emoji: m.emoji, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp, level: m.level, type: m.type, color: m.color, size: m.size }));
+      .map(m => ({ id: m.id, name: m.name, emoji: m.emoji, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp, level: m.level, type: m.type, color: m.color, size: m.size, aiMode:m.aiMode, combat98:publicCombatState(m) }));
 
     const allGround = this.groundItemsByMap.get(player.mapId) || [];
     const groundItems = allGround.filter(g => Math.abs(g.x - player.x) < 15 && Math.abs(g.y - player.y) < 15).map(g => ({ id: g.id, x: g.x, y: g.y, items: g.items }));
@@ -1420,7 +1401,7 @@ class GameEngine {
     official.state.combat = { sessionDamage, sessionSeconds: Math.floor(sessionSeconds), dps: Math.round((sessionDamage / sessionSeconds) * 10) / 10 };
     const social = socialSystems.snapshot(player, this.players);
     const worldClock = createWorldClockSnapshot();
-    return { player: playerData, nearbyPlayers, monsters, groundItems, events, official, social, worldClock };
+    return { player: playerData, nearbyPlayers, monsters, groundItems, events, official, social, worldClock, livingWorld:{npcs:livingWorldAI.publicNpcs(player.mapId,contentDB)}, interiors:{available:interiorSystem.list(player.mapId), current:interiorSystem.snapshot(player)}, worldEvents98:worldEventDirector.snapshot(player.mapId) };
   }
 
   consumeEvents(mapId) { this.pendingEvents.set(mapId, []); }
