@@ -8,6 +8,20 @@ const errors = [];
 page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
 page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
 
+// Keep the capture deterministic while still exercising LoginScreen's real authenticated flow.
+await page.route('http://127.0.0.1:3000/api/auth/register', async route => {
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      account: { id:'visual-review-account', username:'revisao928', createdAt:Date.now(), characters:[] },
+      sessionToken:'visual-review-token',
+      expiresAt:Date.now()+3600000,
+      recoveryCode:'MORIA-928-REVIEW-CODE',
+    }),
+  });
+});
+
 const texts = {};
 const captureText = async (key) => {
   texts[key] = (await page.locator('body').innerText()).replace(/\s+$/gm,'');
@@ -26,8 +40,16 @@ await captureText('login');
 await assertNoLegacyEnglish('login', ['LOGIN','REGISTER','RECOVER','ACCOUNT NAME','PASSWORD','OFFLINE QUICK PLAY','PERSISTENT ONLINE REALM']);
 await screenshot('moria-9-28-login-ptbr.png');
 
-// Character creation uses the actual game renderer for every vocation preview.
+// Traverse the real registration -> recovery-code -> first-character flow.
 await page.getByRole('button', { name:'CADASTRAR', exact:true }).click();
+await page.locator('input[autocomplete="username"]').fill('revisao928');
+await page.locator('input[autocomplete="new-password"]').fill('SenhaForte928!');
+await page.getByRole('button', { name:'CRIAR CONTA', exact:true }).click();
+await page.getByRole('button', { name:/SALVEI.*CONTINUAR/i }).waitFor({ state:'visible', timeout:10000 });
+await assertNoLegacyEnglish('recovery code', ['ACCOUNT RECOVERY','SAVE YOUR RECOVERY CODE','I SAVED IT','CONTINUE']);
+await page.getByRole('button', { name:/SALVEI.*CONTINUAR/i }).click();
+
+// Character creation uses the actual game renderer for every vocation preview.
 const previews = page.locator('[data-vocation-preview]');
 await previews.first().waitFor({ state:'visible', timeout:10000 });
 await page.waitForTimeout(350);
@@ -42,8 +64,10 @@ await page.waitForTimeout(300);
 await captureText('characters-bottom');
 await screenshot('moria-9-28-character-creation-b.png');
 
-// Return to login and enter the deterministic offline gameplay path.
-await page.getByRole('button', { name:'ENTRAR', exact:true }).click();
+// Reset the temporary auth session and enter deterministic offline gameplay.
+await page.evaluate(() => localStorage.removeItem('moria_session_token'));
+await page.reload({ waitUntil:'networkidle' });
+await page.waitForFunction(() => document.documentElement.lang === 'pt-BR');
 await page.getByRole('button', { name:/JOGO RÁPIDO OFFLINE/i }).click();
 await page.locator('canvas.moria-world-canvas').waitFor({ state:'visible' });
 await page.waitForTimeout(1000);
