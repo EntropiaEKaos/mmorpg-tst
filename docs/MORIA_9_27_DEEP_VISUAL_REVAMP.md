@@ -1,52 +1,4 @@
-from pathlib import Path
-
-readme = Path('README.md')
-s = readme.read_text(encoding='utf-8')
-s = s.replace("Versão atual: Mor'ia 9.26.1 — Road to 10 Candidate", "Versão atual: Mor'ia 9.27 — Deep Visual Revamp")
-anchor = "## ✦ Mor'ia 9.17–9.26.1 — Road to 10"
-assert anchor in s, 'README insertion anchor not found'
-section = r'''## 🎨 Mor'ia 9.27 — Deep Visual Revamp
-
-A **9.27** é uma reforma gráfica profunda e exclusivamente de apresentação, construída antes da Road to 10 para elevar o mundo sem transferir autoridade do servidor para o cliente. O visual clássico/pixel foi preservado, mas recebeu uma nova camada de profundidade: materiais menos planos, arquitetura 2.5D, sombras de contato, vegetação em massas, silhuetas mais presentes, acabamento cinematográfico por bioma e uma revisão completa da leitura de HUD, inventário e combate.
-
-O mundo agora combina **micro-bevel e variação estável por coordenada nos tiles**, água/lava com acabamento vivo, fachadas com plano lateral, fundação e sombra de beiral, telhados com oclusão de primeiro plano, árvores com sombra de copa e props urbanos ancorados ao chão. Lampiões, braseiros e cristais possuem halos emissivos preservando o núcleo pixelado; a intensidade reage à escuridão de apresentação e produz um reflexo curto no piso durante a noite.
-
-Clima também passou a alterar a leitura material. **Rain/Storm** aplicam resposta molhada, brilho especular discreto e gradação fria; tempestades ganham pressão atmosférica e exposição rara de relâmpago. O passe continua estritamente visual: não altera colisão, combate, economia, movimentação, IA ou qualquer estado autoritativo.
-
-O combate recebeu VFX extraídos para módulo próprio, com trails e partículas aditivas, enquanto `GameScreen.tsx` permanece dentro do budget arquitetural e o contrato histórico de escala de sprites da 9.7 é preservado. A interface mantém `prefers-reduced-motion` e a revisão real em Chromium terminou sem erros de console/página.
-
-### Entrada — direção dark-fantasy
-
-![Mor'ia 9.27 login revamp](docs/screenshots/moria-9-27-login-revamp.png)
-
-### Eldoria — dia claro
-
-![Mor'ia 9.27 world day](docs/screenshots/moria-9-27-world-day.png)
-
-### Eldoria — noite e iluminação urbana
-
-![Mor'ia 9.27 world night](docs/screenshots/moria-9-27-world-night.png)
-
-### Eldoria — tempestade e superfícies reativas
-
-![Mor'ia 9.27 world storm](docs/screenshots/moria-9-27-world-storm.png)
-
-### Inventário + HUD
-
-![Mor'ia 9.27 inventory HUD](docs/screenshots/moria-9-27-inventory-hud.png)
-
-> Evidência visual versionada no próprio repositório: **todo print final de evolução deve entrar no README antes do merge**. A 9.27 fecha com uma matriz determinística de cinco capturas reais em Chromium.
-
-Detalhes técnicos e limites de autoridade: **[Mor'ia 9.27 — Deep Visual Revamp](docs/MORIA_9_27_DEEP_VISUAL_REVAMP.md)**.
-
----
-
-'''
-s = s.replace(anchor, section + anchor, 1)
-readme.write_text(s, encoding='utf-8')
-
-doc = Path('docs/MORIA_9_27_DEEP_VISUAL_REVAMP.md')
-doc.write_text(r'''# Mor'ia 9.27 — Deep Visual Revamp
+# Mor'ia 9.27 — Deep Visual Revamp
 
 ## Objetivo
 
@@ -105,5 +57,3 @@ A release é fechada somente depois de:
 - `docs/screenshots/moria-9-27-world-night.png`
 - `docs/screenshots/moria-9-27-world-storm.png`
 - `docs/screenshots/moria-9-27-inventory-hud.png`
-''', encoding='utf-8')
-print('Prepared Mor\'ia 9.27 release documentation')
