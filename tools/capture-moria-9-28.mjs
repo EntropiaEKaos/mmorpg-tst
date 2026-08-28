@@ -23,22 +23,21 @@ await page.route('http://127.0.0.1:3000/api/auth/register', async route => {
 });
 
 const texts = {};
-const captureText = async (key) => {
-  texts[key] = (await page.locator('body').innerText()).replace(/\s+$/gm,'');
-};
+const bodyText = async () => (await page.locator('body').innerText()).replace(/\s+$/gm,'');
+const captureText = async (key) => { texts[key] = await bodyText(); };
 const screenshot = name => page.screenshot({ path:`docs/screenshots/${name}`, fullPage:false });
 const escapeRegex = term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const containsStandalone = (text, term) => {
   const escaped = escapeRegex(term.toUpperCase());
-  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'u').test(text);
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'u').test(text.toUpperCase());
 };
 const assertNoLegacyEnglish = async (surface, forbidden) => {
-  const text = (await page.locator('body').innerText()).toUpperCase();
+  const text = await bodyText();
   const hits = forbidden.filter(term => containsStandalone(text, term));
   if (hits.length) throw new Error(`${surface}: untranslated visible labels: ${hits.join(', ')}`);
 };
 const assertPortuguese = async (surface, required) => {
-  const text = (await page.locator('body').innerText()).toUpperCase();
+  const text = (await bodyText()).toUpperCase();
   const missing = required.filter(term => !text.includes(term.toUpperCase()));
   if (missing.length) throw new Error(`${surface}: expected PT-BR labels missing: ${missing.join(', ')}`);
 };
@@ -70,10 +69,14 @@ await page.waitForTimeout(350);
 if (await previews.count() !== 14) throw new Error(`expected 14 vocation previews, got ${await previews.count()}`);
 await captureText('characters-top');
 await assertPortuguese('character creation', [
-  'CRIE SEU PERSONAGEM','NOME DO PERSONAGEM','VOCAÇÃO','CAVALEIRO','PALADINO','FEITICEIRO','DRUIDA','BRUXO','LADINO','SACERDOTE',
+  'CONECTADO COMO REVISÃO928','CRIE SEU PERSONAGEM','NOME DO PERSONAGEM','VOCAÇÃO',
+  'CAVALEIRO','PALADINO','FEITICEIRO','DRUIDA','BRUXO','LADINO','SACERDOTE',
   'CAVALEIRO DA MORTE','MONGE','PATRULHEIRO','NECROMANTE','XAMÃ','TEMPLÁRIO'
 ]);
-await assertNoLegacyEnglish('character creation', ['CHARACTER NAME','VOCATION','SELECTED','CHOOSE','CREATE HERO','KNIGHT','SORCERER','DRUID','WARLOCK','ROGUE','PRIEST','DEATH KNIGHT','MONK','RANGER','NECROMANCER','SHAMAN','TEMPLAR']);
+await assertNoLegacyEnglish('character creation', [
+  'SIGNED IN AS','CHARACTER NAME','VOCATION','SELECTED','CHOOSE','CREATE HERO','KNIGHT','SORCERER','DRUID',
+  'WARLOCK','ROGUE','PRIEST','DEATH KNIGHT','MONK','RANGER','NECROMANCER','SHAMAN','TEMPLAR'
+]);
 await screenshot('moria-9-28-character-creation-a.png');
 const scrollBox = previews.first().locator('xpath=ancestor::div[contains(@class,"moria-scrollbar")]').first();
 if (await scrollBox.count()) await scrollBox.evaluate(el => { el.scrollTop = el.scrollHeight; });
@@ -83,21 +86,39 @@ await captureText('characters-bottom');
 await screenshot('moria-9-28-character-creation-b.png');
 
 // Reset the temporary auth session and enter deterministic offline gameplay.
-await page.evaluate(() => localStorage.removeItem('moria_session_token'));
+await page.evaluate(() => {
+  localStorage.removeItem('moria_session_token');
+  // Ensure the visual review starts from a clean event/chat state.
+  localStorage.removeItem('moria_world_events');
+});
 await page.reload({ waitUntil:'networkidle' });
 await page.waitForFunction(() => document.documentElement.lang === 'pt-BR');
 await page.getByRole('button', { name:/JOGO RÁPIDO OFFLINE/i }).click();
 await page.locator('canvas.moria-world-canvas').waitFor({ state:'visible' });
-await page.waitForTimeout(1000);
+await page.waitForTimeout(1200);
 await captureText('gameplay');
-await assertNoLegacyEnglish('gameplay HUD', ['INVENTORY','CHARACTER','QUESTS','SETTINGS','LOGOUT','DAILY REWARD','ADVENTURE BOARD']);
+await assertPortuguese('gameplay HUD', [
+  'MASMORRA','MISTÉRIOS','LIVROS','MOEDAS','INVENT.','VIDA','DEPURAÇÃO',
+  'MINIMAPA','CAVALEIRO','LIVRO DE MAGIAS','AMEAÇAS PRÓXIMAS',
+  'FÚRIA','CURA DE FERIDAS','FÚRIA IMPLACÁVEL','ESCUDO MÁGICO',
+  'TODOS','MUNDO','FALAR','GRUPO','GUILDA','COMÉRCIO','BATALHA','SAQUE','MISSÃO','SISTEMA','ENVIAR',
+  'BEM-VINDO A MOR\'IA'
+]);
+await assertNoLegacyEnglish('gameplay HUD', [
+  'INVENTORY','CHARACTER','QUESTS','SETTINGS','LOGOUT','DAILY REWARD','ADVENTURE BOARD',
+  'DUNGEON','MYSTERY','BOOKS','COINS','SPELLBOOK','NEARBY THREATS','BERSERK','WOUND HEAL','FIERCE BERSERK','MAGIC SHIELD',
+  'ALL','WORLD','SAY','PARTY','GUILD','TRADE','BATTLE','LOOT','QUEST','SYSTEM','SEND','PLAGUE RAT','WARNING','WORLD EVENT'
+]);
 await screenshot('moria-9-28-gameplay-ptbr-character.png');
 
 await page.keyboard.press('i');
-await page.waitForTimeout(450);
+await page.waitForTimeout(500);
 await captureText('inventory');
-await assertPortuguese('inventory', ['INVENTÁRIO']);
-await assertNoLegacyEnglish('inventory', ['INVENTORY','EQUIP','UNEQUIP','CRAFT','RECIPE','INGREDIENTS','STATS','REQUIREMENTS']);
+await assertPortuguese('inventory', ['INVENTÁRIO','ITENS','ARTESANATO','ENCAIXE','POÇÃO DE VIDA','POÇÃO DE MANA']);
+await assertNoLegacyEnglish('inventory', [
+  'INVENTORY','ITEMS','CRAFTING','SOCKET','EQUIP','UNEQUIP','CRAFT','RECIPE','INGREDIENTS','STATS','REQUIREMENTS',
+  'HEALTH POTION','MANA POTION','GREATER HEALTH POTION'
+]);
 await screenshot('moria-9-28-inventory-ptbr.png');
 
 fs.writeFileSync('browser-console.txt', errors.join('\n'));
