@@ -3,7 +3,7 @@
 <div align="center">
   <img src="public/images/logo.png" alt="Mor'ia Logo" width="280" />
   <p><b>Um MMORPG completo com combate autoritativo, inspiração em Tibia & WoW, 100% no navegador.</b></p>
-  <p><b>Versão atual: Mor'ia 9.26.1 — Road to 10 Candidate</b></p>
+  <p><b>Versão atual: Mor'ia 9.33 — Visual Rebirth Candidate</b></p>
 </div>
 
 ---
@@ -29,6 +29,30 @@ O gate oficial de qualidade executa `npm audit`, TypeScript, build de produção
 A linha 9.1 adiciona uma base de lançamento alpha orientada a conteúdo: **11 mapas** (10 regiões públicas + **Astra Sanctum, a Ilha dos GMs**), mais de **70 itens**, mais de **70 monstros**, mais de **40 NPCs**, mais de **45 quests**, novos feitiços para as 14 vocações, eventos regionais, lojas e loot tables autoritativas.
 
 Todo esse conteúdo é materializado no ContentDB e pode ser criado/editado/removido pelo `/admin`. Servidores 9.0 existentes migram uma única vez para a base 9.1 preservando valores já personalizados pelo admin. A Ilha GM usa acesso `gm` validado no servidor pela lista **GM Roster** do próprio Admin.
+
+---
+
+## 🎨 Mor'ia 9.27–9.33 — Visual Rebirth
+
+Antes do hardening final da 10.0, Mor'ia recebeu uma reconstrução gráfica profunda sem alterar a autoridade do servidor. A linha **Visual Rebirth** introduz color grading e atmosfera por bioma, haze e shafts de luz, contact shadows, terreno urbano menos repetitivo, escala/silhueta melhor de personagens, famílias visuais próprias para monstros importantes, VFX de combate por escola elemental/reação, emissivos em cidades e uma linguagem de HUD obsidiana/brass mais consistente.
+
+O revamp é deliberadamente **presentation-only**: dano, colisão, movimento, economia, persistência e regras continuam server-authoritative. A suíte de regressão e o budget arquitetural continuam bloqueando qualquer polish que altere gameplay.
+
+### Gameplay diurno — 9.33
+
+![Mor'ia 9.33 Visual Rebirth day](docs/screenshots/moria-9-33-visual-rebirth-day.png)
+
+### Atmosfera escura / iluminação — 9.33
+
+![Mor'ia 9.33 Visual Rebirth night](docs/screenshots/moria-9-33-visual-rebirth-night.png)
+
+### Character UI — 9.33
+
+![Mor'ia 9.33 Visual Rebirth Character UI](docs/screenshots/moria-9-33-visual-rebirth-character-ui.png)
+
+A revisão final foi executada em Chromium real a **1600×1000**, com os três estados versionados e **0 erros de console/página**. A captura escura usa o override de apresentação do Debug para validar contraste/legibilidade; o relógio autoritativo do mundo permanece independente desse override visual.
+
+Detalhes: **[Visual Rebirth 9.27](docs/MORIA_9_27_VISUAL_REBIRTH.md)** · **[Terrain & Characters 9.28–9.29](docs/MORIA_9_28_9_29_TERRAIN_CHARACTERS.md)** · **[VFX, Lighting & HUD 9.30–9.32](docs/MORIA_9_30_9_32_VFX_LIGHTING_UI.md)**.
 
 ---
 
