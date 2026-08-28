@@ -4,6 +4,7 @@ on:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
       - 'tools/upgrade-moria-9-43a-grand-stormwatch-isle.py'
+      - 'tools/fix-moria-9-43a-stormwatch-seed.py'
       - '.github/workflows/moria-9-43a-grand-stormwatch-isle.yml'
 permissions:
   contents: write
@@ -22,8 +23,9 @@ jobs:
           cache: npm
       - name: Apply Mor'ia 9.43A Grand Stormwatch Isle
         run: |
-          python -m py_compile tools/upgrade-moria-9-43a-grand-stormwatch-isle.py
+          python -m py_compile tools/upgrade-moria-9-43a-grand-stormwatch-isle.py tools/fix-moria-9-43a-stormwatch-seed.py
           python tools/upgrade-moria-9-43a-grand-stormwatch-isle.py
+          python tools/fix-moria-9-43a-stormwatch-seed.py
       - name: Verify 9.43A source contracts
         run: |
           set -euxo pipefail
@@ -36,7 +38,8 @@ jobs:
           grep -q "tempestArchipelagoTile" src/game/maps.ts
           grep -q "node_stormwatch" server/engine/GrandStormwatch.mjs
           grep -q "GRAND_STORMWATCH_MAP" server/engine/AlphaContent.mjs
-          grep -q "migrateGrandStormwatchData" server/engine/ContentDB.mjs
+          test $(grep -c "migrateGrandStormwatchData(this.data)" server/engine/ContentDB.mjs) -eq 2
+          grep -q 'snow>2200' server/test/grand-stormwatch-isle-9-43.test.mjs
       - name: Verify PT-BR source coverage
         run: python tools/audit-moria-9-28-i18n.py
       - name: Validate client
