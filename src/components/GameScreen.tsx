@@ -2284,7 +2284,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     const isInvisible = p.buffs.some((b) => b.type === 'invisible');
     if (isInvisible) ctx.globalAlpha = 0.4;
     drawPlayer(ctx, px, py, TILE_SIZE, p.direction, p.name, p.hp, p.maxHp, now,
-      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount, p.mana, p.maxMana, MAPS[currentMapIdRef.current] || MAPS.eldoria);
+      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount, p.mana, p.maxMana, MAPS[currentMapIdRef.current] || MAPS.eldoria, p.vocation);
     ctx.globalAlpha = 1;
 
     // Draw other players — authoritative server data takes priority

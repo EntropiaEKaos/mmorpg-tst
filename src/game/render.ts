@@ -1,5 +1,6 @@
 import type { Tile } from './types';
 import { drawAvatar, type AvatarAppearance, type AvatarMount, type AvatarNameplateOptions } from './playerAvatar';
+import { translateGameText } from '../i18n';
 import { drawClassicMonsterSprite, drawClassicNpcSprite } from './classicEntityPresentation';
 
 const tileCache = new Map<string, HTMLCanvasElement>();
@@ -420,8 +421,9 @@ export function drawPlayer(
   mana = 0,
   maxMana = 0,
   nameplate?: AvatarNameplateOptions | null,
+  vocationId?: string,
 ) {
-  drawAvatar(ctx, x, y, size, direction, name, hp, maxHp, time, vocationColor, mounted, mountIcon, appearance, mount, mana, maxMana, nameplate);
+  drawAvatar(ctx, x, y, size, direction, name, hp, maxHp, time, vocationColor, mounted, mountIcon, appearance, mount, mana, maxMana, nameplate, vocationId);
 }
 
 export function drawMonster(
@@ -460,7 +462,7 @@ export function drawMonster(
     ctx.fillRect(cx+r-m, cy-r, m, m*3);
   }
 
-  drawClassicMonsterSprite(ctx, cx, cy, entitySize, monster, time);
+  drawClassicMonsterSprite(ctx, cx, cy, entitySize, { ...monster, name: translateGameText(monster.name) }, time);
 
   // World labels are rendered in a dedicated overlay pass so nearby entities
   // can resolve collisions and distance fading as one layout problem.
@@ -487,7 +489,7 @@ export function drawNPC(
   ctx.ellipse(cx, y + size - 3, size * 0.25, size * 0.06, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  drawClassicNpcSprite(ctx, cx, cy, size, npc, time);
+  drawClassicNpcSprite(ctx, cx, cy, size, { ...npc, role: translateGameText(npc.role) }, time);
 
   // NPC labels are also deferred to the shared world-nameplate pass.
 }
