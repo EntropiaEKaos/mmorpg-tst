@@ -1,0 +1,62 @@
+// Mor'ia 9.17-9.26 — editable seed content for the Road to 10 systems.
+export const ROAD_TO_TEN_CONTENT = Object.freeze({
+  professionSpecializations: Object.freeze([
+    { id:'weaponsmith', name:'Weaponsmith', profession:'weaponsmithing', icon:'⚔', requiredLevel:15, qualityBonus:6, tags:['weapon','blade','haft'] },
+    { id:'armorsmith', name:'Armorsmith', profession:'armorsmithing', icon:'🛡', requiredLevel:15, qualityBonus:6, tags:['armor','shield','plate'] },
+    { id:'runesmith', name:'Runesmith', profession:'enchanting', icon:'ᚱ', requiredLevel:20, qualityBonus:8, tags:['rune','enchant','arcane'] },
+    { id:'siege_engineer', name:'Siege Engineer', profession:'siege_engineering', icon:'🏗', requiredLevel:15, qualityBonus:5, tags:['siege','repair','fortification'] },
+    { id:'alchemical_master', name:'Alchemical Master', profession:'alchemy', icon:'⚗', requiredLevel:15, qualityBonus:7, tags:['potion','reagent','transmute'] },
+    { id:'beast_artificer', name:'Beast Artificer', profession:'leatherworking', icon:'🐾', requiredLevel:15, qualityBonus:6, tags:['saddle','harness','beast'] },
+  ]),
+  economyPolicies: Object.freeze([
+    { id:'commercial', name:'Commercial Node Economy', specialization:'commercial', buyMultiplier:0.92, sellMultiplier:1.05, craftDemand:1.08, taxEfficiency:1.25 },
+    { id:'industrial', name:'Industrial Node Economy', specialization:'industrial', buyMultiplier:0.96, sellMultiplier:1.03, craftDemand:1.18, taxEfficiency:1.10 },
+    { id:'military', name:'Military Node Economy', specialization:'military', buyMultiplier:1.05, sellMultiplier:1.02, craftDemand:1.22, taxEfficiency:1.00 },
+    { id:'arcane', name:'Arcane Node Economy', specialization:'arcane', buyMultiplier:1.02, sellMultiplier:1.06, craftDemand:1.16, taxEfficiency:1.00 },
+    { id:'wild', name:'Wild Node Economy', specialization:'wild', buyMultiplier:0.98, sellMultiplier:1.08, craftDemand:1.04, taxEfficiency:0.90 },
+    { id:'religious', name:'Religious Node Economy', specialization:'religious', buyMultiplier:1.00, sellMultiplier:1.00, craftDemand:1.02, taxEfficiency:1.05 },
+    { id:'neutral', name:'Neutral Node Economy', specialization:'neutral', buyMultiplier:1.00, sellMultiplier:1.00, craftDemand:1.00, taxEfficiency:1.00 },
+  ]),
+  factionPrograms: Object.freeze([
+    { id:'crown_program', factionId:'crown_eldoria', name:'Civic Prosperity', objective:'trade', target:25000, rewardInfluence:120, diplomacyStyle:'defensive' },
+    { id:'red_pact_program', factionId:'red_pact', name:'March of Conquest', objective:'siege', target:1200, rewardInfluence:150, diplomacyStyle:'aggressive' },
+    { id:'arcane_program', factionId:'arcane_conclave', name:'Relic Research', objective:'craft', target:80, rewardInfluence:130, diplomacyStyle:'scholarly' },
+    { id:'veil_program', factionId:'order_veil', name:'Veiled Operations', objective:'bounty', target:15, rewardInfluence:140, diplomacyStyle:'secretive' },
+    { id:'wild_program', factionId:'children_wild', name:'Restore the Wilds', objective:'taming', target:35, rewardInfluence:130, diplomacyStyle:'isolationist' },
+    { id:'free_program', factionId:'free_league', name:'Open Roads', objective:'trade', target:35000, rewardInfluence:135, diplomacyStyle:'mercantile' },
+  ]),
+  siegeAssets: Object.freeze([
+    { id:'battering_ram', name:'Battering Ram', icon:'🪵', role:'gate', goldCost:800, material:'Ironbark Resin', materialQty:3, power:140, durability:900 },
+    { id:'catapult', name:'Catapult', icon:'☄', role:'wall', goldCost:1400, material:'Mana Crystal', materialQty:2, power:115, durability:700 },
+    { id:'ballista', name:'Ballista', icon:'➶', role:'tower', goldCost:1100, material:'Storm Core', materialQty:2, power:105, durability:650 },
+    { id:'supply_cart', name:'Supply Cart', icon:'🛒', role:'supply', goldCost:650, material:'Tide Pearl', materialQty:2, power:0, durability:500 },
+    { id:'repair_crew', name:'Repair Crew Kit', icon:'🧰', role:'repair', goldCost:500, material:'Ironbark Resin', materialQty:2, power:95, durability:400 },
+  ]),
+  dynamicWorldRules: Object.freeze([
+    { id:'famine', name:'Famine', metric:'supply', threshold:18, mode:'below', severity:'major', durationMs:1800000, effects:{shopPrice:1.18,morale:-12,spawnThreat:1.05} },
+    { id:'crime_wave', name:'Crime Wave', metric:'morale', threshold:22, mode:'below', severity:'major', durationMs:1500000, effects:{shopPrice:1.08,crime:20,spawnThreat:1.12} },
+    { id:'prosperity_boom', name:'Prosperity Boom', metric:'prosperity', threshold:82, mode:'above', severity:'notable', durationMs:1800000, effects:{shopPrice:0.94,craftQuality:4,trade:1.15} },
+    { id:'beast_bloom', name:'Beast Bloom', metric:'ecology', threshold:78, mode:'above', severity:'notable', durationMs:1200000, effects:{taming:0.08,spawnThreat:1.08} },
+    { id:'shadow_corruption', name:'Shadow Corruption', metric:'corruption', threshold:72, mode:'above', severity:'historic', durationMs:2400000, effects:{spawnThreat:1.28,deathPower:12,morale:-8} },
+  ]),
+  dungeonBlueprints: Object.freeze([
+    { id:'crypt_of_echoes', name:'Crypt of Echoes', icon:'☠', mapId:'nightfall_citadel', minLevel:20, requiredNodeStage:2, waves:5, paths:['ossuary','catacombs'], puzzle:'echo_seals', boss:'Gravebound Abbot', worldImpact:{corruption:-12,morale:5} },
+    { id:'storm_vault', name:'Storm Vault', icon:'⚡', mapId:'stormwatch_isle', minLevel:28, requiredNodeStage:3, waves:6, paths:['conduits','sky_bridge'], puzzle:'conductor_matrix', boss:'Tempest Engine', worldImpact:{prosperity:8,ecology:-3} },
+    { id:'crystal_labyrinth', name:'Crystal Labyrinth', icon:'◇', mapId:'crystal_deep', minLevel:35, requiredNodeStage:3, waves:7, paths:['prism','void_glass'], puzzle:'prismatic_order', boss:'The Refraction', worldImpact:{prosperity:10,corruption:-5} },
+    { id:'ironroot_depths', name:'Ironroot Depths', icon:'❧', mapId:'ironwood', minLevel:16, requiredNodeStage:2, waves:5, paths:['roots','fungal_halls'], puzzle:'living_gates', boss:'Old Bark Maw', worldImpact:{ecology:10,supply:5} },
+  ]),
+  questConsequences: Object.freeze([
+    { id:'eldoria_trade_open', questId:'alpha_eldoria_01', choice:'open_trade', label:'Open the Crown Roads', nodeEffects:{prosperity:8,supply:4}, factionEffects:{influence:12}, chronicle:'The Crown Roads were opened to free caravans.' },
+    { id:'eldoria_trade_control', questId:'alpha_eldoria_01', choice:'crown_control', label:'Place Roads under Crown Control', nodeEffects:{prosperity:4,morale:6}, factionEffects:{influence:18}, chronicle:'The Crown asserted control over the roads.' },
+    { id:'ironwood_preserve', questId:'alpha_ironwood_01', choice:'preserve', label:'Protect the Ancient Groves', nodeEffects:{ecology:12,prosperity:-2}, factionEffects:{influence:15}, chronicle:'The ancient groves were placed under protection.' },
+    { id:'ironwood_harvest', questId:'alpha_ironwood_01', choice:'harvest', label:'Open Controlled Harvesting', nodeEffects:{supply:12,ecology:-8,prosperity:6}, factionEffects:{influence:10}, chronicle:'Ironwood opened controlled harvesting rights.' },
+  ]),
+  housingUpgrades: Object.freeze([
+    { id:'home_workshop', name:'Artisan Workshop', icon:'⚒', category:'workshop', level:1, goldCost:2500, benefits:{craftQuality:3,stationLevel:1} },
+    { id:'home_shopfront', name:'Player Shopfront', icon:'🏪', category:'commerce', level:1, goldCost:4000, benefits:{listingSlots:8,taxReduction:2} },
+    { id:'home_stable', name:'Private Stable', icon:'🐎', category:'taming', level:1, goldCost:3000, benefits:{stableSlots:6,breedingBonus:3} },
+    { id:'home_library', name:'Research Library', icon:'📚', category:'research', level:1, goldCost:3500, benefits:{recipeDiscovery:5,questInsight:1} },
+    { id:'guild_hall', name:'Guild Hall Annex', icon:'🏰', category:'guild', level:2, goldCost:12000, benefits:{guildStorage:20,rally:1} },
+    { id:'siege_foundry', name:'Siege Foundry', icon:'🏗', category:'warfare', level:2, goldCost:9000, benefits:{siegeQuality:6,repairBonus:8} },
+  ]),
+});
