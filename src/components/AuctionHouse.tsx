@@ -3,6 +3,7 @@ import type { Player, Item } from '../game/types';
 import { RARITY_COLORS } from '../game/equipment';
 import { getAuctionListings, listOnAuction, buyFromAuction, cancelListing, seedAuctionHouse, type AuctionListing } from '../game/economy';
 import { T as Tooltip, ItemTooltip } from './Tooltip';
+import { t as tr } from '../i18n';
 
 interface Props {
   player: Player;
@@ -54,13 +55,13 @@ export default function AuctionHouse({ player, inventory, setInventory, setPlaye
   const handleCancel = (listing: AuctionListing) => {
     const returned = cancelListing(listing.id, player.name);
     if (!returned) {
-      addMessage('System', 'Listing could not be cancelled.', '#ff9090', 'system');
+      addMessage(tr('System'), tr('Listing could not be cancelled.'), '#ff9090', 'system');
       refresh();
       return;
     }
     addListingToInventory(returned);
     refresh();
-    addMessage('System', `↩ ${returned.itemName} returned to your inventory.`, '#9bd4ff', 'system');
+    addMessage(tr('System'), `↩ ${tr(returned.itemName)} ${tr('returned to your inventory.')}`, '#9bd4ff', 'system');
   };
 
   const filtered = listings.filter((l) => {
@@ -71,17 +72,17 @@ export default function AuctionHouse({ player, inventory, setInventory, setPlaye
 
   const handleBuy = (l: AuctionListing) => {
     if (player.gold < l.buyoutPrice) {
-      addMessage('System', 'Not enough gold.', '#ff9090', 'system');
+      addMessage(tr('System'), tr('Not enough gold.'), '#ff9090', 'system');
       return;
     }
     const result = buyFromAuction(l.id, player.name);
     if (result.success) {
       setPlayer({ ...player, gold: player.gold - l.buyoutPrice });
       addListingToInventory(result.listing || l);
-      addMessage('System', `🛒 Bought ${l.itemName} for ${l.buyoutPrice} gold!`, '#2ecc71', 'system');
+      addMessage(tr('System'), `🛒 ${tr('Bought')} ${tr(l.itemName)} ${tr('for')} ${l.buyoutPrice} ${tr('gold')}!`, '#2ecc71', 'system');
       refresh();
     } else {
-      addMessage('System', result.reason || 'Purchase failed.', '#ff9090', 'system');
+      addMessage(tr('System'), tr(result.reason || 'Purchase failed.'), '#ff9090', 'system');
     }
   };
 
@@ -92,10 +93,10 @@ export default function AuctionHouse({ player, inventory, setInventory, setPlaye
            className="moria-panel w-full max-w-4xl max-h-[92vh] overflow-hidden rounded-3xl border border-amber-200/20 p-4 sm:p-6 flex flex-col">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
-              style={{ backgroundImage: 'linear-gradient(180deg, #f4e04d 0%, #8b6914 100%)' }}>🏛 AUCTION HOUSE</h2>
+              style={{ backgroundImage: 'linear-gradient(180deg, #f4e04d 0%, #8b6914 100%)' }}>🏛 {tr('AUCTION HOUSE')}</h2>
           <div className="flex items-center gap-3">
-            <span className="text-amber-300 text-sm font-bold">🪙 {player.gold.toLocaleString()} gold</span>
-            <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-2xl">✕</button>
+            <span className="text-amber-300 text-sm font-bold">🪙 {player.gold.toLocaleString('pt-BR')} {tr('gold')}</span>
+            <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-2xl" aria-label={tr('Close auction house')}>✕</button>
           </div>
         </div>
 
@@ -103,7 +104,7 @@ export default function AuctionHouse({ player, inventory, setInventory, setPlaye
           {(['browse', 'sell', 'mine'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
                     className={`px-4 py-1.5 rounded font-bold text-xs tracking-wider transition-all ${tab === t ? 'bg-gradient-to-b from-amber-500 to-amber-700 text-black' : 'bg-black/40 text-amber-200/60 hover:bg-amber-900/30'}`}>
-              {t === 'browse' ? '🔍 Browse' : t === 'sell' ? '💰 Sell' : '📦 My Listings'}
+              {t === 'browse' ? `🔍 ${tr('Browse')}` : t === 'sell' ? `💰 ${tr('Sell')}` : `📦 ${tr('My Listings')}`}
             </button>
           ))}
         </div>
@@ -111,22 +112,22 @@ export default function AuctionHouse({ player, inventory, setInventory, setPlaye
         {tab === 'browse' && (
           <>
             <div className="flex gap-2 mb-3">
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items..."
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tr('Search items...')}
                      className="flex-1 px-3 py-1.5 rounded bg-black/60 border border-amber-900/50 text-amber-100 text-sm focus:outline-none focus:border-amber-500" />
               <select value={category} onChange={(e) => setCategory(e.target.value as any)}
                       className="px-3 py-1.5 rounded bg-black/60 border border-amber-900/50 text-amber-100 text-sm">
-                <option value="all">All Rarities</option>
-                <option value="legendary">Legendary</option>
-                <option value="epic">Epic</option>
-                <option value="rare">Rare</option>
-                <option value="uncommon">Uncommon</option>
-                <option value="common">Common</option>
+                <option value="all">{tr('All Rarities')}</option>
+                <option value="legendary">{tr('Legendary')}</option>
+                <option value="epic">{tr('Epic')}</option>
+                <option value="rare">{tr('Rare')}</option>
+                <option value="uncommon">{tr('Uncommon')}</option>
+                <option value="common">{tr('Common')}</option>
               </select>
               <button onClick={refresh} className="px-3 py-1.5 rounded bg-black/40 text-amber-200 text-sm border border-amber-900/50">🔄</button>
             </div>
             <div className="moria-scrollbar flex-1 overflow-y-auto space-y-1.5 pr-1">
               {filtered.length === 0 ? (
-                <div className="text-center text-amber-200/40 py-12">No listings found.</div>
+                <div className="text-center text-amber-200/40 py-12">{tr('No listings found.')}</div>
               ) : (
                 filtered.map((l) => {
                   const isOwn = l.sellerName === player.name;
@@ -140,21 +141,21 @@ export default function AuctionHouse({ player, inventory, setInventory, setPlaye
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm" style={{ color: l.rarity ? RC[l.rarity] : '#f4e04d' }}>{l.itemName}</span>
+                          <span className="font-bold text-sm" style={{ color: l.rarity ? RC[l.rarity] : '#f4e04d' }}>{tr(l.itemName)}</span>
                           {l.quantity > 1 && <span className="text-amber-200/60 text-xs">×{l.quantity}</span>}
-                          {l.rarity && <span className="text-[9px] uppercase px-1 rounded" style={{ background: RC[l.rarity] + '30', color: RC[l.rarity] }}>{l.rarity}</span>}
+                          {l.rarity && <span className="text-[9px] uppercase px-1 rounded" style={{ background: RC[l.rarity] + '30', color: RC[l.rarity] }}>{tr(l.rarity)}</span>}
                         </div>
-                        <div className="text-[10px] text-amber-200/50">by {l.sellerName}</div>
+                        <div className="text-[10px] text-amber-200/50">{tr('by')} {tr(l.sellerName)}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-amber-300 font-bold text-sm">{l.buyoutPrice.toLocaleString()} 🪙</div>
                         {isOwn ? (
                           <button onClick={() => handleCancel(l)}
-                                  className="text-red-400 text-[10px] hover:text-red-300">Cancel</button>
+                                  className="text-red-400 text-[10px] hover:text-red-300">{tr('Cancel')}</button>
                         ) : (
                           <button onClick={() => handleBuy(l)} disabled={!canBuy}
                                   className={`px-3 py-1 rounded text-[10px] font-bold ${canBuy ? 'bg-gradient-to-b from-green-500 to-green-700 text-white' : 'bg-black/40 text-gray-500 cursor-not-allowed'}`}>
-                            Buyout
+                            {tr('Buyout')}
                           </button>
                         )}
                       </div>
@@ -173,14 +174,14 @@ export default function AuctionHouse({ player, inventory, setInventory, setPlaye
         {tab === 'mine' && (
           <div className="moria-scrollbar flex-1 overflow-y-auto space-y-1.5 pr-1">
             {listings.filter((l) => l.sellerName === player.name).length === 0 ? (
-              <div className="text-center text-amber-200/40 py-12">You have no active listings. Use the Sell tab to list items.</div>
+              <div className="text-center text-amber-200/40 py-12">{tr('You have no active listings. Use the Sell tab to list items.')}</div>
             ) : (
               listings.filter((l) => l.sellerName === player.name).map((l) => (
                 <div key={l.id} className="flex items-center gap-3 p-2 rounded-lg border bg-black/30" style={{ borderColor: '#8b6914' + '50' }}>
                   <div className="text-xl">{l.itemIcon}</div>
-                  <div className="flex-1"><span className="font-bold text-sm text-amber-100">{l.itemName}</span><span className="text-amber-200/50 text-xs ml-2">{l.buyoutPrice.toLocaleString()} 🪙</span></div>
+                  <div className="flex-1"><span className="font-bold text-sm text-amber-100">{tr(l.itemName)}</span><span className="text-amber-200/50 text-xs ml-2">{l.buyoutPrice.toLocaleString()} 🪙</span></div>
                   <button onClick={() => handleCancel(l)}
-                          className="px-3 py-1 rounded bg-red-900/50 text-red-200 text-[10px] border border-red-700/50">Cancel</button>
+                          className="px-3 py-1 rounded bg-red-900/50 text-red-200 text-[10px] border border-red-700/50">{tr('Cancel')}</button>
                 </div>
               ))
             )}
@@ -212,12 +213,12 @@ function SellTab({ player, inventory, setInventory, addMessage, refresh }: {
       itemData: selected.equipment,
     });
     if (!listed) {
-      addMessage('System', 'Invalid auction listing.', '#ff9090', 'system');
+      addMessage(tr('System'), tr('Invalid auction listing.'), '#ff9090', 'system');
       return;
     }
     // Remove from inventory only after escrow accepted the listing.
     setInventory(inventory.filter((i) => i.id !== selected.id));
-    addMessage('System', `📜 Listed ${selected.name} on Auction House for ${price} gold.`, '#f4e04d', 'system');
+    addMessage(tr('System'), `📜 ${tr(selected.name)} ${tr('listed on Auction House for')} ${price} ${tr('gold')}.`, '#f4e04d', 'system');
     setSelected(null);
     refresh();
   };
@@ -225,7 +226,7 @@ function SellTab({ player, inventory, setInventory, addMessage, refresh }: {
   return (
     <div className="flex-1 grid grid-cols-1 gap-3 overflow-y-auto md:grid-cols-2 md:overflow-hidden">
       <div className="moria-scrollbar overflow-y-auto">
-        <div className="text-[10px] text-amber-200/60 tracking-widest mb-2">SELECT ITEM TO SELL ({sellable.length})</div>
+        <div className="text-[10px] text-amber-200/60 tracking-widest mb-2">{tr('SELECT ITEM TO SELL')} ({sellable.length})</div>
         <div className="grid grid-cols-5 gap-1.5">
           {sellable.map((item) => (
             <Tooltip key={item.id} position="right" content={<ItemTooltip item={item} />}>
@@ -245,25 +246,25 @@ function SellTab({ player, inventory, setInventory, addMessage, refresh }: {
       <div className="min-w-0">
         {selected ? (
           <div className="p-3 rounded border-2 border-amber-700/50 bg-black/40">
-            <div className="text-xs text-amber-300 tracking-widest mb-2">LISTING DETAILS</div>
+            <div className="text-xs text-amber-300 tracking-widest mb-2">{tr('LISTING DETAILS')}</div>
             <div className="flex items-center gap-2 mb-3">
               <span className="text-3xl">{selected.icon}</span>
               <div>
-                <div className="font-bold text-sm" style={{ color: selected.equipment ? RARITY_COLORS[selected.equipment.rarity] : '#f4e04d' }}>{selected.name}</div>
-                <div className="text-[10px] text-amber-200/50">×{selected.quantity} · Base value: {selected.value}g</div>
+                <div className="font-bold text-sm" style={{ color: selected.equipment ? RARITY_COLORS[selected.equipment.rarity] : '#f4e04d' }}>{tr(selected.name)}</div>
+                <div className="text-[10px] text-amber-200/50">×{selected.quantity} · {tr('Base value:')} {selected.value}g</div>
               </div>
             </div>
-            <label className="text-[10px] text-amber-200/60 block mb-1">Buyout Price (gold)</label>
+            <label className="text-[10px] text-amber-200/60 block mb-1">{tr('Buyout Price (gold)')}</label>
             <input type="number" value={price} onChange={(e) => setPrice(parseInt(e.target.value) || 0)}
                    className="w-full px-3 py-2 rounded bg-black/60 border border-amber-900/50 text-amber-100 text-sm focus:outline-none focus:border-amber-500" />
-            <div className="text-[10px] text-amber-200/40 mt-1">💡 Tip: Price slightly below base value to sell faster. You keep 100% of the sale (gold sent via mail).</div>
+            <div className="text-[10px] text-amber-200/40 mt-1">💡 {tr('Tip: Price slightly below base value to sell faster. You keep 100% of the sale (gold sent via mail).')}</div>
             <button onClick={handleList}
                     className="w-full mt-3 py-2 rounded bg-gradient-to-b from-amber-500 to-amber-700 text-black font-bold text-sm">
-              📜 List on Auction House
+              📜 {tr('List on Auction House')}
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-amber-200/40 text-sm">Select an item to sell →</div>
+          <div className="flex items-center justify-center h-full text-amber-200/40 text-sm">{tr('Select an item to sell →')}</div>
         )}
       </div>
     </div>
