@@ -200,6 +200,7 @@ export class OfficialSnapshotReadModel {
       auctions,
       worldEvent: projectWorldEvent(event, pendingRewards),
       nearbyPvp: projectNearbyPvp(host, player, nearbyPlayers),
+      livingRealm: typeof host.livingRealmSnapshot === 'function' ? clone(host.livingRealmSnapshot(player)) : null,
     };
   }
 }

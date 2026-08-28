@@ -21,6 +21,26 @@ function validCoordinate(value) {
 export function validateContentReferences(contentDB, type, record) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) return 'Invalid content record';
 
+
+  if (type === 'nodes') {
+    const mapId=typeof record.mapId==='string'?record.mapId.trim():'';
+    if(!hasMap(contentDB,mapId)) return `Node references unknown map: ${mapId || '(empty)'}`;
+  }
+  if (type === 'factions') {
+    const mapId=typeof record.hqMapId==='string'?record.hqMapId.trim():'';
+    if(mapId&&!hasMap(contentDB,mapId)) return `Faction references unknown HQ map: ${mapId}`;
+    for(const enemy of Array.isArray(record.enemies)?record.enemies:[]){if(enemy===record.id)return 'Faction cannot list itself as an enemy';if(!contentDB.get('factions').some(f=>f.id===enemy))return `Faction references unknown enemy: ${enemy}`;}
+  }
+  if (type === 'tamingSpecies') {
+    const mapId=typeof record.mapId==='string'?record.mapId.trim():'';
+    if(!hasMap(contentDB,mapId)) return `Taming species references unknown map: ${mapId || '(empty)'}`;
+    if(!contentDB.get('monsters').some(m=>m.id===record.monsterId)) return `Taming species references unknown monster: ${record.monsterId || '(empty)'}`;
+  }
+  if (type === 'craftingRecipes') {
+    const materialNames=new Set(contentDB.get('materials').map(m=>m.name));
+    for(const input of Array.isArray(record.inputs)?record.inputs:[]){if(!input?.name||!Number.isFinite(Number(input.quantity))||Number(input.quantity)<=0)return 'Crafting input must have a positive quantity';if(!materialNames.has(input.name)&&input.name!=='Dragon Scale')return `Crafting recipe references unknown material: ${input.name}`;}
+  }
+
   if (type === 'quests') {
     const npcId = typeof record.npcId === 'string' ? record.npcId.trim() : '';
     if (npcId && !contentDB.get('npcs').some(npc => npc.id === npcId)) return `Quest references unknown NPC: ${npcId}`;
@@ -173,7 +193,7 @@ export function findBlockingContentReferences(contentDB, type, id) {
 }
 
 
-const AUDIT_TYPES = Object.freeze(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events', 'shops', 'lootTables', 'gmRoster', 'taskQuests', 'houses', 'housingDecor', 'outfits', 'mounts']);
+const AUDIT_TYPES = Object.freeze(['items', 'monsters', 'npcs', 'spells', 'quests', 'maps', 'events', 'shops', 'lootTables', 'gmRoster', 'taskQuests', 'houses', 'housingDecor', 'outfits', 'mounts', 'nodes', 'factions', 'materials', 'craftingRecipes', 'tamingSpecies']);
 
 export function auditContentReferences(contentDB) {
   const issues = [];

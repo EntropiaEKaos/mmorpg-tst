@@ -8,6 +8,7 @@ const EXPECTED = [
   'pet_buy','pet_toggle','depot_put','depot_take','bank_deposit','bank_withdraw','rest','train','food_buy','shop_buy',
   'craft','socket_gem','daily_claim','gather','book_read','mystery_answer','coin_buy','auction_list','auction_buy','auction_cancel',
   'mail_send','mail_read','mail_claim','mail_delete','world_event_claim','pvp_toggle','pvp_attack','dungeon_start','dungeon_abandon',
+  'faction_join','faction_defect','node_donate','node_declare_war','node_attack','node_claim','craft_advanced','tame_animal','breed_animals','tame_activate',
 ];
 
 test('official registry contains every public authoritative action exactly once', () => {
@@ -40,6 +41,7 @@ test('registry dispatch covers every action and preserves contextual side effect
         if (property === 'pvpToggle') return false;
         if (property === 'pvpAttack') return { damage: 5 };
         if (property === 'startDungeon') return { ok: true, wave: 1 };
+        if (['joinFaction','defectFaction','donateNode','declareNodeWar','attackNode','claimNode','advancedCraft','tameAnimal','breedAnimals','activateTamedAnimal'].includes(String(property))) return { ok:true };
         return true;
       };
     },
@@ -49,12 +51,12 @@ test('registry dispatch covers every action and preserves contextual side effect
   const ctx = {
     world: {}, contentItems: [], findOnlinePlayer: () => null, characterExists: () => true,
     getPlayer: () => ({ id: 'target' }), getDerivedStats: () => ({}),
-    startDungeon: () => { sideEffects.start++; }, clearDungeon: () => { sideEffects.clear++; },
+    startDungeon: () => { sideEffects.start++; }, clearDungeon: () => { sideEffects.clear++; }, nearbyMonsters: [],
   };
   const payload = {
     petId: 'pet', itemId: 'item', depotId: 'depot', amount: 1, foodId: 'food', quantity: 1, recipeId: 'recipe',
     gemItemId: 'gem', bookId: 'book', mysteryId: 'mystery', answer: 'answer', price: 1, listingId: 'listing',
-    mailId: 'mail', targetId: 'target', waves: 3,
+    mailId: 'mail', targetId: 'target', waves: 3, factionId:'crown_eldoria', nodeId:'node_eldoria', parentAId:'a', parentBId:'b', animalId:'a',
   };
   for (const action of EXPECTED) {
     const result = executeOfficialAction(systems, player, action, payload, ctx);

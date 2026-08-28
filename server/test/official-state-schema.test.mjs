@@ -16,7 +16,7 @@ test('official state defaults are deterministic with injected time and independe
   assert.deepEqual(a, b);
   a.pets.owned.push('wolf_pup');
   assert.deepEqual(b.pets.owned, []);
-  assert.deepEqual(freshGlobalState(), { version: 1, auctions: [], mail: [], credits: {}, eventRewards: {}, event: null, eventSequence: 0 });
+  assert.deepEqual(freshGlobalState(), { version: 1, auctions: [], mail: [], credits: {}, eventRewards: {}, event: null, eventSequence: 0, livingRealm: { nodes:{}, chronicle:[], sequence:0 } });
 });
 
 test('official player schema rejects unknown catalog IDs and deduplicates known IDs', () => {

@@ -3,7 +3,7 @@
 <div align="center">
   <img src="public/images/logo.png" alt="Mor'ia Logo" width="280" />
   <p><b>Um MMORPG completo com combate autoritativo, inspiração em Tibia & WoW, 100% no navegador.</b></p>
-  <p><b>Versão atual: Mor'ia 9.10 — Elemental Reactions</b></p>
+  <p><b>Versão atual: Mor'ia 9.16 — The Living Realm</b></p>
 </div>
 
 ---
@@ -29,6 +29,40 @@ O gate oficial de qualidade executa `npm audit`, TypeScript, build de produção
 A linha 9.1 adiciona uma base de lançamento alpha orientada a conteúdo: **11 mapas** (10 regiões públicas + **Astra Sanctum, a Ilha dos GMs**), mais de **70 itens**, mais de **70 monstros**, mais de **40 NPCs**, mais de **45 quests**, novos feitiços para as 14 vocações, eventos regionais, lojas e loot tables autoritativas.
 
 Todo esse conteúdo é materializado no ContentDB e pode ser criado/editado/removido pelo `/admin`. Servidores 9.0 existentes migram uma única vez para a base 9.1 preservando valores já personalizados pelo admin. A Ilha GM usa acesso `gm` validado no servidor pela lista **GM Roster** do próprio Admin.
+
+---
+
+## 🏰 Mor'ia 9.11–9.16 — The Living Realm
+
+A linha **Living Realm** transforma regiões em estruturas persistentes e disputáveis. Os **Living Nodes** evoluem por atividade real do servidor; facções são escolhidas durante a aventura; guerras passam por preparação, cerco, ocupação e recuperação; o **Mor'ia Chronicle** registra fatos do servidor; o **Grand Crafting** cria cadeias produtivas e qualidade de item; e o sistema de **Beast Taming & Breeding** exige criaturas reais próximas e gera animais persistentes com herança de atributos.
+
+Tudo atravessa o `OfficialActionGateway`, snapshots públicos filtrados e o estado persistente oficial. A interface de jogador usa intents do servidor para facção, doações, guerra, crafting e doma; o **Living Realm Director 9.16** oferece uma visão editorial separada sem transferir autoridade ao cliente.
+
+### Gameplay real — Mor'ia 9.16
+
+![Mor'ia 9.16 gameplay](docs/screenshots/moria-9-16-gameplay.png)
+
+### Living Nodes 9.11
+
+![Mor'ia 9.16 Living Nodes](docs/screenshots/moria-9-16-living-nodes.png)
+
+### Factions 9.12
+
+![Mor'ia 9.16 Factions](docs/screenshots/moria-9-16-factions.png)
+
+### Mor'ia Chronicle 9.14
+
+![Mor'ia 9.16 Chronicle](docs/screenshots/moria-9-16-chronicle.png)
+
+### Grand Crafting 9.15
+
+![Mor'ia 9.16 Grand Crafting](docs/screenshots/moria-9-16-grand-crafting.png)
+
+### Beast Taming & Breeding 9.16
+
+![Mor'ia 9.16 Taming and Breeding](docs/screenshots/moria-9-16-taming-breeding.png)
+
+Mais detalhes técnicos: **[Mor'ia 9.11–9.16 — The Living Realm](docs/MORIA_9_11_9_16_LIVING_REALM.md)**.
 
 ---
 

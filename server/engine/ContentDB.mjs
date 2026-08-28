@@ -10,18 +10,20 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { ALPHA_CONTENT } from './AlphaContent.mjs';
 import { ALPHA_SYSTEMS_CONTENT } from './AlphaSystemsContent.mjs';
+import { LIVING_REALM_CONTENT } from './LivingRealmContent.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DB_FILE = process.env.MORIA_CONTENT_DB || path.join(__dirname, '..', 'moria-content.json');
-const COLLECTION_KEYS = Object.freeze(['items', 'monsters', 'npcs', 'quests', 'spells', 'maps', 'worldEvents', 'shops', 'lootTables', 'gmRoster', 'taskQuests', 'houses', 'housingDecor', 'outfits', 'mounts']);
+const COLLECTION_KEYS = Object.freeze(['items', 'monsters', 'npcs', 'quests', 'spells', 'maps', 'worldEvents', 'shops', 'lootTables', 'gmRoster', 'taskQuests', 'houses', 'housingDecor', 'outfits', 'mounts', 'nodes', 'factions', 'materials', 'craftingRecipes', 'tamingSpecies']);
 const TYPE_ALIASES = Object.freeze({ events: 'worldEvents' });
 
 function emptyContentData() {
   return {
-    version: 1,
+    version: 1, livingRealmVersion: 0,
     items: [], monsters: [], npcs: [], quests: [], spells: [], maps: [],
     worldEvents: [], shops: [], lootTables: [], gmRoster: [], taskQuests: [], houses: [], housingDecor: [], outfits: [], mounts: [],
+    nodes: [], factions: [], materials: [], craftingRecipes: [], tamingSpecies: [],
   };
 }
 
@@ -71,6 +73,7 @@ export function normalizeContentData(raw) {
   const normalized = emptyContentData();
   const version = Number(raw.version);
   normalized.version = Number.isInteger(version) && version > 0 ? version : 1;
+  normalized.livingRealmVersion = Number.isInteger(Number(raw.livingRealmVersion)) && Number(raw.livingRealmVersion) > 0 ? Number(raw.livingRealmVersion) : 0;
   for (const key of COLLECTION_KEYS) {
     if (key === 'worldEvents') continue;
     normalized[key] = normalizeCollection(raw[key], { requireId: key !== 'shops' && key !== 'lootTables' });
@@ -89,7 +92,7 @@ export class ContentDB {
     // Only seed a brand-new or unrecoverably corrupt database. A valid empty
     // collection is intentional admin state and must stay empty after restart.
     if (!this.load()) this.seedDefaults();
-    else { this.migrateAlphaV2(); this.migrateAlphaV3(); }
+    else { this.migrateAlphaV2(); this.migrateAlphaV3(); this.migrateLivingRealmV1(); }
   }
 
   load() {
@@ -156,6 +159,21 @@ export class ContentDB {
       this.data.mounts = mergeById(ALPHA_SYSTEMS_CONTENT.mounts, this.data.mounts);
     }
     this.data.version = 3;
+    this.save();
+    return true;
+  }
+
+  migrateLivingRealmV1() {
+    if (Number(this.data.livingRealmVersion) >= 1) return false;
+    const hasExistingContent = COLLECTION_KEYS.some(key => Array.isArray(this.data[key]) && this.data[key].length > 0);
+    if (hasExistingContent) {
+      this.data.nodes = mergeById(LIVING_REALM_CONTENT.nodes, this.data.nodes);
+      this.data.factions = mergeById(LIVING_REALM_CONTENT.factions, this.data.factions);
+      this.data.materials = mergeById(LIVING_REALM_CONTENT.materials, this.data.materials);
+      this.data.craftingRecipes = mergeById(LIVING_REALM_CONTENT.craftingRecipes, this.data.craftingRecipes);
+      this.data.tamingSpecies = mergeById(LIVING_REALM_CONTENT.tamingSpecies, this.data.tamingSpecies);
+    }
+    this.data.livingRealmVersion = 1;
     this.save();
     return true;
   }
@@ -272,7 +290,13 @@ export class ContentDB {
     this.data.housingDecor = mergeById(this.data.housingDecor, ALPHA_SYSTEMS_CONTENT.housingDecor);
     this.data.outfits = mergeById(this.data.outfits, ALPHA_SYSTEMS_CONTENT.outfits);
     this.data.mounts = mergeById(this.data.mounts, ALPHA_SYSTEMS_CONTENT.mounts);
+    this.data.nodes = mergeById(this.data.nodes, LIVING_REALM_CONTENT.nodes);
+    this.data.factions = mergeById(this.data.factions, LIVING_REALM_CONTENT.factions);
+    this.data.materials = mergeById(this.data.materials, LIVING_REALM_CONTENT.materials);
+    this.data.craftingRecipes = mergeById(this.data.craftingRecipes, LIVING_REALM_CONTENT.craftingRecipes);
+    this.data.tamingSpecies = mergeById(this.data.tamingSpecies, LIVING_REALM_CONTENT.tamingSpecies);
     this.data.version = 3;
+    this.data.livingRealmVersion = 1;
 
     this.save();
   }
