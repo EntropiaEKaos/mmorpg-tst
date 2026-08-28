@@ -338,6 +338,8 @@ export interface AvatarNameplateOptions {
   nameplateBarHeight?: number;
   nameplateFontSize?: number;
   nameplateShowValues?: boolean;
+  nameplateHeadClearance?: number;
+  nameplateStackGap?: number;
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number) {
@@ -392,19 +394,29 @@ export function drawAvatar(
     drawPixelHuman(ctx, cx, feetY, size, direction, style, colors, addonMask, time);
   }
 
-  // 9.7 compact nameplate policy. Values are map-authored through Content Studio,
-  // but bounded here so a bad presentation edit can never explode the renderer.
+  // 9.7.1 safe-stack policy: anchor to the authored sprite top, never the tile center.
   const hpPct = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
   const manaPct = Math.max(0, Math.min(1, mana / Math.max(1, maxMana)));
   const scale = clampNumber(nameplate?.nameplateScale, 0.55, 1.5, 0.82);
-  const offsetY = clampNumber(nameplate?.nameplateOffsetY, -32, 12, -9);
+  const offsetY = clampNumber(nameplate?.nameplateOffsetY, -32, 12, 0);
   const barW = Math.round(clampNumber(nameplate?.nameplateBarWidth, 18, 64, 30) * scale);
   const barH = Math.max(2, Math.round(clampNumber(nameplate?.nameplateBarHeight, 2, 8, 3) * scale));
   const fontSize = Math.max(7, Math.round(clampNumber(nameplate?.nameplateFontSize, 7, 14, 8) * scale));
+  const headClearance = Math.round(clampNumber(nameplate?.nameplateHeadClearance, 4, 24, 7) * scale);
+  const stackGap = Math.max(1, Math.round(clampNumber(nameplate?.nameplateStackGap, 1, 8, 2) * scale));
   const showValues = nameplate?.nameplateShowValues === true;
   const barX = Math.round(cx - barW / 2);
-  const nameY = Math.round(y + offsetY);
-  const hpBarY = nameY + 3;
+  const humanCell = Math.max(1, Math.round((mounted ? size * 0.84 : size) * PIXEL_SPRITE_SCALE / 24));
+  const spriteTop = mounted
+    ? Math.round(feetY - cell * 6 - CITIZEN_FRAME.length * humanCell)
+    : Math.round(feetY - CITIZEN_FRAME.length * humanCell);
+  const nameLineH = fontSize + 2;
+  const stackH = nameLineH + stackGap + barH + 1 + barH;
+  // Positive legacy offsets cannot lower the plate into the protected head zone.
+  const safeBottom = spriteTop - headClearance + Math.min(0, Math.round(offsetY));
+  const stackTop = safeBottom - stackH;
+  const nameY = stackTop + fontSize;
+  const hpBarY = stackTop + nameLineH + stackGap;
   const manaBarY = hpBarY + barH + 1;
 
   ctx.textAlign = 'center';

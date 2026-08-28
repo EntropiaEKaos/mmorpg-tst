@@ -24,6 +24,7 @@ export interface WorldLabelRequest {
   x: number;
   y: number;
   size: number;
+  visualHeight?: number;
   distance: number;
   targeted?: boolean;
   entity: {
@@ -131,7 +132,8 @@ function drawMonsterPlate(ctx: CanvasRenderingContext2D, request: WorldLabelRequ
   const scale = boss ? options.bossScale : elite ? 1.05 : 1;
   const font = options.monsterFontSize * scale;
   const name = options.monsterShowLevel && monster.level ? `${monster.name} [${monster.level}]` : monster.name;
-  const showBar = request.distance <= options.monsterBarDistance || boss || request.targeted;
+  const damaged = (Number(monster.hp) || 0) < Math.max(1, Number(monster.maxHp) || 1);
+  const showBar = boss || request.targeted === true || (elite && request.distance <= options.monsterBarDistance) || (damaged && request.distance <= options.monsterBarDistance);
   const barW = options.monsterBarWidth * scale;
   const barH = options.monsterBarHeight * scale;
   const accent = boss ? '#f0c75e' : elite ? '#c785ff' : '#e96b62';
@@ -212,7 +214,9 @@ export function drawWorldNameplates(ctx: CanvasRenderingContext2D, requests: Wor
     const width = Math.max(options.monsterBarWidth * scale, ctx.measureText(label).width + 8);
     const extra = isNpc ? 3 : options.monsterBarHeight * scale + (options.monsterShowValues ? 9 : 3) + (boss ? 8 : 0);
     const height = Math.ceil(options.monsterFontSize * scale + extra);
-    const preferredY = request.y - Math.round(request.size * (boss ? .58 : .40)) - height;
+    const visualHeight = Math.max(request.size * .55, request.visualHeight ?? request.size * .86);
+    const spriteTop = request.y + request.size - visualHeight;
+    const preferredY = Math.round(spriteTop - 5 - height);
     const mustPlace = boss || Boolean(request.targeted);
     const rect = place(occupied, request.x + request.size / 2, preferredY, width, height, options.collisionPadding, mustPlace);
     if (!rect) continue;
@@ -226,10 +230,10 @@ export function createWorldLabelQueue(playerPos: { x: number; y: number }, targe
   const requests: WorldLabelRequest[] = [];
   return {
     npc(n: any, x: number, y: number, size: number) {
-      requests.push({ kind: 'npc', x, y, size, distance: Math.hypot(n.pos.x - playerPos.x, n.pos.y - playerPos.y), entity: { name: n.name, role: n.role } });
+      requests.push({ kind: 'npc', x, y, size, visualHeight: size * .88, distance: Math.hypot(n.pos.x - playerPos.x, n.pos.y - playerPos.y), entity: { name: n.name, role: n.role } });
     },
     monster(m: any, mx: number, my: number, x: number, y: number, size: number) {
-      requests.push({ kind: 'monster', x, y, size, distance: Math.hypot(mx - playerPos.x, my - playerPos.y), targeted: targetId === m.id, entity: { name: m.name, hp: m.hp, maxHp: m.maxHp, level: m.level, type: m.type } });
+      requests.push({ kind: 'monster', x, y, size, visualHeight: size * Math.max(.68, Math.min(1.55, .72 + Number(m.size ?? m.msSize ?? 1) * .32)), distance: Math.hypot(mx - playerPos.x, my - playerPos.y), targeted: targetId === m.id, entity: { name: m.name, hp: m.hp, maxHp: m.maxHp, level: m.level, type: m.type } });
     },
     draw(ctx: CanvasRenderingContext2D, map?: Partial<GameMap> | null) { drawWorldNameplates(ctx, requests, map); },
   };

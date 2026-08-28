@@ -40,6 +40,8 @@ export interface GameMap {
   nameplateBarHeight?: number;
   nameplateFontSize?: number;
   nameplateShowValues?: boolean;
+  nameplateHeadClearance?: number;
+  nameplateStackGap?: number;
   residentialRingEnabled?: boolean;
   residentialRingDensity?: number;
   npcNameplateMode?: 'nearby' | 'always' | 'hidden';
@@ -223,6 +225,8 @@ export function syncServerMaps(rawMaps: unknown): void {
       nameplateBarHeight: Number.isFinite(Number(raw.nameplateBarHeight)) ? Math.max(2, Math.min(8, Number(raw.nameplateBarHeight))) : base?.nameplateBarHeight,
       nameplateFontSize: Number.isFinite(Number(raw.nameplateFontSize)) ? Math.max(7, Math.min(14, Number(raw.nameplateFontSize))) : base?.nameplateFontSize,
       nameplateShowValues: typeof raw.nameplateShowValues === 'boolean' ? raw.nameplateShowValues : base?.nameplateShowValues,
+      nameplateHeadClearance: Number.isFinite(Number(raw.nameplateHeadClearance)) ? Math.max(4, Math.min(24, Number(raw.nameplateHeadClearance))) : base?.nameplateHeadClearance,
+      nameplateStackGap: Number.isFinite(Number(raw.nameplateStackGap)) ? Math.max(1, Math.min(8, Number(raw.nameplateStackGap))) : base?.nameplateStackGap,
       residentialRingEnabled: typeof raw.residentialRingEnabled === 'boolean' ? raw.residentialRingEnabled : (base?.residentialRingEnabled ?? false),
       residentialRingDensity: integer(raw.residentialRingDensity, 0, 10, base?.residentialRingDensity ?? 0),
       npcNameplateMode: ['nearby','always','hidden'].includes(String(raw.npcNameplateMode)) ? raw.npcNameplateMode : (base?.npcNameplateMode ?? 'nearby'),

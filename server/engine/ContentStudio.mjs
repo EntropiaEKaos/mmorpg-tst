@@ -76,7 +76,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('cityStyle', 'City style', 'select', { optionKey: 'cityStyles' }), field('cityAccent', 'City accent'), field('roofColor', 'Roof color'), field('wallColor', 'Wall color'), field('roadColor', 'Road color'),
     field('nameplateOffsetY', 'Nameplate Y offset', 'number'), field('nameplateScale', 'Nameplate scale', 'number'),
     field('nameplateBarWidth', 'Nameplate bar width', 'number'), field('nameplateBarHeight', 'Nameplate bar height', 'number'), field('nameplateFontSize', 'Name font size', 'number'),
-    field('nameplateShowValues', 'Show HP/Mana values', 'boolean'), field('residentialRingEnabled', 'Decorative residential ring', 'boolean'), field('residentialRingDensity', 'Residential density', 'number'),
+    field('nameplateShowValues', 'Show HP/Mana values', 'boolean'), field('nameplateHeadClearance', 'Head clearance px', 'number'), field('nameplateStackGap', 'Name/bar gap px', 'number'), field('residentialRingEnabled', 'Decorative residential ring', 'boolean'), field('residentialRingDensity', 'Residential density', 'number'),
     field('npcNameplateMode', 'NPC labels', 'select', { optionKey: 'nameplateModes' }), field('npcNameplateDistance', 'NPC label distance', 'number'),
     field('monsterNameplateMode', 'Monster labels', 'select', { optionKey: 'nameplateModes' }), field('monsterNameplateDistance', 'Monster label distance', 'number'), field('monsterBarDistance', 'Monster HP bar distance', 'number'),
     field('monsterNameplateFontSize', 'Monster name font', 'number'), field('monsterNameplateBarWidth', 'Monster HP width', 'number'), field('monsterNameplateBarHeight', 'Monster HP height', 'number'),
@@ -233,6 +233,8 @@ export function validateStudioRecord(type, record) {
     for (const key of ['x','y','entranceX','entranceY']) { const error=playableCoord(record,key); if(error)return error; }
     for (const [key,min,max] of [['width',2,12],['height',2,12],['price',0,100000000],['weeklyRent',0,10000000],['levelRequired',1,100000]]) { const error=numberIn(record,key,min,max,{required:true,integer:true}); if(error)return error; }
     if (Number(record.x)+Number(record.width)>MAP_WIDTH-1 || Number(record.y)+Number(record.height)>MAP_HEIGHT-1) return 'house interior exceeds map bounds';
+    const nearBox=Number(record.entranceX)>=Number(record.x)-2&&Number(record.entranceX)<=Number(record.x)+Number(record.width)+1&&Number(record.entranceY)>=Number(record.y)-2&&Number(record.entranceY)<=Number(record.y)+Number(record.height)+1;
+    if(!nearBox)return 'house entrance must stay beside its footprint';
     return null;
   }
 
@@ -259,7 +261,7 @@ export function validateStudioRecord(type, record) {
     if (record.portals !== undefined && !Array.isArray(record.portals)) return 'portals must be a JSON array';
     if (record.cityStyle !== undefined && record.cityStyle !== '' && !CITY_STYLES.includes(String(record.cityStyle))) return 'cityStyle is not supported';
     for (const key of ['cityAccent','roofColor','wallColor','roadColor']) if (record[key] !== undefined && record[key] !== '' && !COLOR_RE.test(String(record[key]))) return `${key} must be a CSS hex color`;
-    for (const [key,min,max] of [['nameplateOffsetY',-32,12],['nameplateScale',0.55,1.5],['nameplateBarWidth',18,64],['nameplateBarHeight',2,8],['nameplateFontSize',7,14],['residentialRingDensity',0,10],['npcNameplateDistance',2,20],['monsterNameplateDistance',2,24],['monsterBarDistance',1,20],['monsterNameplateFontSize',7,14],['monsterNameplateBarWidth',18,72],['monsterNameplateBarHeight',2,8],['bossNameplateScale',0.8,1.8],['nameplateCollisionPadding',0,10],['nameplateFadeStart',0.2,0.95]]) { const e=numberIn(record,key,min,max,{required:false}); if(e)return e; }
+    for (const [key,min,max] of [['nameplateOffsetY',-32,12],['nameplateScale',0.55,1.5],['nameplateBarWidth',18,64],['nameplateBarHeight',2,8],['nameplateFontSize',7,14],['nameplateHeadClearance',4,24],['nameplateStackGap',1,8],['residentialRingDensity',0,10],['npcNameplateDistance',2,20],['monsterNameplateDistance',2,24],['monsterBarDistance',1,20],['monsterNameplateFontSize',7,14],['monsterNameplateBarWidth',18,72],['monsterNameplateBarHeight',2,8],['bossNameplateScale',0.8,1.8],['nameplateCollisionPadding',0,10],['nameplateFadeStart',0.2,0.95]]) { const e=numberIn(record,key,min,max,{required:false}); if(e)return e; }
     if (record.npcNameplateMode !== undefined && !NAMEPLATE_MODES.includes(String(record.npcNameplateMode))) return 'npcNameplateMode is not supported';
     if (record.monsterNameplateMode !== undefined && !NAMEPLATE_MODES.includes(String(record.monsterNameplateMode))) return 'monsterNameplateMode is not supported';
     if (record.nameplateShowValues !== undefined && typeof record.nameplateShowValues !== 'boolean') return 'nameplateShowValues must be boolean';

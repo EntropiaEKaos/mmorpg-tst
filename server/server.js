@@ -536,6 +536,8 @@ function handleAdminAPI(req, res, route) {
       if (semanticError) return json(res, 400, { error: semanticError });
       const referenceError = validateContentReferences(contentDB, type, candidate);
       if (referenceError) return json(res, 409, { error: referenceError });
+      const spatialError = type === 'houses' ? housingSystem.validateDefinition(candidate, contentDB) : type === 'maps' ? housingSystem.validateMapEdit(candidate, contentDB) : null;
+      if (spatialError) return json(res, 409, { error: spatialError });
       const changed = existing ? contentDB.update(type, data.id, data) : contentDB.add(type, data);
       if (!changed) return json(res, 409, { error: 'Content write was rejected' });
       if (type === 'maps') { engine.syncContentMaps(contentDB.get('maps')); engine.syncContentMonsters(contentDB.get('monsters')); }

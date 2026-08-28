@@ -58,6 +58,7 @@ import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawHousing } from '../game/housingPresentation';
 import { createWorldLabelQueue } from '../game/worldNameplates';
+import { enforceNpcSpatialIntegrity } from '../game/spatialIntegrity';
 import CastBar from './CastBar';
 import RaidWarning from './RaidWarning';
 import { triggerCast } from './CastBar';
@@ -98,7 +99,6 @@ export default function GameScreen({ account, onLogout }: Props) {
   const onlineAccount = Boolean(account.sessionToken && !account.offline);
   const allowLocalAdmin = account.offline === true;
 
-  // Panels state
   const [showInventory, setShowInventory] = useState(false);
   const [showCharacter, setShowCharacter] = useState(false);
   const [showQuestLog, setShowQuestLog] = useState(false);
@@ -139,7 +139,6 @@ export default function GameScreen({ account, onLogout }: Props) {
   const lastSimChatRef = useRef(0);
   const lastEventCheckRef = useRef(0);
 
-  // ===== REAL NETWORK (online players) =====
   const onlinePlayersRef = useRef<Map<string, NetPlayer>>(new Map());
   const [netMode, setNetMode] = useState<'offline' | 'local' | 'online'>('offline');
   const [serverUrl, setServerUrl] = useState('');
@@ -150,7 +149,6 @@ export default function GameScreen({ account, onLogout }: Props) {
   const lastStaminaDrainRef = useRef(0);
   const [onlineCount, setOnlineCount] = useState(1);
   const [muted, setMuted] = useState(false);
-  // Server-authoritative state refs (used when connected to authoritative server)
   const serverMonstersRef = useRef<any[]>([]);
   const serverPlayersRef = useRef<any[]>([]);
   const serverGroundRef = useRef<any[]>([]);
@@ -158,11 +156,9 @@ export default function GameScreen({ account, onLogout }: Props) {
   const zoomRef = useRef(1);
   const [activeDialog, setActiveDialog] = useState<NPC | null>(null);
 
-  // Buildings + custom NPCs/monsters for current map
   const buildingsRef = useRef<Building[]>(getCityBuildings(MAPS.eldoria));
   const customNpcsRef = useRef<CustomNPC[]>(getCustomNPCs());
   const customMonstersRef = useRef<CustomMonster[]>(getCustomMonsters());
-  // Force refresh of custom content (used after admin edits)
   const refreshCustomContent = () => {
     const previousNpcIds = new Set(customNpcsRef.current.map((npc) => npc.id));
     const previousMonsterIds = new Set(customMonstersRef.current.map((monster) => monster.id));
@@ -179,7 +175,6 @@ export default function GameScreen({ account, onLogout }: Props) {
     ];
   };
 
-  // Dungeon state
   const [inDungeon, setInDungeon] = useState(false);
   const [dungeonWave, setDungeonWave] = useState(0);
   const dungeonTotalWavesRef = useRef(0);
@@ -189,17 +184,13 @@ export default function GameScreen({ account, onLogout }: Props) {
     return parseInt(localStorage.getItem(`tibia_dungeon_high_${account.characterName}`) || '0');
   });
 
-  // Pet state
   const petStateRef = useRef<ActivePetState | null>(null);
 
-  // Auto-attack
   const autoAttackRef = useRef(true);
   const [_autoAttack, setAutoAttack] = useState(true);
 
-  // Food shop from innkeeper
   const [showFoodShop, setShowFoodShop] = useState(false);
 
-  // Admin/Cheats
   const [godMode, setGodMode] = useState(false);
   const [noClip, setNoClip] = useState(false);
   const [oneHitKill, setOneHitKill] = useState(false);
@@ -220,14 +211,11 @@ export default function GameScreen({ account, onLogout }: Props) {
   useEffect(() => { damageMultiplierRef.current = damageMultiplier; }, [damageMultiplier]);
   useEffect(() => { dayTimeOverrideRef.current = dayTimeOverride; }, [dayTimeOverride]);
 
-  // Combo system
   const comboRef = useRef({ count: 0, lastHit: 0 });
   const [comboDisplay, setComboDisplay] = useState<{ count: number; mult: number } | null>(null);
 
-  // Weather
   const [weather, setWeather] = useState<WorldWeather>('clear');
 
-  // Load or create player (using Unified Save System)
   const [player, setPlayer] = useState<Player>(() => {
     const basePlayer = createPlayer(account.characterName, account.vocation.toLowerCase());
     const loadedSave = loadLocal(account.characterName);
@@ -245,7 +233,6 @@ export default function GameScreen({ account, onLogout }: Props) {
   const playerRef = useRef(player);
   playerRef.current = player;
 
-  // Map system
   const [currentMapId, setCurrentMapId] = useState('eldoria');
   const currentMapIdRef = useRef('eldoria');
   const worldRef = useRef(generateMap('eldoria'));
@@ -1199,8 +1186,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     if (now - p.lastAttack < 700) return;
     p.lastAttack = now;
 
-    // Combo system
-    if (now - comboRef.current.lastHit < 3000) {
+      if (now - comboRef.current.lastHit < 3000) {
       comboRef.current.count++;
     } else {
       comboRef.current.count = 1;
@@ -2206,6 +2192,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     // Houses and decoration are presentation-only projections of global server state.
     if (serverSync.isActive()) drawHousing(ctx, p.housing, cam, TILE_SIZE, now);
 
+    enforceNpcSpatialIntegrity(npcsRef.current, world, Array.isArray(p.housing?.houses) ? p.housing.houses : []);
     const worldLabels=createWorldLabelQueue(p.pos,p.targetId);
     // NPCs
     for (const n of npcsRef.current) {

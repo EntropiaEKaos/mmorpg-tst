@@ -105,3 +105,26 @@ test('9.7 city designer directly manipulates authoritative building footprints',
   assert.match(admin, /meta\.kind === 'boolean'/);
   assert.match(admin, /meta\.kind === 'json'/);
 });
+
+
+test('9.7.1 player plates reserve authored head clearance and world labels respect sprite height', () => {
+  const avatar=read('src/game/playerAvatar.ts');
+  const labels=read('src/game/worldNameplates.ts');
+  const maps=read('src/game/maps.ts');
+  const studio=read('server/engine/ContentStudio.mjs');
+  assert.match(avatar,/const spriteTop = mounted/);
+  assert.match(avatar,/nameplateHeadClearance/);
+  assert.match(avatar,/safeBottom = spriteTop - headClearance/);
+  assert.match(labels,/visualHeight/);
+  assert.match(labels,/const damaged = .*monster.hp.*monster.maxHp/);
+  assert.match(maps,/nameplateStackGap/);
+  assert.match(studio,/Head clearance px/);
+});
+
+test('9.7.1 ambient NPC projection repairs blocked architecture and excludes housing interiors', () => {
+  const spatial=read('src/game/spatialIntegrity.ts');
+  const screen=read('src/components/GameScreen.tsx');
+  assert.match(spatial,/nearestPublicWalkableTile/);
+  assert.match(spatial,/insideHouse/);
+  assert.match(screen,/enforceNpcSpatialIntegrity/);
+});
