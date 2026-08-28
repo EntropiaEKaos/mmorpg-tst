@@ -98,7 +98,7 @@ export const GRAND_SHADOWFEN_MAP=Object.freeze({
   portals:Object.freeze([
     {x:80,y:141,targetMap:'eldoria',targetX:130,targetY:120,label:'🏰 Calçada de Eldoria'},
     {x:18,y:34,targetMap:'voidlands',targetX:70,targetY:70,label:'☠ Brecha do Vazio'},
-    {x:141,y:82,targetMap:'crystal_deep',targetX:10,targetY:40,label:'💎 Sumidouro de Cristal'},
+    {x:141,y:82,targetMap:'crystal_deep',targetX:22,targetY:84,label:'💎 Sumidouro de Cristal'},
   ]),
 });
 
@@ -106,7 +106,7 @@ export const GRAND_SHADOWFEN_BUILTIN_WORLD_CONFIG=Object.freeze({
   ...GRAND_SHADOWFEN_MAP,
   spawnPoint:{x:GRAND_SHADOWFEN_MAP.spawnX,y:GRAND_SHADOWFEN_MAP.spawnY},
   townCenter:{x:GRAND_SHADOWFEN_MAP.townX,y:GRAND_SHADOWFEN_MAP.townY},
-  portals:GRAND_SHADOWFEN_MAP.portals.filter(portal=>portal.targetMap==='eldoria'||portal.targetMap==='voidlands').map(portal=>({pos:{x:portal.x,y:portal.y},targetMap:portal.targetMap,targetSpawn:{x:portal.targetX,y:portal.targetY},label:portal.label})),
+  portals:GRAND_SHADOWFEN_MAP.portals.filter(portal=>portal.targetMap==='eldoria'||portal.targetMap==='voidlands'||portal.targetMap==='crystal_deep').map(portal=>({pos:{x:portal.x,y:portal.y},targetMap:portal.targetMap,targetSpawn:{x:portal.targetX,y:portal.targetY},label:portal.label})),
 });
 
 export const GRAND_SHADOWFEN_NPC_MOVES=Object.freeze({

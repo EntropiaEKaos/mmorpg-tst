@@ -9,6 +9,7 @@ import { GRAND_IRONWOOD_BUILTIN_WORLD_CONFIG } from './GrandIronwood.mjs';
 import { GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG } from './GrandFrostpeak.mjs';
 import { GRAND_SHADOWFEN_BUILTIN_WORLD_CONFIG } from './GrandShadowfen.mjs';
 import { GRAND_EMBERHOLD_BUILTIN_WORLD_CONFIG } from './GrandEmberhold.mjs';
+import { GRAND_CRYSTAL_DEEP_BUILTIN_WORLD_CONFIG } from './GrandCrystalDeep.mjs';
 
 class Monster {
   constructor(data) {
@@ -22,7 +23,7 @@ const MIN_MAP_DIMENSION = 40;
 const MAX_MAP_DIMENSION = 192;
 const SETTLEMENT_CLASSES = Object.freeze(['wilderness','town','city','capital']);
 const SETTLEMENT_CLASS_SET = new Set(SETTLEMENT_CLASSES);
-const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings','terraced-bastion','marsh-wards','caldera-radials']);
+const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings','terraced-bastion','marsh-wards','caldera-radials','geode-chambers']);
 const BIOMES = new Set(['plains', 'snow', 'swamp', 'desert', 'shadow']);
 const BIOME_SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
 const CITY_STYLES = new Set(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
@@ -50,6 +51,7 @@ const MAP_CONFIG = Object.freeze({
   frostpeak: GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG,
   shadowfen: GRAND_SHADOWFEN_BUILTIN_WORLD_CONFIG,
   emberhold: GRAND_EMBERHOLD_BUILTIN_WORLD_CONFIG,
+  crystal_deep: GRAND_CRYSTAL_DEEP_BUILTIN_WORLD_CONFIG,
   voidlands: {
     id: 'voidlands', name: 'Voidlands', description: 'The end of the world. Pure darkness and ancient evil.', biome: 'shadow',
     spawnPoint: { x: 70, y: 70 }, townCenter: { x: 40, y: 40 }, townRange: 6, levelRequired: 25, seed: 666,
@@ -349,6 +351,18 @@ function calderaRadialsTile(config,x,y){
   return {type:'floor',walkable:true,blocksSight:false};
 }
 
+
+function nearGeodeGallery(x,y,ax,ay,bx,by,width=2.2){
+  const vx=bx-ax,vy=by-ay,wx=x-ax,wy=y-ay,length=vx*vx+vy*vy;const t=length?Math.max(0,Math.min(1,(wx*vx+wy*vy)/length)):0;const px=ax+t*vx,py=ay+t*vy;return (x-px)*(x-px)+(y-py)*(y-py)<=width*width;
+}
+function geodeChambersTile(config,x,y){
+  const bounds=config.urbanBounds;if(!bounds)return null;const minX=Number(bounds.x),minY=Number(bounds.y),maxX=minX+Number(bounds.width)-1,maxY=minY+Number(bounds.height)-1;if(x<minX||x>maxX||y<minY||y>maxY)return null;
+  const gate=((x===minX||x===maxX)&&Math.abs(y-84)<=2)||((y===minY||y===maxY)&&Math.abs(x-80)<=2);if(gate)return {type:'path',walkable:true,blocksSight:false};if(x===minX||x===maxX||y===minY||y===maxY)return {type:'wall',walkable:false,blocksSight:true};
+  const chambers=[[80,80,18],[80,34,13],[48,48,14],[112,48,14],[40,84,14],[120,84,14],[52,118,15],[108,118,15]];
+  const galleries=[[80,18,80,34],[80,141,80,126],[18,84,40,84],[141,84,120,84],[80,34,48,48],[80,34,112,48],[48,48,40,84],[112,48,120,84],[40,84,80,80],[120,84,80,80],[80,80,52,118],[80,80,108,118],[52,118,80,141],[108,118,80,141],[80,34,80,80]];
+  const gallery=galleries.some(segment=>nearGeodeGallery(x,y,...segment));if(gallery)return {type:'path',walkable:true,blocksSight:false};const chamber=chambers.some(([cx,cy,r])=>(x-cx)*(x-cx)+(y-cy)*(y-cy)<=r*r);if(chamber)return {type:'floor',walkable:true,blocksSight:false};return {type:'wall',walkable:false,blocksSight:true};
+}
+
 function capitalUrbanTile(config, x, y) {
   if (config?.settlementClass !== 'capital') return null;
   if (config.urbanPlan === 'harbor-crescent') return harborCapitalTile(config, x, y);
@@ -356,6 +370,7 @@ function capitalUrbanTile(config, x, y) {
   if (config.urbanPlan === 'terraced-bastion') return terracedBastionTile(config, x, y);
   if (config.urbanPlan === 'marsh-wards') return marshWardsTile(config, x, y);
   if (config.urbanPlan === 'caldera-radials') return calderaRadialsTile(config, x, y);
+  if (config.urbanPlan === 'geode-chambers') return geodeChambersTile(config, x, y);
   const bounds = config.urbanBounds;
   if (!bounds) return null;
   const minX = Number(bounds.x), minY = Number(bounds.y);

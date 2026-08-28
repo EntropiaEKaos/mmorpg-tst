@@ -85,6 +85,19 @@ function buildTileCache(size: number) {
     ctx.fillStyle='#39432d';ctx.fillRect(0,0,2,s);ctx.fillRect(s-2,0,2,s);
   }, size));
 
+
+  tileCache.set(`wall_crystal_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#17182b';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));
+    for(let i=0;i<18;i++){const x=Math.floor(hash(i,201)*s/px)*px,y=Math.floor(hash(i,211)*s/px)*px;ctx.fillStyle=['#242743','#30335a','#433d70','#2b4664'][Math.floor(hash(i,223)*4)];ctx.fillRect(x,y,px*(hash(i,227)>.6?2:1),px*(hash(i,229)>.72?2:1));}
+    for(let i=0;i<4;i++){const x=s*(.18+i*.21),h=s*(.18+hash(i,233)*.32);ctx.fillStyle=i%2?'#5f65a5':'#4da6bd';ctx.fillRect(x,s-h,Math.max(px,s*.05),h);ctx.fillStyle='rgba(164,241,255,.38)';ctx.fillRect(x,s-h,px,Math.max(px,h*.35));}
+  },size));
+  tileCache.set(`floor_crystal_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#343753';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));for(let i=0;i<22;i++){const x=Math.floor(hash(i,239)*s/px)*px,y=Math.floor(hash(i,241)*s/px)*px;ctx.fillStyle=hash(i,251)>.72?'rgba(126,222,241,.34)':'rgba(152,133,221,.20)';ctx.fillRect(x,y,px,px);}ctx.fillStyle='rgba(183,238,255,.12)';ctx.fillRect(0,0,s,px);
+  },size));
+  tileCache.set(`path_crystal_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#424762';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));ctx.fillStyle='#65718c';ctx.fillRect(0,s*.28,s,s*.44);ctx.fillStyle='rgba(116,225,255,.34)';ctx.fillRect(0,s*.46,s,Math.max(px,s*.05));for(let i=0;i<5;i++){const x=Math.floor(hash(i,257)*s);ctx.fillStyle='rgba(166,143,238,.28)';ctx.fillRect(x,0,px,s);}
+  },size));
+
   tileCache.set(`water_${size}`, createTileCanvas((ctx, s) => {
     // Deep water gradient with depth
     const grad = ctx.createLinearGradient(0, 0, 0, s);

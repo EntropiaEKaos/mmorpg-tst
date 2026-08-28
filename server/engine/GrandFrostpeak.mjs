@@ -97,7 +97,7 @@ export const GRAND_FROSTPEAK_MAP=Object.freeze({
   portals:Object.freeze([
     {x:26,y:82,targetMap:'eldoria',targetX:30,targetY:80,label:'🏰 Passagem de Eldoria'},
     {x:133,y:112,targetMap:'emberhold',targetX:80,targetY:22,label:'🌋 Passagem de Emberhold'},
-    {x:80,y:18,targetMap:'crystal_deep',targetX:40,targetY:70,label:'💎 Descida do Cristal'},
+    {x:80,y:18,targetMap:'crystal_deep',targetX:80,targetY:138,label:'💎 Descida do Cristal'},
     {x:80,y:139,targetMap:'ironwood',targetX:80,targetY:24,label:'🌲 Estrada de Ironwood'},
   ]),
 });
@@ -106,7 +106,7 @@ export const GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG=Object.freeze({
   ...GRAND_FROSTPEAK_MAP,
   spawnPoint:{x:GRAND_FROSTPEAK_MAP.spawnX,y:GRAND_FROSTPEAK_MAP.spawnY},
   townCenter:{x:GRAND_FROSTPEAK_MAP.townX,y:GRAND_FROSTPEAK_MAP.townY},
-  portals:GRAND_FROSTPEAK_MAP.portals.filter(portal=>portal.targetMap==='eldoria'||portal.targetMap==='emberhold'||portal.targetMap==='ironwood').map(portal=>({pos:{x:portal.x,y:portal.y},targetMap:portal.targetMap,targetSpawn:{x:portal.targetX,y:portal.targetY},label:portal.label})),
+  portals:GRAND_FROSTPEAK_MAP.portals.filter(portal=>portal.targetMap==='eldoria'||portal.targetMap==='emberhold'||portal.targetMap==='ironwood'||portal.targetMap==='crystal_deep').map(portal=>({pos:{x:portal.x,y:portal.y},targetMap:portal.targetMap,targetSpawn:{x:portal.targetX,y:portal.targetY},label:portal.label})),
 });
 
 export const GRAND_FROSTPEAK_NPC_MOVES=Object.freeze({

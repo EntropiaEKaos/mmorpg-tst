@@ -3,6 +3,7 @@ import type { Monster, Player, TileType } from '../game/types';
 import { MAPS, generateMap, getBiomeTint, getMapDimensions } from '../game/maps';
 import { getCityMinimapMarkers } from '../game/cityPresentation';
 
+const CRYSTAL_TILE_COLORS: Partial<Record<TileType,string>> = { wall:'#17182b', floor:'#4d5277', path:'#6ca9c7' };
 const TILE_COLORS: Partial<Record<TileType, string>> = {
   water: '#285a86', tree: '#294838', stone: '#77736b', sand: '#bba36c', path: '#8a7456', wall: '#27272c',
   floor: '#8f826b', lava: '#a13a2d', bush: '#37563b', rock: '#554e4d', wood_floor: '#765a3a', bridge: '#8b704b',
@@ -30,7 +31,7 @@ export default function WorldMiniMap({ player, monsters, mapId }: Props) {
       for (let x = 0; x < mapWidth; x += sample) {
         const tile = world[y]?.[x];
         const fallback = ((x + y) & 2) === 0 ? tint.ground : tint.groundDark;
-        nextTiles.push({ x, y, color: tile ? (TILE_COLORS[tile.type] || fallback) : fallback });
+        nextTiles.push({ x, y, color: tile ? (tile.variant === 'crystal' ? (CRYSTAL_TILE_COLORS[tile.type] || TILE_COLORS[tile.type] || fallback) : (TILE_COLORS[tile.type] || fallback)) : fallback });
       }
     }
     return { tiles: nextTiles, markers: getCityMinimapMarkers(map) };

@@ -8,7 +8,7 @@ export const MAX_MAP_DIMENSION = 192;
 export const TILE_SIZE = 32;
 
 export type SettlementClass = 'wilderness' | 'town' | 'city' | 'capital';
-export type UrbanPlan = 'royal-grid' | 'harbor-crescent' | 'forest-rings' | 'terraced-bastion' | 'marsh-wards' | 'caldera-radials';
+export type UrbanPlan = 'royal-grid' | 'harbor-crescent' | 'forest-rings' | 'terraced-bastion' | 'marsh-wards' | 'caldera-radials' | 'geode-chambers';
 export interface UrbanBounds { x: number; y: number; width: number; height: number; }
 
 export type BiomeType = 'plains' | 'snow' | 'swamp' | 'desert' | 'shadow';
@@ -86,7 +86,7 @@ function settlementClassOf(value: unknown, mapId = ''): SettlementClass {
   return (['wilderness','town','city','capital'] as const).includes(requested as SettlementClass) ? requested as SettlementClass : 'city';
 }
 function mapDimension(value: unknown, fallback = MAP_WIDTH): number { return integer(value, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, fallback); }
-function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const fallback: UrbanPlan = mapId === 'sunreach_coast' ? 'harbor-crescent' : mapId === 'ironwood' ? 'forest-rings' : mapId === 'frostpeak' ? 'terraced-bastion' : mapId === 'shadowfen' ? 'marsh-wards' : mapId === 'emberhold' ? 'caldera-radials' : 'royal-grid'; const requested = String(value || fallback); return requested === 'harbor-crescent' || requested === 'forest-rings' || requested === 'terraced-bastion' || requested === 'marsh-wards' || requested === 'caldera-radials' ? requested : 'royal-grid'; }
+function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const fallback: UrbanPlan = mapId === 'sunreach_coast' ? 'harbor-crescent' : mapId === 'ironwood' ? 'forest-rings' : mapId === 'frostpeak' ? 'terraced-bastion' : mapId === 'shadowfen' ? 'marsh-wards' : mapId === 'emberhold' ? 'caldera-radials' : mapId === 'crystal_deep' ? 'geode-chambers' : 'royal-grid'; const requested = String(value || fallback); return requested === 'harbor-crescent' || requested === 'forest-rings' || requested === 'terraced-bastion' || requested === 'marsh-wards' || requested === 'caldera-radials' || requested === 'geode-chambers' ? requested : 'royal-grid'; }
 function normalizeUrbanBounds(raw: unknown, width: number, height: number, townCenter: Position, settlementClass: SettlementClass): UrbanBounds {
   const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Partial<UrbanBounds> : {};
   const radius = settlementClass === 'capital' ? Math.min(36, Math.floor(Math.min(width, height) / 3)) : Math.min(14, Math.floor(Math.min(width, height) / 4));
@@ -474,6 +474,15 @@ function calderaRadialsTile(map: GameMap,x:number,y:number): Tile | null {
   return {type:'floor',walkable:true,blocksSight:false};
 }
 
+
+function nearGeodeGallery(x:number,y:number,ax:number,ay:number,bx:number,by:number,width=2.2){const vx=bx-ax,vy=by-ay,wx=x-ax,wy=y-ay,length=vx*vx+vy*vy;const t=length?Math.max(0,Math.min(1,(wx*vx+wy*vy)/length)):0;const px=ax+t*vx,py=ay+t*vy;return (x-px)*(x-px)+(y-py)*(y-py)<=width*width;}
+function geodeChambersTile(map:GameMap,x:number,y:number):Tile|null{
+  const bounds=map.urbanBounds;if(!bounds)return null;const minX=bounds.x,minY=bounds.y,maxX=minX+bounds.width-1,maxY=minY+bounds.height-1;if(x<minX||x>maxX||y<minY||y>maxY)return null;
+  const gate=((x===minX||x===maxX)&&Math.abs(y-84)<=2)||((y===minY||y===maxY)&&Math.abs(x-80)<=2);if(gate)return {type:'path',walkable:true,blocksSight:false};if(x===minX||x===maxX||y===minY||y===maxY)return {type:'wall',walkable:false,blocksSight:true};
+  const chambers=[[80,80,18],[80,34,13],[48,48,14],[112,48,14],[40,84,14],[120,84,14],[52,118,15],[108,118,15]];const galleries=[[80,18,80,34],[80,141,80,126],[18,84,40,84],[141,84,120,84],[80,34,48,48],[80,34,112,48],[48,48,40,84],[112,48,120,84],[40,84,80,80],[120,84,80,80],[80,80,52,118],[80,80,108,118],[52,118,80,141],[108,118,80,141],[80,34,80,80]];
+  if(galleries.some(segment=>nearGeodeGallery(x,y,...segment as [number,number,number,number])))return {type:'path',walkable:true,blocksSight:false};if(chambers.some(([cx,cy,r])=>(x-cx)*(x-cx)+(y-cy)*(y-cy)<=r*r))return {type:'floor',walkable:true,blocksSight:false};return {type:'wall',walkable:false,blocksSight:true};
+}
+
 function capitalUrbanTile(map: GameMap, x: number, y: number): Tile | null {
   if (map.settlementClass !== 'capital' || !map.urbanBounds) return null;
   if (map.urbanPlan === 'harbor-crescent') return harborCapitalTile(map, x, y);
@@ -481,6 +490,7 @@ function capitalUrbanTile(map: GameMap, x: number, y: number): Tile | null {
   if (map.urbanPlan === 'terraced-bastion') return terracedBastionTile(map, x, y);
   if (map.urbanPlan === 'marsh-wards') return marshWardsTile(map, x, y);
   if (map.urbanPlan === 'caldera-radials') return calderaRadialsTile(map, x, y);
+  if (map.urbanPlan === 'geode-chambers') return geodeChambersTile(map, x, y);
   const minX = map.urbanBounds.x, minY = map.urbanBounds.y;
   const maxX = minX + map.urbanBounds.width - 1, maxY = minY + map.urbanBounds.height - 1;
   if (x < minX || x > maxX || y < minY || y > maxY) return null;
@@ -546,7 +556,8 @@ export function generateMap(mapId: string): Tile[][] {
         }
         }
       }
-      const variant: Tile['variant'] = biome === 'swamp' && (type === 'water' || type === 'grass' || type === 'bridge') ? 'swamp' : undefined;
+      const inCrystalUrban = mapData.urbanPlan === 'geode-chambers' && mapData.urbanBounds && x >= mapData.urbanBounds.x && x < mapData.urbanBounds.x + mapData.urbanBounds.width && y >= mapData.urbanBounds.y && y < mapData.urbanBounds.y + mapData.urbanBounds.height;
+      const variant: Tile['variant'] = inCrystalUrban && (type === 'wall' || type === 'floor' || type === 'path') ? 'crystal' : biome === 'swamp' && (type === 'water' || type === 'grass' || type === 'bridge') ? 'swamp' : undefined;
       row.push({ type, walkable, blocksSight, ...(variant ? { variant } : {}) });
     }
     map.push(row);

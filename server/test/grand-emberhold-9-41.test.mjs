@@ -61,7 +61,7 @@ test('9.41A migrated Emberhold houses remain valid against authoritative archite
 });
 
 test('9.41A fresh ContentDB converges Emberhold and advances Grand Capital schema to 7',()=>{
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'moria-941-')),file=path.join(dir,'content.json');try{const db=new ContentDB(file),data=db.getAllContent();assert.equal(data.version,3);assert.equal(data.grandCapitalVersion,7);const map=data.maps.find(entry=>entry.id==='emberhold');assert.deepEqual([map.width,map.height,map.urbanPlan,map.levelRequired],[160,160,'caldera-radials',28]);const npc=data.npcs.find(entry=>entry.id==='quest_emberhold');const node=data.nodes.find(entry=>entry.id==='node_emberhold');assert.deepEqual([npc.posX,npc.posY],[80,116]);assert.deepEqual([node.x,node.y],[80,66]);}finally{fs.rmSync(dir,{recursive:true,force:true});}
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'moria-941-')),file=path.join(dir,'content.json');try{const db=new ContentDB(file),data=db.getAllContent();assert.equal(data.version,3);assert.ok(data.grandCapitalVersion>=7);const map=data.maps.find(entry=>entry.id==='emberhold');assert.deepEqual([map.width,map.height,map.urbanPlan,map.levelRequired],[160,160,'caldera-radials',28]);const npc=data.npcs.find(entry=>entry.id==='quest_emberhold');const node=data.nodes.find(entry=>entry.id==='node_emberhold');assert.deepEqual([npc.posX,npc.posY],[80,116]);assert.deepEqual([node.x,node.y],[80,66]);}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
 test('9.41A client server and Studio share caldera-radials vocabulary',()=>{
