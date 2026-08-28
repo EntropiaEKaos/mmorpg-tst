@@ -46,3 +46,15 @@ test('9.27 third pass deepens vegetation and architecture without changing autho
   assert.match(render, /variation > \.54/);
   assert.match(render, /Roof mass and tile bands/);
 });
+
+
+test('9.27 fourth pass makes weather and authored lights visually reactive only', () => {
+  const fx = read('src/game/worldVisualRevamp927.ts');
+  const city = read('src/game/cityPresentation.ts');
+  assert.match(fx, /Weather-reactive wet surface response/);
+  assert.match(fx, /weather === 'rain' \|\| weather === 'storm'/);
+  assert.match(fx, /Storm pressure and rare lightning exposure/);
+  assert.match(city, /drawLocalEmissiveHalo/);
+  assert.match(city, /Ground every prop/);
+  assert.doesNotMatch(fx + city, /sendOfficial|serverSync|fetch\(|WebSocket/);
+});

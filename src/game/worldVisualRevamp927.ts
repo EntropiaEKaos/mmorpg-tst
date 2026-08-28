@@ -77,6 +77,47 @@ export function drawWorldCinematicPass(
     ctx.fillRect(0, h * .45, w, h * .55);
   }
 
+  // Weather-reactive wet surface response: rain changes the material read, not gameplay.
+  if (weather === 'rain' || weather === 'storm') {
+    ctx.globalCompositeOperation = 'soft-light';
+    const wet = ctx.createLinearGradient(0, 0, w, h);
+    wet.addColorStop(0, weather === 'storm' ? 'rgba(126,154,188,.16)' : 'rgba(150,178,202,.10)');
+    wet.addColorStop(.46, 'rgba(88,117,146,.035)');
+    wet.addColorStop(1, weather === 'storm' ? 'rgba(18,31,50,.18)' : 'rgba(26,43,61,.08)');
+    ctx.fillStyle = wet;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'lighter';
+    const glintCount = weather === 'storm' ? 22 : 13;
+    for (let i = 0; i < glintCount; i++) {
+      const gx = Math.round(hash(i * 17 + 41) * w);
+      const gy = Math.round(h * (.48 + hash(i * 13 + 29) * .47));
+      const gw = 5 + Math.round(hash(i * 19 + 7) * 22);
+      const pulse = .025 + Math.max(0, Math.sin(time * .0012 + i * 1.7)) * .035;
+      ctx.fillStyle = `rgba(188,215,235,${pulse})`;
+      ctx.fillRect(gx, gy, gw, 1);
+      if ((i & 3) === 0) ctx.fillRect(gx + Math.round(gw * .25), gy + 2, Math.max(2, Math.round(gw * .42)), 1);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // Storm pressure and rare lightning exposure give weather visual consequence.
+  if (weather === 'storm') {
+    const stormShade = ctx.createLinearGradient(0, 0, 0, h);
+    stormShade.addColorStop(0, 'rgba(16,27,46,.16)');
+    stormShade.addColorStop(.62, 'rgba(20,30,42,.035)');
+    stormShade.addColorStop(1, 'rgba(7,13,22,.10)');
+    ctx.fillStyle = stormShade;
+    ctx.fillRect(0, 0, w, h);
+    const lightningWave = Math.max(0, Math.sin(time * .0067 + 2.4));
+    const lightning = lightningWave > .985 ? Math.pow((lightningWave - .985) / .015, 2) * .16 : 0;
+    if (lightning > 0) {
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = `rgba(200,220,255,${lightning})`;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
   // Cinematic vignette and subtle inner frame improve focus/readability.
   const vignette = ctx.createRadialGradient(w * .50, h * .46, Math.min(w, h) * .20, w * .50, h * .48, Math.max(w, h) * .69);
   vignette.addColorStop(0, 'rgba(0,0,0,0)');

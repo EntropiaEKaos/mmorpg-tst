@@ -220,6 +220,19 @@ function pixelRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
 }
 
+function drawLocalEmissiveHalo(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number, rgb: string, alpha: number) {
+  // Local emissive halo is presentation-only; the crisp pixel prop remains the visual anchor.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  halo.addColorStop(0, `rgba(${rgb},${alpha})`);
+  halo.addColorStop(.36, `rgba(${rgb},${alpha * .38})`);
+  halo.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = halo;
+  ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+  ctx.restore();
+}
+
 function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number, y: number, size: number, time: number, accent: string) {
   const cx = x + size / 2;
   const cy = y + size * 0.70;
@@ -228,21 +241,30 @@ function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number,
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
+  // Ground every prop before drawing the authored pixel silhouette.
+  ctx.fillStyle = 'rgba(13,15,13,.24)';
+  ctx.fillRect(x + size*.22, y + size*.78, size*.56, Math.max(2, size*.075));
+  ctx.fillStyle = 'rgba(30,35,27,.13)';
+  ctx.fillRect(x + size*.31, y + size*.75, size*.38, Math.max(1, size*.04));
+
   switch (prop.kind) {
     case 'banner':
       pixelRect(ctx,cx-u,y+size*.18,u*2,size*.67,'#5b4028');
       pixelRect(ctx,cx+u,y+size*.20,u*5,u*6,prop.color || accent);
       ctx.fillStyle='rgba(255,255,255,.24)';ctx.fillRect(cx+u*2,y+size*.22,u,u*4); break;
     case 'lamp':
+      drawLocalEmissiveHalo(ctx,cx,y+size*.32,size*.50,'255,205,105',.16 + pulse*.07);
       pixelRect(ctx,cx-u,y+size*.31,u*2,size*.52,'#42392d');
       ctx.fillStyle=`rgba(255,211,104,${pulse*.25})`;ctx.fillRect(cx-u*5,y+size*.17,u*10,u*10);
       pixelRect(ctx,cx-u*2,y+size*.21,u*4,u*5,'#e7bd5c');
       ctx.fillStyle='#fff0a7';ctx.fillRect(cx-u,y+size*.23,u*2,u*2); break;
     case 'brazier':
+      drawLocalEmissiveHalo(ctx,cx,cy-u*4,size*.58,'255,118,48',.14 + pulse*.09);
       pixelRect(ctx,cx-u*4,cy,u*8,u*3,'#524438');
       ctx.fillStyle='#8f3926';ctx.fillRect(cx-u*3,cy-u*3,u*6,u*3);
       ctx.fillStyle='#ff9737';ctx.fillRect(cx-u*2,cy-u*6,u*4,u*4);ctx.fillStyle='#ffd15e';ctx.fillRect(cx-u,cy-u*7,u*2,u*4); break;
     case 'crystal':
+      drawLocalEmissiveHalo(ctx,cx,y+size*.43,size*.53,'151,143,255',.11 + pulse*.07);
       ctx.fillStyle=prop.color || accent;ctx.fillRect(cx-u*2,y+size*.28,u*4,u*8);ctx.fillRect(cx-u,y+size*.18,u*2,u*12);
       ctx.fillStyle='rgba(255,255,255,.52)';ctx.fillRect(cx-u,y+size*.22,u,u*5); break;
     case 'grave':
