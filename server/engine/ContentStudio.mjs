@@ -12,7 +12,7 @@ const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
 const RARITIES = Object.freeze(['common', 'uncommon', 'rare', 'epic', 'legendary']);
 const ITEM_SLOTS = Object.freeze(['weapon', 'armor', 'helmet', 'legs', 'boots', 'shield', 'ring', 'ring2', 'amulet', 'cloak', 'belt', 'gloves', 'relic']);
 const MAP_ACCESS = Object.freeze(['public', 'gm']);
-const EVENT_TYPES = Object.freeze(['invasion', 'boss', 'hunt', 'defense']);
+const EVENT_TYPES = Object.freeze(['invasion','world_boss','caravan','city_defense','weather','region','boss','hunt','defense']);
 const MONSTER_TYPES = Object.freeze(['normal', 'elite', 'boss']);
 const NPC_ROLES = Object.freeze(['merchant', 'banker', 'innkeeper', 'trainer', 'guard', 'healer', 'quest', 'taskmaster', 'stablemaster', 'outfitter', 'realtor']);
 const SPELL_TYPES = Object.freeze(['attack', 'heal', 'aoe', 'buff']);
@@ -45,11 +45,14 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('mapId', 'Runtime map', 'select', { optionKey: 'maps', allowEmpty: true }), field('count', 'Spawn count', 'number'),
     field('posX', 'Spawn X', 'number'), field('posY', 'Spawn Y', 'number'), field('speed', 'Move delay', 'number'),
     field('lootTableId', 'Loot table', 'select', { optionKey: 'lootTables', allowEmpty: true }),
+    field('aiArchetype','AI archetype'), field('aggroRadius','Aggro radius','number'), field('leashRadius','Leash radius','number'), field('patrolRadius','Patrol radius','number'), field('fleeAtHp','Flee HP ratio','number'), field('packId','Pack ID'),
+    field('telegraphMs','Telegraph ms','number'), field('telegraphKind','Telegraph kind'), field('telegraphRadius','Telegraph radius','number'), field('staggerThreshold','Stagger threshold','number'), field('phases','Boss phases','json'),
   ]),
   npcs: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('emoji', 'Emoji'), field('color', 'Color'),
     field('role', 'Role', 'select', { optionKey: 'npcRoles' }), field('posX', 'X', 'number'), field('posY', 'Y', 'number'),
     field('mapId', 'Map', 'select', { optionKey: 'maps' }), field('dialogue', 'Dialogue', 'textarea'),
+    field('aiMode','AI mode'), field('moveDelay','Move delay','number'), field('wanderRadius','Wander radius','number'), field('guardRadius','Guard radius','number'), field('openHour','Open hour','number'), field('closeHour','Close hour','number'), field('patrolRoute','Patrol route','json'), field('schedule','Daily schedule','json'),
   ]),
   spells: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('icon', 'Icon'), field('mana', 'Mana', 'number'),
@@ -68,6 +71,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('description', 'Description', 'textarea'), field('target', 'Target'), field('count', 'Count', 'number'),
     field('rewardGold', 'Reward gold', 'number'), field('rewardXp', 'Reward XP', 'number'), field('levelRequired', 'Required level', 'number'),
     field('requires', 'Prerequisite quest IDs', 'json'), field('rewardItem', 'Reward item', 'json'),
+    field('nodes','Quest graph nodes','json'), field('startNode','Start node'), field('branches','Quest branches','json'), field('triggers','Quest triggers','json'), field('events','Quest events','json'),
   ]),
   maps: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('biome', 'Biome', 'select', { optionKey: 'biomes' }), field('description', 'Description', 'textarea'),
@@ -83,7 +87,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('monsterNameplateShowLevel', 'Show monster level', 'boolean'), field('monsterNameplateShowValues', 'Show monster HP values', 'boolean'),
     field('bossNameplateScale', 'Boss plate scale', 'number'), field('bossNameplateAlwaysVisible', 'Boss labels always visible', 'boolean'),
     field('nameplateCollisionPadding', 'Label collision padding', 'number'), field('nameplateFadeStart', 'Label fade start ratio', 'number'),
-    field('districts', 'Districts', 'json'), field('landmarks', 'Landmarks', 'json'), field('props', 'Street props', 'json'),
+    field('districts', 'Districts', 'json'), field('landmarks', 'Landmarks', 'json'), field('props', 'Street props', 'json'), field('interiors','Interiors','json'),
     field('access', 'Access', 'select', { optionKey: 'mapAccess' }), field('portals', 'Portals', 'json'),
   ]),
   events: Object.freeze([
@@ -91,6 +95,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('type', 'Event type', 'select', { optionKey: 'eventTypes' }), field('target', 'Monster target'), field('count', 'Required kills', 'number'), field('rewardGold', 'Reward gold', 'number'),
     field('rewardXp', 'Reward XP', 'number'), field('rewardCoins', 'Reward coins', 'number'),
     field('mapId', 'Map', 'select', { optionKey: 'maps', allowEmpty: true }), field('durationMs', 'Duration ms', 'number'),
+    field('enabled','Enabled','boolean'), field('autoStart','Auto start','boolean'), field('repeatEveryMs','Repeat every ms','number'), field('startHour','Start hour','number'), field('route','Route','json'), field('weather','Weather preset'), field('bossId','Boss ID'),
   ]),
   shops: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('npcId', 'Merchant NPC', 'select', { optionKey: 'npcs' }),
@@ -160,6 +165,31 @@ export function validateStudioRecord(type, record) {
   if (!ID_RE.test(id)) return 'id must be 2-100 letters, numbers, dash or underscore';
   const nameError = requiredText(record, 'name', 100);
   if (nameError) return nameError;
+
+  if (type === 'monsters') {
+    for (const [key,min,max] of [['aggroRadius',1,30],['leashRadius',2,60],['patrolRadius',0,20],['fleeAtHp',0,0.8],['telegraphMs',100,5000],['telegraphRadius',1,12],['staggerThreshold',20,500]]) {
+      const error = numberIn(record, key, min, max); if (error) return error;
+    }
+    if (record.phases !== undefined && !Array.isArray(record.phases)) return 'phases must be an array';
+  }
+  if (type === 'npcs') {
+    for (const [key,min,max] of [['moveDelay',100,60000],['wanderRadius',0,20],['guardRadius',1,30],['openHour',0,23],['closeHour',1,24]]) {
+      const error = numberIn(record, key, min, max); if (error) return error;
+    }
+    if (record.patrolRoute !== undefined && !Array.isArray(record.patrolRoute)) return 'patrolRoute must be an array';
+    if (record.schedule !== undefined && !Array.isArray(record.schedule)) return 'schedule must be an array';
+  }
+  if (type === 'quests') {
+    for (const key of ['nodes','branches','triggers','events']) if (record[key] !== undefined && !Array.isArray(record[key])) return `${key} must be an array`;
+  }
+  if (type === 'maps' && record.interiors !== undefined && !Array.isArray(record.interiors)) return 'interiors must be an array';
+  if (type === 'events') {
+    for (const [key,min,max] of [['repeatEveryMs',0,604800000],['startHour',0,23],['durationMs',1000,21600000]]) {
+      const error = numberIn(record, key, min, max); if (error) return error;
+    }
+    for (const key of ['enabled','autoStart']) if (record[key] !== undefined && typeof record[key] !== 'boolean') return `${key} must be boolean`;
+    if (record.route !== undefined && !Array.isArray(record.route)) return 'route must be an array';
+  }
 
   if (type === 'items') {
     if (!ITEM_SLOTS.includes(String(record.slot || ''))) return 'slot is not supported';
