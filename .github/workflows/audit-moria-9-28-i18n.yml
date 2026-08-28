@@ -3,6 +3,7 @@ on:
   push:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
+      - 'src/**'
       - 'tools/audit-moria-9-28-i18n.py'
       - '.github/workflows/audit-moria-9-28-i18n.yml'
 jobs:
@@ -13,12 +14,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: moria-9.28-character-i18n-ptbr
-      - name: Scan human-facing English candidates
+      - name: Verify PT-BR source-candidate coverage
         run: python tools/audit-moria-9-28-i18n.py
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: moria-9-28-i18n-visible-audit
           path: |
             i18n-visible-audit.json
             i18n-visible-audit.txt
+            i18n-coverage-report.json
           retention-days: 30
