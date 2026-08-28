@@ -23,3 +23,8 @@ O portal de Eldoria que chega a Sunreach é movido de 40,68 para 80,24 apenas qu
 ## Paridade
 
 O campo `urbanPlan` passa pelo ContentDB/World e chega ao cliente. `harborShoreY` e `harborCapitalTile` usam os mesmos marcadores e constantes nos dois lados. O gate 9.37A exige typecheck/build, auditoria, teste focado e suíte completa antes do commit automático.
+
+
+## 9.37B — Prova visual autoritativa
+
+A aceitação visual usa o servidor real em banco temporário e o renderer de produção. São capturados minimapa, City Designer e panorâmica da área portuária. O gate exige 160×160, 12 distritos, 38 footprints, Farol no setor sudeste e uma quantidade mínima de pixels azuis na panorâmica para impedir que a bacia marítima desapareça por regressão de renderização.
