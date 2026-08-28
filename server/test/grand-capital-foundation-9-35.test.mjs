@@ -29,8 +29,8 @@ test('9.35A unpromoted regions stay 80x80 while declared capitals can generate 1
   assert.equal(world.getMap('frostpeak').width, 160);
   assert.equal(world.getMap('frostpeak').height, 160);
   assert.equal(world.getMap('frostpeak').settlementClass, 'capital');
-  assert.equal(world.getMap('shadowfen').width, MAP_WIDTH);
-  assert.equal(world.getMap('shadowfen').height, MAP_HEIGHT);
+  assert.equal(world.getMap('emberhold').width, MAP_WIDTH);
+  assert.equal(world.getMap('emberhold').height, MAP_HEIGHT);
   world.syncContentMaps([capital()]);
   const map = world.getMap('qa_grand_capital');
   assert.equal(map.width, 160);

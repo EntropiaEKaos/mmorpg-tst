@@ -64,7 +64,7 @@ test('9.39A migrated Frostpeak houses remain valid against authoritative archite
 });
 
 test('9.39A fresh ContentDB converges Frostpeak and advances only the Grand Capital marker',()=>{
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'moria-939-')),file=path.join(dir,'content.json');try{const db=new ContentDB(file),data=db.getAllContent();assert.equal(data.version,3);assert.equal(data.grandCapitalVersion,GRAND_CAPITAL_SCHEMA_VERSION);const map=data.maps.find(entry=>entry.id==='frostpeak');assert.deepEqual([map.width,map.height,map.urbanPlan],[160,160,'terraced-bastion']);const npc=data.npcs.find(entry=>entry.id==='quest_frostpeak');const node=data.nodes.find(entry=>entry.id==='node_frostpeak');assert.deepEqual([npc.posX,npc.posY],[74,100]);assert.deepEqual([node.x,node.y],[80,76]);}finally{fs.rmSync(dir,{recursive:true,force:true});}
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'moria-939-')),file=path.join(dir,'content.json');try{const db=new ContentDB(file),data=db.getAllContent();assert.equal(data.version,3);assert.ok(data.grandCapitalVersion>=GRAND_CAPITAL_SCHEMA_VERSION);const map=data.maps.find(entry=>entry.id==='frostpeak');assert.deepEqual([map.width,map.height,map.urbanPlan],[160,160,'terraced-bastion']);const npc=data.npcs.find(entry=>entry.id==='quest_frostpeak');const node=data.nodes.find(entry=>entry.id==='node_frostpeak');assert.deepEqual([npc.posX,npc.posY],[74,100]);assert.deepEqual([node.x,node.y],[80,76]);}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
 test('9.39A client server and Studio share terraced-bastion vocabulary',()=>{

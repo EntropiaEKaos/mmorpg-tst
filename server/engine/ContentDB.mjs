@@ -15,7 +15,8 @@ import { ROAD_TO_TEN_CONTENT } from './RoadToTenContent.mjs';
 import { migrateGrandEldoriaData } from './GrandEldoria.mjs';
 import { migrateGrandSunreachData } from './GrandSunreach.mjs';
 import { migrateGrandIronwoodData } from './GrandIronwood.mjs';
-import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandFrostpeakData } from './GrandFrostpeak.mjs';
+import { migrateGrandFrostpeakData } from './GrandFrostpeak.mjs';
+import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandShadowfenData } from './GrandShadowfen.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -201,11 +202,12 @@ export class ContentDB {
 
   migrateGrandCapitalV1() {
     if (Number(this.data.grandCapitalVersion) >= GRAND_CAPITAL_SCHEMA_VERSION) return false;
-    // Every capital migration is idempotent and exact-default-only. Schema 5 adds Frostpeak.
+    // Every capital migration is idempotent and exact-default-only. Schema 6 adds Shadowfen.
     migrateGrandEldoriaData(this.data);
     migrateGrandSunreachData(this.data);
     migrateGrandIronwoodData(this.data);
     migrateGrandFrostpeakData(this.data);
+    migrateGrandShadowfenData(this.data);
     this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
     this.save();
     return true;
@@ -338,6 +340,7 @@ export class ContentDB {
     migrateGrandSunreachData(this.data);
     migrateGrandIronwoodData(this.data);
     migrateGrandFrostpeakData(this.data);
+    migrateGrandShadowfenData(this.data);
     this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
 
     this.save();

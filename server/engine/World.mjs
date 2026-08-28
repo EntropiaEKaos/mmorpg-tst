@@ -7,6 +7,7 @@ import { GRAND_ELDORIA_BUILTIN_WORLD_CONFIG } from './GrandEldoria.mjs';
 import { GRAND_SUNREACH_BUILTIN_WORLD_CONFIG } from './GrandSunreach.mjs';
 import { GRAND_IRONWOOD_BUILTIN_WORLD_CONFIG } from './GrandIronwood.mjs';
 import { GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG } from './GrandFrostpeak.mjs';
+import { GRAND_SHADOWFEN_BUILTIN_WORLD_CONFIG } from './GrandShadowfen.mjs';
 
 class Monster {
   constructor(data) {
@@ -20,7 +21,7 @@ const MIN_MAP_DIMENSION = 40;
 const MAX_MAP_DIMENSION = 192;
 const SETTLEMENT_CLASSES = Object.freeze(['wilderness','town','city','capital']);
 const SETTLEMENT_CLASS_SET = new Set(SETTLEMENT_CLASSES);
-const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings','terraced-bastion']);
+const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings','terraced-bastion','marsh-wards']);
 const BIOMES = new Set(['plains', 'snow', 'swamp', 'desert', 'shadow']);
 const BIOME_SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
 const CITY_STYLES = new Set(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
@@ -46,14 +47,7 @@ const MAP_CONFIG = Object.freeze({
   sunreach_coast: GRAND_SUNREACH_BUILTIN_WORLD_CONFIG,
   ironwood: GRAND_IRONWOOD_BUILTIN_WORLD_CONFIG,
   frostpeak: GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG,
-  shadowfen: {
-    id: 'shadowfen', name: 'Shadowfen', description: 'Cursed swampland. Rotten and foggy.', biome: 'swamp',
-    spawnPoint: { x: 40, y: 70 }, townCenter: { x: 40, y: 65 }, townRange: 8, seed: 7,
-    portals: [
-      { pos: { x: 40, y: 75 }, targetMap: 'eldoria', targetSpawn: { x: 130, y: 120 }, label: '🌳 To Eldoria' },
-      { pos: { x: 10, y: 10 }, targetMap: 'voidlands', targetSpawn: { x: 70, y: 70 }, label: '☠ To Voidlands' },
-    ],
-  },
+  shadowfen: GRAND_SHADOWFEN_BUILTIN_WORLD_CONFIG,
   emberhold: {
     id: 'emberhold', name: 'Emberhold', description: 'Volcanic desert. Scorched earth and lava.', biome: 'desert',
     spawnPoint: { x: 70, y: 10 }, townCenter: { x: 65, y: 15 }, townRange: 8, seed: 999,
@@ -65,7 +59,7 @@ const MAP_CONFIG = Object.freeze({
     id: 'voidlands', name: 'Voidlands', description: 'The end of the world. Pure darkness and ancient evil.', biome: 'shadow',
     spawnPoint: { x: 70, y: 70 }, townCenter: { x: 40, y: 40 }, townRange: 6, levelRequired: 25, seed: 666,
     portals: [
-      { pos: { x: 75, y: 75 }, targetMap: 'shadowfen', targetSpawn: { x: 12, y: 12 }, label: '🍄 To Shadowfen' },
+      { pos: { x: 75, y: 75 }, targetMap: 'shadowfen', targetSpawn: { x: 22, y: 34 }, label: '🍄 To Shadowfen' },
     ],
   },
 });
@@ -164,7 +158,7 @@ function normalizeConfig(record, base = null) {
   const height = integer(record?.height, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, base?.height || MAP_HEIGHT);
   const requestedSettlement = String(record?.settlementClass || base?.settlementClass || (id === 'eldoria' ? 'capital' : 'city'));
   const settlementClass = SETTLEMENT_CLASS_SET.has(requestedSettlement) ? requestedSettlement : 'city';
-  const defaultUrbanPlan = id === 'sunreach_coast' ? 'harbor-crescent' : id === 'ironwood' ? 'forest-rings' : id === 'frostpeak' ? 'terraced-bastion' : 'royal-grid';
+  const defaultUrbanPlan = id === 'sunreach_coast' ? 'harbor-crescent' : id === 'ironwood' ? 'forest-rings' : id === 'frostpeak' ? 'terraced-bastion' : id === 'shadowfen' ? 'marsh-wards' : 'royal-grid';
   const requestedUrbanPlan = String(record?.urbanPlan || base?.urbanPlan || defaultUrbanPlan);
   const urbanPlan = settlementClass === 'capital' && URBAN_PLANS.has(requestedUrbanPlan) ? requestedUrbanPlan : 'royal-grid';
   const baseSpawn = base?.spawnPoint || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
@@ -304,11 +298,42 @@ function terracedBastionTile(config, x, y) {
   return {type:(vertical||terraceRoad||highCourt||forgeCourt||expeditionCourt||lowerCourt)?'path':'snow',walkable:true,blocksSight:false};
 }
 
+
+function marshWardsTile(config, x, y) {
+  const bounds=config.urbanBounds;if(!bounds)return null;
+  const minX=Number(bounds.x),minY=Number(bounds.y),maxX=minX+Number(bounds.width)-1,maxY=minY+Number(bounds.height)-1;
+  if(x<minX||x>maxX||y<minY||y>maxY)return null;
+  const cx=config.townCenter.x,cy=config.townCenter.y;
+  const portalGate=config.portals.some(portal=>((portal.pos.x===minX||portal.pos.x===maxX)&&x===portal.pos.x&&Math.abs(y-portal.pos.y)<=2)||((portal.pos.y===minY||portal.pos.y===maxY)&&y===portal.pos.y&&Math.abs(x-portal.pos.x)<=2));
+  const northGate=y===minY&&Math.abs(x-cx)<=2;
+  const eastGate=x===maxX&&Math.abs(y-cy)<=2;
+  if(portalGate||northGate||eastGate)return {type:'path',walkable:true,blocksSight:false};
+  if(x===minX||x===maxX||y===minY||y===maxY)return {type:'water',walkable:false,blocksSight:false};
+
+  const westCanal=cx-27+Math.round(Math.sin((y-minY)/10)*4);
+  const eastCanal=cx+27+Math.round(Math.sin((y-minY)/12)*5);
+  const crossCanal=cy+Math.round(Math.sin((x-minX)/13)*4);
+  const inCanal=Math.abs(x-westCanal)<=3||Math.abs(x-eastCanal)<=3||Math.abs(y-crossCanal)<=2;
+  const centralSpine=Math.abs(x-cx)<=1;
+  const causeway=[54,82,110,136].some(line=>Math.abs(y-line)<=1);
+  const wardWalk=Math.abs(x-40)<=1||Math.abs(x-120)<=1;
+  const boardwalk=centralSpine||causeway||wardWalk;
+  if(boardwalk&&inCanal)return {type:'bridge',walkable:true,blocksSight:false};
+  if(boardwalk)return {type:'path',walkable:true,blocksSight:false};
+  const fenCourt=x>=70&&x<=94&&y>=68&&y<=98;
+  if(fenCourt)return {type:'path',walkable:true,blocksSight:false};
+  if(inCanal)return {type:'water',walkable:false,blocksSight:false};
+  const westReed=Math.abs(x-westCanal)<=5,eastReed=Math.abs(x-eastCanal)<=5,crossReed=Math.abs(y-crossCanal)<=4;
+  if((westReed||eastReed||crossReed)&&((x*19+y*23)%7===0))return {type:'bush',walkable:false,blocksSight:false};
+  return {type:'grass',walkable:true,blocksSight:false};
+}
+
 function capitalUrbanTile(config, x, y) {
   if (config?.settlementClass !== 'capital') return null;
   if (config.urbanPlan === 'harbor-crescent') return harborCapitalTile(config, x, y);
   if (config.urbanPlan === 'forest-rings') return forestCapitalTile(config, x, y);
   if (config.urbanPlan === 'terraced-bastion') return terracedBastionTile(config, x, y);
+  if (config.urbanPlan === 'marsh-wards') return marshWardsTile(config, x, y);
   const bounds = config.urbanBounds;
   if (!bounds) return null;
   const minX = Number(bounds.x), minY = Number(bounds.y);

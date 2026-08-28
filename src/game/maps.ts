@@ -8,7 +8,7 @@ export const MAX_MAP_DIMENSION = 192;
 export const TILE_SIZE = 32;
 
 export type SettlementClass = 'wilderness' | 'town' | 'city' | 'capital';
-export type UrbanPlan = 'royal-grid' | 'harbor-crescent' | 'forest-rings' | 'terraced-bastion';
+export type UrbanPlan = 'royal-grid' | 'harbor-crescent' | 'forest-rings' | 'terraced-bastion' | 'marsh-wards';
 export interface UrbanBounds { x: number; y: number; width: number; height: number; }
 
 export type BiomeType = 'plains' | 'snow' | 'swamp' | 'desert' | 'shadow';
@@ -86,7 +86,7 @@ function settlementClassOf(value: unknown, mapId = ''): SettlementClass {
   return (['wilderness','town','city','capital'] as const).includes(requested as SettlementClass) ? requested as SettlementClass : 'city';
 }
 function mapDimension(value: unknown, fallback = MAP_WIDTH): number { return integer(value, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, fallback); }
-function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const fallback: UrbanPlan = mapId === 'sunreach_coast' ? 'harbor-crescent' : mapId === 'ironwood' ? 'forest-rings' : mapId === 'frostpeak' ? 'terraced-bastion' : 'royal-grid'; const requested = String(value || fallback); return requested === 'harbor-crescent' || requested === 'forest-rings' || requested === 'terraced-bastion' ? requested : 'royal-grid'; }
+function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const fallback: UrbanPlan = mapId === 'sunreach_coast' ? 'harbor-crescent' : mapId === 'ironwood' ? 'forest-rings' : mapId === 'frostpeak' ? 'terraced-bastion' : mapId === 'shadowfen' ? 'marsh-wards' : 'royal-grid'; const requested = String(value || fallback); return requested === 'harbor-crescent' || requested === 'forest-rings' || requested === 'terraced-bastion' || requested === 'marsh-wards' ? requested : 'royal-grid'; }
 function normalizeUrbanBounds(raw: unknown, width: number, height: number, townCenter: Position, settlementClass: SettlementClass): UrbanBounds {
   const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Partial<UrbanBounds> : {};
   const radius = settlementClass === 'capital' ? Math.min(36, Math.floor(Math.min(width, height) / 3)) : Math.min(14, Math.floor(Math.min(width, height) / 4));
@@ -153,7 +153,7 @@ const BASE_MAPS: Record<string, GameMap> = {
     spawnPoint: { x: 40, y: 40 }, townCenter: { x: 40, y: 40 }, townRange: 10,
     portals: [
       { pos: { x: 10, y: 40 }, targetMap: 'frostpeak', targetSpawn: { x: 70, y: 40 }, label: '❄ To Frostpeak' },
-      { pos: { x: 70, y: 10 }, targetMap: 'shadowfen', targetSpawn: { x: 40, y: 70 }, label: '🍄 To Shadowfen' },
+      { pos: { x: 70, y: 10 }, targetMap: 'shadowfen', targetSpawn: { x: 80, y: 138 }, label: '🍄 To Shadowfen' },
     ],
   },
   frostpeak: {
@@ -184,7 +184,7 @@ const BASE_MAPS: Record<string, GameMap> = {
     id: 'voidlands', name: 'Voidlands', description: 'The end of the world. Pure darkness and ancient evil.', biome: 'shadow', seed: 666,
     cityStyle: 'void', cityAccent: '#a86dff', roofColor: '#21192d', wallColor: '#4c4259', roadColor: '#342c42', districts: [], landmarks: [], props: [],
     spawnPoint: { x: 70, y: 70 }, townCenter: { x: 40, y: 40 }, townRange: 6, levelRequired: 25, dangerLevel: 'Nightmare',
-    portals: [{ pos: { x: 75, y: 75 }, targetMap: 'shadowfen', targetSpawn: { x: 12, y: 12 }, label: '🍄 To Shadowfen' }],
+    portals: [{ pos: { x: 75, y: 75 }, targetMap: 'shadowfen', targetSpawn: { x: 22, y: 34 }, label: '🍄 To Shadowfen' }],
   },
 };
 
@@ -418,11 +418,42 @@ function terracedBastionTile(map: GameMap, x: number, y: number): Tile | null {
   return {type:(vertical||terraceRoad||highCourt||forgeCourt||expeditionCourt||lowerCourt)?'path':'snow',walkable:true,blocksSight:false};
 }
 
+
+function marshWardsTile(map: GameMap, x: number, y: number): Tile | null {
+  const bounds=map.urbanBounds;if(!bounds)return null;
+  const minX=bounds.x,minY=bounds.y,maxX=minX+bounds.width-1,maxY=minY+bounds.height-1;
+  if(x<minX||x>maxX||y<minY||y>maxY)return null;
+  const cx=map.townCenter.x,cy=map.townCenter.y;
+  const portalGate=map.portals.some(portal=>((portal.pos.x===minX||portal.pos.x===maxX)&&x===portal.pos.x&&Math.abs(y-portal.pos.y)<=2)||((portal.pos.y===minY||portal.pos.y===maxY)&&y===portal.pos.y&&Math.abs(x-portal.pos.x)<=2));
+  const northGate=y===minY&&Math.abs(x-cx)<=2;
+  const eastGate=x===maxX&&Math.abs(y-cy)<=2;
+  if(portalGate||northGate||eastGate)return {type:'path',walkable:true,blocksSight:false};
+  if(x===minX||x===maxX||y===minY||y===maxY)return {type:'water',walkable:false,blocksSight:false};
+
+  const westCanal=cx-27+Math.round(Math.sin((y-minY)/10)*4);
+  const eastCanal=cx+27+Math.round(Math.sin((y-minY)/12)*5);
+  const crossCanal=cy+Math.round(Math.sin((x-minX)/13)*4);
+  const inCanal=Math.abs(x-westCanal)<=3||Math.abs(x-eastCanal)<=3||Math.abs(y-crossCanal)<=2;
+  const centralSpine=Math.abs(x-cx)<=1;
+  const causeway=[54,82,110,136].some(line=>Math.abs(y-line)<=1);
+  const wardWalk=Math.abs(x-40)<=1||Math.abs(x-120)<=1;
+  const boardwalk=centralSpine||causeway||wardWalk;
+  if(boardwalk&&inCanal)return {type:'bridge',walkable:true,blocksSight:false};
+  if(boardwalk)return {type:'path',walkable:true,blocksSight:false};
+  const fenCourt=x>=70&&x<=94&&y>=68&&y<=98;
+  if(fenCourt)return {type:'path',walkable:true,blocksSight:false};
+  if(inCanal)return {type:'water',walkable:false,blocksSight:false};
+  const westReed=Math.abs(x-westCanal)<=5,eastReed=Math.abs(x-eastCanal)<=5,crossReed=Math.abs(y-crossCanal)<=4;
+  if((westReed||eastReed||crossReed)&&((x*19+y*23)%7===0))return {type:'bush',walkable:false,blocksSight:false};
+  return {type:'grass',walkable:true,blocksSight:false};
+}
+
 function capitalUrbanTile(map: GameMap, x: number, y: number): Tile | null {
   if (map.settlementClass !== 'capital' || !map.urbanBounds) return null;
   if (map.urbanPlan === 'harbor-crescent') return harborCapitalTile(map, x, y);
   if (map.urbanPlan === 'forest-rings') return forestCapitalTile(map, x, y);
   if (map.urbanPlan === 'terraced-bastion') return terracedBastionTile(map, x, y);
+  if (map.urbanPlan === 'marsh-wards') return marshWardsTile(map, x, y);
   const minX = map.urbanBounds.x, minY = map.urbanBounds.y;
   const maxX = minX + map.urbanBounds.width - 1, maxY = minY + map.urbanBounds.height - 1;
   if (x < minX || x > maxX || y < minY || y > maxY) return null;
