@@ -6,7 +6,7 @@ const read = path => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 
 
 test('9.7 player presentation uses authored native-pixel frames instead of block-built legacy figures', () => {
   const avatar = read('src/game/playerAvatar.ts');
-  assert.match(avatar, /PIXEL_SPRITE_SCALE = 1\.30/);
+  assert.match(avatar, /PIXEL_SPRITE_SCALE = 1\.42/); // 9.29 intentionally supersedes the 9.7 scale contract
   assert.match(avatar, /18 × 24 native-pixel frames/);
   assert.match(avatar, /const KNIGHT_FRAME: SpriteFrame/);
   assert.match(avatar, /const CASTER_FRAME: SpriteFrame/);

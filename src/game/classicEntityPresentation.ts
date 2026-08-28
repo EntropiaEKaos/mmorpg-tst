@@ -142,6 +142,48 @@ export function drawClassicMonsterSprite(
     ctx.fillStyle = '#111';
     ctx.fillRect(left + 4 * u, top + 11 * u, u, u);
     ctx.fillRect(left + 8 * u, top + 11 * u, u, u);
+  } else if (/dragon|wyrm|drake/.test(id)) {
+    // Long reptilian silhouette with wing planes and horned head.
+    ctx.fillStyle = dark;
+    ctx.fillRect(left, top + 7*u, 5*u, 2*u);
+    ctx.fillRect(left + 8*u, top + 6*u, 5*u, 2*u);
+    drawPixelOutline(ctx, left + 3*u, top + 6*u, 8*u, 9*u, body);
+    drawPixelOutline(ctx, left + 9*u, top + 4*u, 5*u, 6*u, body);
+    ctx.fillStyle = shade(body,.66);
+    ctx.fillRect(left + 2*u, top + 3*u, 4*u, 6*u);
+    ctx.fillRect(left + 6*u, top + 2*u, 4*u, 5*u);
+    ctx.fillStyle = light;
+    ctx.fillRect(left + 10*u, top + 5*u, 2*u, u);
+    ctx.fillStyle = '#ffd36b';
+    ctx.fillRect(left + 12*u, top + 6*u, u, u);
+    ctx.fillStyle = dark;
+    ctx.fillRect(left + 4*u, top + 15*u, 2*u, 3*u);
+    ctx.fillRect(left + 9*u, top + 15*u, 2*u, 3*u);
+  } else if (/ghost|wraith|spirit|spect/.test(id)) {
+    const fade = ctx.createLinearGradient(0,top+5*u,0,top+18*u);
+    fade.addColorStop(0,light); fade.addColorStop(1,'rgba(130,160,180,.12)');
+    ctx.fillStyle=fade;
+    ctx.fillRect(left+3*u,top+5*u,8*u,10*u);
+    ctx.fillRect(left+2*u,top+8*u,10*u,5*u);
+    ctx.fillStyle='#0d151b';
+    ctx.fillRect(left+5*u,top+8*u,u,u);ctx.fillRect(left+8*u,top+8*u,u,u);
+    ctx.fillStyle='rgba(205,236,255,.35)';
+    ctx.fillRect(left+4*u,top+5*u,4*u,u);
+  } else if (/demon|fiend|devil/.test(id)) {
+    drawPixelOutline(ctx,left+3*u,top+4*u,7*u,11*u,body);
+    ctx.fillStyle=dark;
+    ctx.fillRect(left+2*u,top+1*u,2*u,5*u);ctx.fillRect(left+9*u,top+1*u,2*u,5*u);
+    ctx.fillRect(left,top+7*u,3*u,8*u);ctx.fillRect(left+10*u,top+7*u,3*u,8*u);
+    ctx.fillStyle='#ff9a45';
+    ctx.fillRect(left+5*u,top+7*u,u,u);ctx.fillRect(left+8*u,top+7*u,u,u);
+    ctx.fillStyle=light;ctx.fillRect(left+5*u,top+11*u,3*u,u);
+  } else if (/lich|necromancer/.test(id)) {
+    drawPixelOutline(ctx,left+3*u,top+3*u,7*u,6*u,'#b9c4b5');
+    drawPixelOutline(ctx,left+2*u,top+9*u,9*u,7*u,body);
+    ctx.fillStyle='#73d9ff';
+    ctx.fillRect(left+5*u,top+5*u,u,u);ctx.fillRect(left+8*u,top+5*u,u,u);
+    ctx.fillStyle=dark;ctx.fillRect(left,top+8*u,2*u,9*u);ctx.fillRect(left+11*u,top+8*u,2*u,9*u);
+    ctx.fillStyle=light;ctx.fillRect(left+5*u,top+10*u,3*u,u);
   } else {
     const bone = /skeleton|undead/.test(id);
     const primary = bone ? '#c9c4ae' : body;

@@ -155,22 +155,44 @@ function buildTileCache(size: number) {
 
   tileCache.set(`path_${size}`, createTileCanvas((ctx, s) => {
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = '#816b4f';
+    ctx.fillStyle = '#514a3d';
     ctx.fillRect(0, 0, s, s);
-    const u = Math.max(1, Math.round(s / 16));
-    for (let row = 0; row < 5; row++) {
-      const yy = row * Math.max(u*3, Math.floor(s/5));
-      const offset = row % 2 ? u*3 : 0;
-      for (let xx = -offset; xx < s; xx += u*6) {
-        const tone = hash(xx + row, row, 7) > .5 ? '#967b58' : '#755e45';
-        ctx.fillStyle = '#5d4937';
-        ctx.fillRect(xx, yy, u*5, u*3);
+    const u = Math.max(1, Math.round(s / 32));
+    const rows = 7;
+    const rowH = Math.max(4, Math.floor(s / rows));
+    for (let row = 0; row < rows; row++) {
+      const yy = row * rowH;
+      let xx = row % 2 ? -Math.floor(s * .09) : -Math.floor(s * .02);
+      let col = 0;
+      while (xx < s) {
+        const r = hash(row * 31 + col, row + 7, 29);
+        const stoneW = Math.max(5, Math.round(s * (.17 + r * .11)));
+        const stoneH = Math.max(3, rowH - (r > .67 ? 2 : 1));
+        const tones = ['#776b56','#887a61','#6c6252','#96866a','#7d715d'];
+        const tone = tones[Math.floor(hash(row, col, 13) * tones.length)];
+        ctx.fillStyle = '#39352f';
+        ctx.fillRect(xx, yy, stoneW, rowH);
         ctx.fillStyle = tone;
-        ctx.fillRect(xx+u, yy+u, u*4-1, u*2-1);
-        ctx.fillStyle = 'rgba(226,199,151,.16)';
-        ctx.fillRect(xx+u, yy+u, u*3, 1);
+        ctx.fillRect(xx + 1, yy + 1, Math.max(1, stoneW - 2), stoneH);
+        ctx.fillStyle = 'rgba(231,213,178,.18)';
+        ctx.fillRect(xx + 2, yy + 1, Math.max(1, stoneW - 4), 1);
+        ctx.fillStyle = 'rgba(26,24,22,.22)';
+        ctx.fillRect(xx + stoneW - 2, yy + 2, 1, Math.max(1, stoneH - 2));
+        if (hash(row, col, 44) > .78) {
+          ctx.fillStyle = '#4e6242';
+          ctx.fillRect(xx + 1, yy + stoneH, Math.max(1, Math.round(stoneW * .35)), u);
+        }
+        if (hash(row, col, 61) > .83) {
+          ctx.fillStyle = 'rgba(35,31,27,.55)';
+          ctx.fillRect(xx + Math.floor(stoneW*.45), yy + 2, u, Math.max(1, Math.floor(stoneH*.55)));
+          ctx.fillRect(xx + Math.floor(stoneW*.45), yy + Math.floor(stoneH*.55), Math.max(1,Math.floor(stoneW*.22)), u);
+        }
+        xx += stoneW + 1;
+        col++;
       }
     }
+    ctx.fillStyle = 'rgba(30,27,24,.12)';
+    for (let i=0;i<9;i++) ctx.fillRect(Math.floor(hash(i,91)*s),Math.floor(hash(i,73)*s),u,u);
   }, size));
 
   tileCache.set(`wall_${size}`, createTileCanvas((ctx, s) => {
@@ -491,6 +513,14 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
+
+  // 9.28 environment depth: buildings cast a short directional shadow plus a hard contact edge.
+  if (building.type !== 'tree_deco') {
+    ctx.fillStyle = 'rgba(0,0,0,.16)';
+    ctx.fillRect(Math.round(sx + tileSize*.18), Math.round(sy + h*.18), Math.max(3,Math.round(w*.92)), Math.max(3,Math.round(h*.76)));
+    ctx.fillStyle = 'rgba(0,0,0,.30)';
+    ctx.fillRect(Math.round(sx + w*.08), Math.round(sy + h*.86), Math.max(2,Math.round(w*.88)), Math.max(2,Math.round(h*.055)));
+  }
 
   if (building.type === 'tree_deco') {
     drawTile(ctx, { type: 'tree', walkable: false }, sx, sy, tileSize);

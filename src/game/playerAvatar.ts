@@ -25,7 +25,7 @@ export interface AvatarMount {
 }
 
 // Public architecture contract used by the 9.7 visual regression tests.
-export const PIXEL_SPRITE_SCALE = 1.30;
+export const PIXEL_SPRITE_SCALE = 1.42;
 
 const DEFAULT_COLORS: AvatarColors = {
   head: '#d7a06b',
@@ -285,6 +285,11 @@ export function drawPixelHuman(
   const frame = frameForStyle(style);
   const idle = Math.round(Math.sin(time / 300) * 0.35);
   drawSpriteMatrix(ctx, cx, feetY + idle, size, frame, palette, direction === 'left');
+
+  // 9.29 one-pixel material glint: keeps larger silhouettes crisp rather than blurry.
+  const glint = Math.max(1, Math.round(size * PIXEL_SPRITE_SCALE / 32));
+  ctx.fillStyle = 'rgba(255,239,196,.20)';
+  ctx.fillRect(Math.round(cx - glint*2), Math.round(feetY - size*1.02 + idle), glint*2, glint);
 
   // Tiny addon pixels sit on top of the authored frame instead of changing its
   // bounding box, so outfit addons remain crisp and do not become UI glyphs.
