@@ -4,6 +4,7 @@ on:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
       - 'tools/upgrade-moria-9-42a-grand-crystal-deep.py'
+      - 'tools/fix-moria-9-42a-crystal-node-id.py'
       - '.github/workflows/moria-9-42a-grand-crystal-deep.yml'
 permissions:
   contents: write
@@ -22,7 +23,8 @@ jobs:
           cache: npm
       - name: Apply Mor'ia 9.42A Grand Crystal Deep
         run: |
-          python -m py_compile tools/upgrade-moria-9-42a-grand-crystal-deep.py
+          python -m py_compile tools/upgrade-moria-9-42a-grand-crystal-deep.py tools/fix-moria-9-42a-crystal-node-id.py
+          python tools/fix-moria-9-42a-crystal-node-id.py
           python tools/upgrade-moria-9-42a-grand-crystal-deep.py
       - name: Verify Grand Crystal Deep source contract
         run: |
@@ -31,6 +33,7 @@ jobs:
           grep -Fq "GRAND_CAPITAL_SCHEMA_VERSION=8" server/engine/GrandCrystalDeep.mjs
           grep -Fq "urbanPlan:'geode-chambers'" server/engine/GrandCrystalDeep.mjs
           grep -Fq "landmarks.length,42" server/test/grand-crystal-deep-9-42.test.mjs
+          grep -Fq "node_crystaldeep" server/engine/GrandCrystalDeep.mjs
           grep -Fq "geodeChambersTile" server/engine/World.mjs
           grep -Fq "geodeChambersTile" src/game/maps.ts
           grep -Fq "nearGeodeGallery" server/engine/World.mjs
