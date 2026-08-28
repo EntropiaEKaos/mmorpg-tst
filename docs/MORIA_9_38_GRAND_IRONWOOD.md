@@ -44,3 +44,8 @@ A 9.38B fará a prova visual autoritativa com:
 - City Designer;
 - panorâmica de produção;
 - verificação de massa verde/árvores, trilhas circulares e principais marcos de Ironwood.
+
+
+## 9.38B — Prova visual autoritativa
+
+A aceitação visual usa o servidor real em banco temporário e o renderer de produção. São capturados minimapa, City Designer e panorâmica da área urbana. O gate exige 160×160, 12 distritos, 40 footprints, Poço Lunar no setor sudeste, uma massa mínima de árvores, trilhas e gramados gerados pelo `forest-rings`, além de presença mínima de pixels verdes no canvas para detectar regressões que apaguem a identidade florestal.
