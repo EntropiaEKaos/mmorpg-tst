@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 
-// Fourth-pass matrix: same deterministic camera/state, now reviewing reactive atmosphere.
+// Final 9.27 art-direction matrix: validate night-sensitive city lighting and reactive weather.
 fs.mkdirSync('docs/screenshots', { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
@@ -26,7 +26,6 @@ await page.getByRole('button', { name: /OFFLINE QUICK PLAY/i }).click();
 await page.locator('canvas.moria-world-canvas').waitFor({ state: 'visible' });
 await page.waitForTimeout(900);
 
-// Deterministic presentation review through the existing offline-only admin controls.
 await openAdmin();
 await page.getByRole('button', { name: '☀ Day', exact: true }).click();
 await page.getByRole('button', { name: '☀ Clear', exact: true }).click();
@@ -37,6 +36,7 @@ await openAdmin();
 await page.getByRole('button', { name: '🌙 Night', exact: true }).click();
 await page.getByRole('button', { name: '☀ Clear', exact: true }).click();
 await closeAdmin();
+await page.waitForTimeout(600);
 await shot('moria-9-27-world-night.png');
 
 await openAdmin();
