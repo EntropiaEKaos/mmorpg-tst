@@ -4,6 +4,7 @@ on:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
       - 'tools/upgrade-moria-9-34-1-visual-proof.py'
+      - 'tools/upgrade-moria-9-34-1-react-events.py'
       - '.github/workflows/moria-9-34-1-visual-proof.yml'
 permissions:
   contents: write
@@ -21,14 +22,18 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply Mor'ia 9.34.1 visual proof hardening
-        run: python tools/upgrade-moria-9-34-1-visual-proof.py
+        run: |
+          python tools/upgrade-moria-9-34-1-visual-proof.py
+          python tools/upgrade-moria-9-34-1-react-events.py
       - name: Verify proof hardening and documentation
         run: |
           grep -q "'You have'" tools/upgrade-moria-9-34-1-visual-proof.py
           grep -q "moria:hud:action-bar:position" src/visualQa.tsx
+          grep -q "onFocusCapture={handleEnter}" src/components/Tooltip.tsx
+          grep -q "data-tooltip-portal=\"true\"" src/components/Tooltip.tsx
           grep -q "Action Bar is not visibly framed" tools/capture-moria-9-34.mjs
           grep -q "Combos reativos" tools/capture-moria-9-34.mjs
-          grep -q "Mor'ia 9.34.1" docs/MORIA_9_34_1_VISUAL_PROOF.md
+          grep -q "corrida entre render" docs/MORIA_9_34_1_VISUAL_PROOF.md
       - name: Verify PT-BR source coverage
         run: python tools/audit-moria-9-28-i18n.py
       - name: Validate client
