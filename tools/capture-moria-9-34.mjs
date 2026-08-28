@@ -52,6 +52,11 @@ for (const panel of ['talents', 'actionbar', 'castbar', 'dps']) {
     }
     const portal = page.locator('body > [data-tooltip-portal="true"]');
     await portal.waitFor({ state: 'visible', timeout: 3000 });
+    const portalBox = await portal.boundingBox();
+    const viewport = page.viewportSize();
+    if (!portalBox || !viewport || portalBox.x < 3 || portalBox.y < 3 || portalBox.x + portalBox.width > viewport.width - 3 || portalBox.y + portalBox.height > viewport.height - 3) {
+      throw new Error(`Mor'ia 9.34.2 Tooltip escapes viewport: ${JSON.stringify({ portalBox, viewport })}`);
+    }
     const tooltipText = await portal.innerText();
     for (const required of ['Fúria', 'ATALHO:', 'Custo de Mana:', 'Recarga:', 'COMBOS REATIVOS']) {
       if (!tooltipText.includes(required)) throw new Error(`Mor'ia 9.34 Action Bar tooltip missing ${required}: ${tooltipText}`);

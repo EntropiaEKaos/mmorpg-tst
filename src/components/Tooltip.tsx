@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Player, Spell, SchoolValues } from '../game/types';
 import { buildSpellScalingBreakdown, normalizeSchool, SCHOOL_META } from '../game/elementalScaling';
@@ -11,40 +11,62 @@ interface TooltipData {
   preferred?: 'top' | 'bottom' | 'left' | 'right';
 }
 
+type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right';
+
+type TooltipSize = { width: number; height: number };
+
+function resolveTooltipPosition(data: TooltipData, size: TooltipSize) {
+  const edge = 4;
+  const padding = 12;
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+  const r = data.rect;
+  const width = Math.min(size.width, Math.max(160, viewportW - edge * 2));
+  const height = Math.min(size.height, Math.max(80, viewportH - edge * 2));
+  const centerX = r.left + r.width / 2;
+  const centerY = r.top + r.height / 2;
+  const placements: Record<TooltipPlacement, { x: number; y: number }> = {
+    top: { x: centerX - width / 2, y: r.top - height - padding },
+    bottom: { x: centerX - width / 2, y: r.bottom + padding },
+    left: { x: r.left - width - padding, y: centerY - height / 2 },
+    right: { x: r.right + padding, y: centerY - height / 2 },
+  };
+  const preferred = (data.preferred || 'top') as TooltipPlacement;
+  const opposite: Record<TooltipPlacement, TooltipPlacement> = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
+  const perpendicular: Record<TooltipPlacement, TooltipPlacement[]> = {
+    top: ['right', 'left'], bottom: ['right', 'left'], left: ['top', 'bottom'], right: ['top', 'bottom'],
+  };
+  const order = [preferred, opposite[preferred], ...perpendicular[preferred]];
+  const fits = ({ x, y }: { x: number; y: number }) => x >= edge && y >= edge && x + width <= viewportW - edge && y + height <= viewportH - edge;
+  const selected = order.map((placement) => placements[placement]).find(fits) || placements[preferred];
+  return {
+    x: Math.max(edge, Math.min(viewportW - width - edge, selected.x)),
+    y: Math.max(edge, Math.min(viewportH - height - edge, selected.y)),
+  };
+}
+
 /** Shared body-level portal renderer used by real tooltip triggers. */
 function TooltipPortal({ data }: { data: TooltipData }) {
-  const padding = 12;
-  const tooltipW = 280;
-  const tooltipH = 200;
-  const r = data.rect;
-  let x = 0, y = 0;
-  const preferred = data.preferred || 'top';
+  const portalRef = useRef<HTMLDivElement>(null);
+  const [measured, setMeasured] = useState<TooltipSize>({ width: 280, height: 200 });
+  const position = resolveTooltipPosition(data, measured);
 
-  if (preferred === 'top' && r.top - tooltipH - padding > 0) {
-    x = r.left + r.width / 2 - tooltipW / 2;
-    y = r.top - tooltipH - padding;
-  } else if (preferred === 'bottom' && r.bottom + tooltipH + padding < window.innerHeight) {
-    x = r.left + r.width / 2 - tooltipW / 2;
-    y = r.bottom + padding;
-  } else if (preferred === 'left' && r.left - tooltipW - padding > 0) {
-    x = r.left - tooltipW - padding;
-    y = r.top + r.height / 2 - tooltipH / 2;
-  } else if (preferred === 'right' && r.right + tooltipW + padding < window.innerWidth) {
-    x = r.right + padding;
-    y = r.top + r.height / 2 - tooltipH / 2;
-  } else {
-    x = r.left + r.width / 2 - tooltipW / 2;
-    y = r.bottom + padding;
-    if (y + tooltipH > window.innerHeight) y = Math.max(4, r.top - tooltipH - padding);
-  }
-
-  x = Math.max(4, Math.min(window.innerWidth - tooltipW - 4, x));
-  y = Math.max(4, Math.min(window.innerHeight - tooltipH - 4, y));
+  useLayoutEffect(() => {
+    const node = portalRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    const next = { width: Math.ceil(rect.width), height: Math.ceil(rect.height) };
+    setMeasured((current) => current.width === next.width && current.height === next.height ? current : next);
+  }, [data.content]);
 
   return createPortal(
     <div
+      ref={portalRef}
       data-tooltip-portal="true"
-      style={{ position: 'fixed', left: `${x}px`, top: `${y}px`, maxWidth: `${tooltipW}px`, zIndex: 99999, pointerEvents: 'none' }}
+      style={{
+        position: 'fixed', left: `${position.x}px`, top: `${position.y}px`, maxWidth: '280px',
+        maxHeight: 'calc(100vh - 8px)', overflowY: 'auto', zIndex: 99999, pointerEvents: 'none',
+      }}
     >
       <div
         className="rounded-lg border-2 px-3 py-2 text-xs backdrop-blur-md shadow-2xl"
