@@ -72,49 +72,46 @@ function buildTileCache(size: number) {
   }, size));
 
   tileCache.set(`tree_${size}`, createTileCanvas((ctx, s) => {
-    ctx.fillStyle = '#4a7c3a';
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#355d2d';
     ctx.fillRect(0, 0, s, s);
-    // Soft ground shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath();
-    ctx.ellipse(s / 2, s - 3, s * 0.38, 3.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Trunk with gradient + roots
-    const trunkGrad = ctx.createLinearGradient(s / 2 - 4, 0, s / 2 + 4, 0);
-    trunkGrad.addColorStop(0, '#3a2410');
-    trunkGrad.addColorStop(0.5, '#6a4420');
-    trunkGrad.addColorStop(1, '#4a2e14');
-    ctx.fillStyle = trunkGrad;
-    ctx.fillRect(s / 2 - 3, s * 0.52, 6, s * 0.42);
-    // Roots
-    ctx.strokeStyle = '#3a2410';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(s / 2, s * 0.9);
-    ctx.lineTo(s / 2 - 5, s * 0.96);
-    ctx.moveTo(s / 2, s * 0.9);
-    ctx.lineTo(s / 2 + 5, s * 0.96);
-    ctx.stroke();
-    // Layered canopy (darker base to lighter top for depth)
-    const leaves = [
-      { x: s / 2, y: s * 0.36, r: s * 0.38, c: '#1e3d10' },
-      { x: s * 0.34, y: s * 0.42, r: s * 0.24, c: '#2d5016' },
-      { x: s * 0.66, y: s * 0.42, r: s * 0.24, c: '#2d5016' },
-      { x: s / 2, y: s * 0.26, r: s * 0.27, c: '#3a6b1f' },
-      { x: s * 0.42, y: s * 0.3, r: s * 0.16, c: '#4a7c2a' },
-    ];
-    for (const l of leaves) {
-      ctx.fillStyle = l.c;
-      ctx.beginPath();
-      ctx.arc(l.x, l.y, l.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Sunlight highlights
-    ctx.fillStyle = 'rgba(150,200,90,0.5)';
-    ctx.beginPath();
-    ctx.arc(s * 0.38, s * 0.28, 4, 0, Math.PI * 2);
-    ctx.arc(s * 0.56, s * 0.32, 3, 0, Math.PI * 2);
-    ctx.fill();
+    const u = Math.max(1, Math.round(s / 16));
+
+    // Ground detail and tight pixel shadow.
+    ctx.fillStyle = '#294d27';
+    ctx.fillRect(u, s-u*2, s-u*2, u);
+    ctx.fillStyle = 'rgba(20,24,16,.45)';
+    ctx.fillRect(s/2-u*5, s-u*3, u*10, u*2);
+
+    // Trunk, roots and bark highlights.
+    ctx.fillStyle = '#2c1d13';
+    ctx.fillRect(s/2-u*2, s-u*8, u*4, u*6);
+    ctx.fillStyle = '#5f3d23';
+    ctx.fillRect(s/2-u, s-u*8, u*2, u*6);
+    ctx.fillStyle = '#8a5b31';
+    ctx.fillRect(s/2-u, s-u*7, u, u*3);
+    ctx.fillStyle = '#382418';
+    ctx.fillRect(s/2-u*5, s-u*3, u*4, u);
+    ctx.fillRect(s/2+u, s-u*3, u*4, u);
+
+    // Stepped canopy clusters, intentionally no vector circles/gradients.
+    ctx.fillStyle = '#132d1b';
+    ctx.fillRect(s/2-u*7, u*5, u*14, u*7);
+    ctx.fillRect(s/2-u*6, u*3, u*12, u*10);
+    ctx.fillRect(s/2-u*4, u*2, u*8, u*11);
+    ctx.fillStyle = '#214529';
+    ctx.fillRect(s/2-u*6, u*4, u*5, u*5);
+    ctx.fillRect(s/2+u, u*5, u*5, u*5);
+    ctx.fillRect(s/2-u*3, u*2, u*6, u*5);
+    ctx.fillStyle = '#35683a';
+    ctx.fillRect(s/2-u*4, u*4, u*3, u*3);
+    ctx.fillRect(s/2+u, u*3, u*3, u*3);
+    ctx.fillRect(s/2-u, u*6, u*3, u*3);
+    ctx.fillStyle = '#5b8a4c';
+    ctx.fillRect(s/2-u*3, u*3, u*2, u*2);
+    ctx.fillRect(s/2+u, u*4, u*2, u*2);
+    ctx.fillStyle = '#86a85c';
+    ctx.fillRect(s/2-u*2, u*3, u, u);
   }, size));
 
   tileCache.set(`stone_${size}`, createTileCanvas((ctx, s) => {
@@ -157,23 +154,22 @@ function buildTileCache(size: number) {
   }, size));
 
   tileCache.set(`path_${size}`, createTileCanvas((ctx, s) => {
-    // Dirt path with gradient
-    const grad = ctx.createLinearGradient(0, 0, s, s);
-    grad.addColorStop(0, '#9a8262');
-    grad.addColorStop(1, '#7a6244');
-    ctx.fillStyle = grad;
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#816b4f';
     ctx.fillRect(0, 0, s, s);
-    // Packed dirt stones
-    for (let i = 0; i < 10; i++) {
-      ctx.fillStyle = `rgba(${110 + hash(i, 1) * 30}, ${85 + hash(i, 3) * 20}, ${60 + hash(i, 5) * 20}, ${0.5 + hash(i, 2) * 0.4})`;
-      ctx.beginPath();
-      ctx.arc(hash(i, 2) * s, hash(i, 3) * s, 1 + hash(i, 4) * 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Lighter dust specks
-    for (let i = 0; i < 6; i++) {
-      ctx.fillStyle = `rgba(200,180,150,${hash(i, 6) * 0.4})`;
-      ctx.fillRect(hash(i + 10, 1) * s, hash(i + 10, 2) * s, 1, 1);
+    const u = Math.max(1, Math.round(s / 16));
+    for (let row = 0; row < 5; row++) {
+      const yy = row * Math.max(u*3, Math.floor(s/5));
+      const offset = row % 2 ? u*3 : 0;
+      for (let xx = -offset; xx < s; xx += u*6) {
+        const tone = hash(xx + row, row, 7) > .5 ? '#967b58' : '#755e45';
+        ctx.fillStyle = '#5d4937';
+        ctx.fillRect(xx, yy, u*5, u*3);
+        ctx.fillStyle = tone;
+        ctx.fillRect(xx+u, yy+u, u*4-1, u*2-1);
+        ctx.fillStyle = 'rgba(226,199,151,.16)';
+        ctx.fillRect(xx+u, yy+u, u*3, 1);
+      }
     }
   }, size));
 
@@ -259,26 +255,26 @@ function buildTileCache(size: number) {
   }, size));
 
   tileCache.set(`bush_${size}`, createTileCanvas((ctx, s) => {
-    ctx.fillStyle = '#4a7c3a';
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#355d2d';
     ctx.fillRect(0, 0, s, s);
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.beginPath();
-    ctx.ellipse(s / 2, s - 4, s * 0.35, 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#2d5016';
-    ctx.beginPath();
-    ctx.arc(s / 2, s / 2, s * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#4a7c2a';
-    ctx.beginPath();
-    ctx.arc(s * 0.4, s * 0.4, s * 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#c13030';
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath();
-      ctx.arc(s * 0.4 + i * 5, s * 0.55, 1.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    const u = Math.max(1, Math.round(s / 16));
+    ctx.fillStyle = 'rgba(20,24,16,.35)';
+    ctx.fillRect(u*3, s-u*4, s-u*6, u*2);
+    ctx.fillStyle = '#17341e';
+    ctx.fillRect(u*2, u*6, s-u*4, u*7);
+    ctx.fillRect(u*4, u*4, s-u*8, u*10);
+    ctx.fillStyle = '#28542f';
+    ctx.fillRect(u*3, u*6, u*5, u*4);
+    ctx.fillRect(u*9, u*7, u*4, u*4);
+    ctx.fillStyle = '#47783d';
+    ctx.fillRect(u*5, u*5, u*3, u*3);
+    ctx.fillRect(u*9, u*6, u*2, u*2);
+    ctx.fillStyle = '#b74e55';
+    ctx.fillRect(u*5, u*9, u, u);
+    ctx.fillRect(u*10, u*8, u, u);
+    ctx.fillStyle = '#e0c261';
+    ctx.fillRect(u*7, u*7, u, u);
   }, size));
 
   tileCache.set(`rock_${size}`, createTileCanvas((ctx, s) => {
@@ -385,23 +381,23 @@ export function drawMonster(
   ctx.ellipse(cx, y + size - 3, entitySize * 0.32, entitySize * 0.08, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Type indicator (glow ring)
+  // Pixel-native rarity corners: readable without a vector glow halo.
   if (monster.type === 'elite' || monster.type === 'boss') {
-    const pulse = 0.5 + Math.sin(time / 200) * 0.3;
-    ctx.strokeStyle = monster.type === 'boss'
-      ? `rgba(255,215,0,${pulse})`
-      : `rgba(200,50,255,${pulse})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, entitySize * 0.42, 0, Math.PI * 2);
-    ctx.stroke();
+    const marker = monster.type === 'boss' ? '#e2b64f' : '#c265ef';
+    const m = Math.max(2, Math.round(size / 12));
+    const r = entitySize * .40;
+    ctx.fillStyle = marker;
+    ctx.fillRect(cx-r, cy-r, m*3, m);
+    ctx.fillRect(cx-r, cy-r, m, m*3);
+    ctx.fillRect(cx+r-m*3, cy-r, m*3, m);
+    ctx.fillRect(cx+r-m, cy-r, m, m*3);
   }
 
   drawClassicMonsterSprite(ctx, cx, cy, entitySize, monster, time);
 
   // Name + level
   const nameColor = monster.type === 'boss' ? '#ffd700' : monster.type === 'elite' ? '#c832ff' : '#ff9090';
-  ctx.font = 'bold 9px system-ui, sans-serif';
+  ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.strokeStyle = 'rgba(0,0,0,0.9)';
@@ -444,22 +440,14 @@ export function drawNPC(
 
   drawClassicNpcSprite(ctx, cx, cy, size, npc, time);
 
-  const roleIcon =
-    npc.role === 'merchant' ? '🛒' :
-    npc.role === 'banker' ? '🏦' :
-    npc.role === 'innkeeper' ? '🛏' :
-    npc.role === 'quest' ? '❗' :
-    npc.role === 'trainer' ? '📚' :
-    npc.role === 'guard' ? '🛡' : '💬';
-
-  ctx.font = 'bold 9px system-ui';
+  ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.strokeStyle = 'rgba(0,0,0,0.9)';
   ctx.lineWidth = 2.5;
-  ctx.strokeText(`${roleIcon} ${npc.name}`, cx, y - Math.round(size * 0.34));
+  ctx.strokeText(npc.name, cx, y - Math.round(size * 0.34));
   ctx.fillStyle = '#9bd4ff';
-  ctx.fillText(`${roleIcon} ${npc.name}`, cx, y - Math.round(size * 0.34));
+  ctx.fillText(npc.name, cx, y - Math.round(size * 0.34));
 }
 
 // ===== BUILDINGS =====
