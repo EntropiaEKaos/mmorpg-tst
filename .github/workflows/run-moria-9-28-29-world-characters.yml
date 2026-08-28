@@ -24,6 +24,8 @@ jobs:
             server/package-lock.json
       - name: Apply terrain and character pass
         run: python tools/apply-moria-9-28-29-world-characters.py
+      - name: Update visual regression contract
+        run: python tools/fix-moria-9-29-visual-contract.py
       - run: npm ci
       - run: npm audit
       - run: npm run typecheck
@@ -38,6 +40,6 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package.json package-lock.json server/package.json server/package-lock.json src/game/render.ts src/game/playerAvatar.ts src/game/classicEntityPresentation.ts docs/MORIA_9_28_9_29_TERRAIN_CHARACTERS.md
+          git add package.json package-lock.json server/package.json server/package-lock.json src/game/render.ts src/game/playerAvatar.ts src/game/classicEntityPresentation.ts docs/MORIA_9_28_9_29_TERRAIN_CHARACTERS.md server/test/reference-visual-9-7.test.mjs server/test/visual-rebirth-9-27-29.test.mjs
           git commit -m 'feat(9.29): deepen terrain and character readability'
           git push origin HEAD:moria-9.27-visual-rebirth
