@@ -1,6 +1,8 @@
 // Mor'ia 9.7 — original pixel-first 2D entity presentation.
 // Inspired by classic grid MMORPG readability; no third-party game assets are used.
 
+import { drawPixelHuman, type AvatarColors } from './playerAvatar';
+
 const safeColor = (value: string | undefined, fallback: string) => /^#[0-9a-fA-F]{6}$/.test(String(value || '')) ? String(value) : fallback;
 
 function shade(hex: string, factor: number) {
@@ -18,6 +20,23 @@ function drawPixelOutline(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
 }
 
+function npcStyle(role: string) {
+  if (role === 'guard' || role === 'trainer') return 'knight';
+  if (role === 'quest') return 'caster';
+  if (role === 'scout' || role === 'hunter') return 'ranger';
+  return 'citizen';
+}
+
+function npcColors(role: string, body: string): AvatarColors {
+  if (role === 'guard') return { head: '#d2a073', primary: '#53677b', secondary: '#293847', detail: '#d4ba63' };
+  if (role === 'trainer') return { head: '#c99669', primary: shade(body, 0.88), secondary: '#473426', detail: '#c8cdd1' };
+  if (role === 'quest') return { head: '#d5a574', primary: body, secondary: shade(body, 0.54), detail: '#f0cf58' };
+  if (role === 'merchant') return { head: '#d5a574', primary: body, secondary: '#5c3e29', detail: '#d6b55c' };
+  if (role === 'banker') return { head: '#d5a574', primary: shade(body, 0.90), secondary: '#38455b', detail: '#e0c56f' };
+  if (role === 'innkeeper') return { head: '#d5a574', primary: '#8f4f3b', secondary: '#4f3527', detail: '#e0c49a' };
+  return { head: '#d5a574', primary: body, secondary: shade(body, 0.56), detail: shade(body, 1.28) };
+}
+
 export function drawClassicNpcSprite(
   ctx: CanvasRenderingContext2D,
   cx: number,
@@ -26,74 +45,34 @@ export function drawClassicNpcSprite(
   npc: { color: string; role: string; emoji?: string },
   time: number,
 ) {
-  const u = Math.max(1, Math.round(size / 18));
-  const body = safeColor(npc.color, '#65728a');
-  const dark = shade(body, 0.56);
-  const light = shade(body, 1.28);
-  const skin = '#d6a06f';
-  const feetY = Math.round(cy + size * 0.46 + Math.sin(time / 500 + cx) * 0.35 * u);
-  const left = Math.round(cx - 6 * u);
-  const top = feetY - 20 * u;
   const role = String(npc.role || '').toLowerCase();
+  const body = safeColor(npc.color, '#65728a');
+  const feetY = Math.round(cy + size * 0.46);
+  const u = Math.max(1, Math.round(size / 24));
 
+  // NPCs share the same authored humanoid sprite grammar as the player so a
+  // populated square reads as one coherent pixel-art world instead of mixed UI shapes.
+  drawPixelHuman(ctx, cx, feetY, size * 0.96, 'down', npcStyle(role), npcColors(role, body), 0, time + cx * 7);
+
+  // Profession details are only a few native pixels; no emoji is used on-world.
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-
-  // Legs / boots.
-  drawPixelOutline(ctx, left + 2 * u, top + 15 * u, 3 * u, 4 * u, dark);
-  drawPixelOutline(ctx, left + 7 * u, top + 15 * u, 3 * u, 4 * u, dark);
-  ctx.fillStyle = '#211d19';
-  ctx.fillRect(left + u, top + 18 * u, 4 * u, 2 * u);
-  ctx.fillRect(left + 7 * u, top + 18 * u, 4 * u, 2 * u);
-
-  // Role-specific torso gives every profession a readable silhouette.
-  drawPixelOutline(ctx, left + 2 * u, top + 8 * u, 8 * u, 7 * u, body);
-  ctx.fillStyle = light;
-  ctx.fillRect(left + 3 * u, top + 9 * u, u, 5 * u);
-  ctx.fillStyle = dark;
-  ctx.fillRect(left + 2 * u, top + 14 * u, 8 * u, u);
-  drawPixelOutline(ctx, left, top + 9 * u, 2 * u, 6 * u, dark);
-  drawPixelOutline(ctx, left + 10 * u, top + 9 * u, 2 * u, 6 * u, dark);
-
-  // Head / hair or helmet.
-  drawPixelOutline(ctx, left + 3 * u, top + 2 * u, 6 * u, 6 * u, skin);
-  ctx.fillStyle = '#2c211c';
-  ctx.fillRect(left + 3 * u, top + u, 6 * u, 2 * u);
-  ctx.fillRect(left + 2 * u, top + 2 * u, u, 4 * u);
-  ctx.fillRect(left + 9 * u, top + 2 * u, u, 4 * u);
-  ctx.fillStyle = '#171717';
-  ctx.fillRect(left + 4 * u, top + 4 * u, u, u);
-  ctx.fillRect(left + 7 * u, top + 4 * u, u, u);
-
-  if (role === 'guard') {
-    ctx.fillStyle = '#87919b';
-    ctx.fillRect(left + 3 * u, top, 6 * u, 3 * u);
-    ctx.fillStyle = '#c8d1d8';
-    ctx.fillRect(left + 5 * u, top, 2 * u, 2 * u);
-    ctx.fillStyle = '#d0b85a';
-    ctx.fillRect(left + 5 * u, top + 9 * u, 2 * u, 5 * u);
-    ctx.fillStyle = '#bfc7ce';
-    ctx.fillRect(left + 12 * u, top + 6 * u, u, 11 * u);
-    ctx.fillRect(left + 11 * u, top + 6 * u, 3 * u, u);
-  } else if (role === 'merchant' || role === 'banker') {
-    ctx.fillStyle = '#d6b55c';
-    ctx.fillRect(left + 3 * u, top + 11 * u, 6 * u, 2 * u);
-    ctx.fillStyle = '#5f3b24';
-    ctx.fillRect(left + 10 * u, top + 13 * u, 3 * u, 4 * u);
-  } else if (role === 'trainer') {
-    ctx.fillStyle = '#c7d1dc';
-    ctx.fillRect(left + 11 * u, top + 7 * u, u, 10 * u);
-    ctx.fillStyle = '#7b4d2b';
-    ctx.fillRect(left + 10 * u, top + 6 * u, 3 * u, 2 * u);
-  } else if (role === 'quest') {
+  if (role === 'quest') {
+    ctx.fillStyle = '#1b1710';
+    ctx.fillRect(Math.round(cx - u * 2), Math.round(feetY - size * 1.38), u * 4, u * 6);
     ctx.fillStyle = '#f4d95d';
-    ctx.fillRect(left + 5 * u, top - 4 * u, 2 * u, 3 * u);
-    ctx.fillRect(left + 5 * u, top, 2 * u, u);
-  } else if (role === 'innkeeper') {
-    ctx.fillStyle = '#f0d0a0';
-    ctx.fillRect(left + 3 * u, top + 10 * u, 6 * u, 4 * u);
-    ctx.fillStyle = '#8f2f2f';
-    ctx.fillRect(left + 5 * u, top + 10 * u, 2 * u, 4 * u);
+    ctx.fillRect(Math.round(cx - u), Math.round(feetY - size * 1.36), u * 2, u * 4);
+    ctx.fillRect(Math.round(cx - u), Math.round(feetY - size * 1.27), u * 2, u * 2);
+  } else if (role === 'merchant') {
+    ctx.fillStyle = '#51321f';
+    ctx.fillRect(Math.round(cx + size * .28), Math.round(feetY - size * .46), u * 5, u * 5);
+    ctx.fillStyle = '#a8783d';
+    ctx.fillRect(Math.round(cx + size * .30), Math.round(feetY - size * .44), u * 3, u * 2);
+  } else if (role === 'banker') {
+    ctx.fillStyle = '#d4b659';
+    ctx.fillRect(Math.round(cx + size * .30), Math.round(feetY - size * .50), u * 4, u * 4);
+    ctx.fillStyle = '#6c5825';
+    ctx.fillRect(Math.round(cx + size * .31), Math.round(feetY - size * .49), u * 2, u * 2);
   }
   ctx.restore();
 }
