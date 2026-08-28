@@ -4,6 +4,7 @@ on:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
       - 'tools/close-moria-9-28-ptbr.py'
+      - 'tools/fix-moria-9-28-ptbr-closure-syntax.py'
       - '.github/workflows/close-moria-9-28-ptbr.yml'
 permissions:
   contents: write
@@ -23,6 +24,7 @@ jobs:
       - name: Apply PT-BR runtime closure
         run: |
           python tools/close-moria-9-28-ptbr.py
+          python tools/fix-moria-9-28-ptbr-closure-syntax.py
           python - <<'PY'
           import json
           from pathlib import Path
