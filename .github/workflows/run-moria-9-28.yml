@@ -25,6 +25,8 @@ jobs:
             server/package-lock.json
       - name: Apply 9.28 migration
         run: python tools/apply-moria-9-28-character-i18n.py
+      - name: Apply TS compatibility fixes
+        run: python tools/fix-moria-9-28-typecheck.py
       - name: Install client
         run: npm ci
       - name: Audit client
