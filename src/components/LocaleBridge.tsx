@@ -27,10 +27,36 @@ function translateTree(root: Node) {
   }
 }
 
+function installCanvasTranslation() {
+  if (getLocale() !== 'pt-BR' || typeof CanvasRenderingContext2D === 'undefined') return () => {};
+  const proto = CanvasRenderingContext2D.prototype;
+  const originalFillText = proto.fillText;
+  const originalStrokeText = proto.strokeText;
+
+  const localizedFillText = function(this: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth?: number) {
+    const localized = translateGameText(text);
+    if (maxWidth === undefined) originalFillText.call(this, localized, x, y);
+    else originalFillText.call(this, localized, x, y, maxWidth);
+  };
+  const localizedStrokeText = function(this: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth?: number) {
+    const localized = translateGameText(text);
+    if (maxWidth === undefined) originalStrokeText.call(this, localized, x, y);
+    else originalStrokeText.call(this, localized, x, y, maxWidth);
+  };
+
+  proto.fillText = localizedFillText;
+  proto.strokeText = localizedStrokeText;
+  return () => {
+    if (proto.fillText === localizedFillText) proto.fillText = originalFillText;
+    if (proto.strokeText === localizedStrokeText) proto.strokeText = originalStrokeText;
+  };
+}
+
 export default function LocaleBridge() {
   useEffect(() => {
     document.documentElement.lang = getLocale();
     document.documentElement.dataset.moriaLocale = getLocale();
+    const restoreCanvas = installCanvasTranslation();
     translateTree(document.body);
     const observer = new MutationObserver((entries) => {
       for (const entry of entries) {
@@ -39,7 +65,10 @@ export default function LocaleBridge() {
       }
     });
     observer.observe(document.body, { subtree: true, childList: true, characterData: true });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      restoreCanvas();
+    };
   }, []);
   return null;
 }
