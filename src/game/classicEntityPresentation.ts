@@ -98,6 +98,17 @@ export function drawClassicMonsterSprite(
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
+  // 9.27 visual hierarchy: every creature gets a contact shadow; elites/bosses gain restrained world-space aura.
+  ctx.fillStyle = 'rgba(0,0,0,.38)';
+  ctx.beginPath(); ctx.ellipse(cx, feetY, size * .31, Math.max(2,size*.055), 0, 0, Math.PI*2); ctx.fill();
+  if (monster.type === 'elite' || monster.type === 'boss') {
+    const radius = size * (monster.type === 'boss' ? .72 : .58);
+    const aura = ctx.createRadialGradient(cx, cy, size*.10, cx, cy, radius);
+    aura.addColorStop(0, monster.type === 'boss' ? 'rgba(232,181,72,.16)' : 'rgba(184,93,235,.12)');
+    aura.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = aura; ctx.fillRect(cx-radius, cy-radius, radius*2, radius*2);
+  }
+
   if (/rat|wolf|boar|hound|tiger|lion/.test(id)) {
     drawPixelOutline(ctx, left + u, top + 8 * u, 9 * u, 6 * u, body);
     drawPixelOutline(ctx, left + 8 * u, top + 6 * u, 5 * u, 5 * u, body);

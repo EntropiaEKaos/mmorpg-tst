@@ -382,10 +382,19 @@ export function drawAvatar(
   const cx = Math.round(x + size / 2);
   const feetY = Math.round(y + size - 1);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  // 9.27 layered contact shadow makes the sprite feel planted in the world.
+  const shadowY = y + size - 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.beginPath();
-  ctx.ellipse(cx, y + size - 1, size * (mounted ? 0.42 : 0.32), Math.max(2, size * 0.065), 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + size * 0.035, shadowY + 1, size * (mounted ? 0.48 : 0.38), Math.max(3, size * 0.095), -0.06, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.46)';
+  ctx.beginPath();
+  ctx.ellipse(cx, shadowY, size * (mounted ? 0.37 : 0.285), Math.max(2, size * 0.052), 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Warm micro-rim under the feet separates silhouettes from dark cobbles without smoothing pixels.
+  ctx.fillStyle = 'rgba(244,210,138,0.075)';
+  ctx.fillRect(Math.round(cx - size * .22), Math.round(shadowY - 2), Math.max(2, Math.round(size * .44)), 1);
 
   if (mounted) {
     drawMount(ctx, cx, feetY + cell * 2, size, mount || { id: 'legacy', icon: fallbackMountIcon, color: vocationColor }, direction, time);

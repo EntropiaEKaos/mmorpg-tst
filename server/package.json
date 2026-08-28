@@ -1,6 +1,6 @@
 {
   "name": "moria-mmo-server",
-  "version": "9.26.1",
+  "version": "9.27.0",
   "description": "Production authoritative MMO server for Mor'ia with secure sessions, world authority and persistent quest state",
   "main": "server.js",
   "type": "module",
