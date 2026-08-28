@@ -6,14 +6,15 @@ interface Props { player: Player; official?: any; }
 type View='realm'|'chronicle'|'craft'|'stable';
 const fmt=(n:number)=>new Intl.NumberFormat().format(Number(n)||0);
 
-export default function LivingRealmPlayerPanel916({player,official}:Props){
+export default function LivingRealmPlayerPanel916({official}:Props){
   const [view,setView]=useState<View>('realm');
   const [donation,setDonation]=useState(100);
   const [parentA,setParentA]=useState(''); const [parentB,setParentB]=useState('');
   const realm=official?.livingRealm; const mine=realm?.player; const factionId=mine?.faction?.id;
   const faction=(realm?.factions||[]).find((f:any)=>f.id===factionId);
-  const node=(realm?.nodes||[]).find((n:any)=>n.mapId===player.mapId);
-  const localSpecies=(realm?.tamingSpecies||[]).filter((s:any)=>s.mapId===player.mapId);
+  const mapId=serverSync.getMapId();
+  const node=(realm?.nodes||[]).find((n:any)=>n.mapId===mapId);
+  const localSpecies=(realm?.tamingSpecies||[]).filter((s:any)=>s.mapId===mapId);
   const animals=mine?.taming?.animals||[];
   const breedPairs=useMemo(()=>animals.filter((a:any)=>animals.some((b:any)=>b.id!==a.id&&b.speciesId===a.speciesId)),[animals]);
   if(!realm)return <div className="mt-5 rounded-2xl border border-amber-300/15 bg-black/30 p-4 text-xs text-slate-400"><b className="text-amber-200">🏰 Living Realm 9.16</b><div className="mt-1">Connect to the authoritative MMO server to manage faction allegiance, Nodes, Chronicle, grand crafting and tamed beasts.</div></div>;

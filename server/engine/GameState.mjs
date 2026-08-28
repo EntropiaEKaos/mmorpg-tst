@@ -96,7 +96,7 @@ class GameEngine {
       this.pendingEvents.set(mapId, []);
     }
     questEngine.registerPlayers(this.players);
-    livingWorldAI.sync(contentDB); interiorSystem.sync(contentDB);
+    livingWorldAI.sync(contentDB); interiorSystem.sync(contentDB); officialSystems.syncLivingRealmContent?.();
     console.log(`🌍 World Init: ${WORLD.getMapIds().length} maps`);
   }
 
@@ -600,6 +600,7 @@ class GameEngine {
       this.emitEvent(player.mapId, { kind:update.ready ? 'task_ready' : 'task_progress', targetId:player.id, text:`${update.name}: ${update.current}/${update.needed}${update.ready ? ' · return to task master' : ''}`, color:update.ready ? '#f4e04d' : '#9bd4ff', pos:{ x:player.x, y:player.y }, vocation:player.vocation });
     }
     const officialKill = officialSystems.onMonsterKill(player, monster);
+      officialSystems.livingRealmMonsterKill?.(player, monster);
     for (const event98 of worldEventDirector.recordKill(player.mapId, monster)) this.emitEvent(player.mapId,{kind:'world_event_98',targetId:player.id,text:`🌍 ${event98.name}: ${event98.progress}/${event98.needed}`,color:'#ff9b4d',pos:{x:player.x,y:player.y}});
     const xpGain = Math.floor(monster.xp * (1 + derived.xpBonus / 100) * adventureKill.xpMultiplier * officialKill.xpMultiplier);
     player.xp += xpGain;
@@ -1171,6 +1172,7 @@ class GameEngine {
       contentItems: this.contentItems,
       contentNpcs: contentDB.get('npcs'),
       contentShops: contentDB.get('shops'),
+      nearbyMonsters: this.monstersByMap.get(player.mapId) || [],
       getPlayer: id => this.players.get(id),
       getDerivedStats: target => this.computeDerivedStats(target),
       characterExists: name => Boolean(accountStore.findCharacter(name)),
@@ -1340,6 +1342,7 @@ class GameEngine {
     const worldClock98 = createWorldClockSnapshot();
     livingWorldAI.tickNpcs({contentDB,world:WORLD,clock:worldClock98,players:[...this.players.values()],monstersByMap:this.monstersByMap,now});
     worldEventDirector.tick({contentDB,clock:worldClock98,now});
+    officialSystems.livingRealmTick?.(now);
     interiorSystem.sync(contentDB);
     for (const p of this.players.values()) {
       officialSystems.tickPlayer(p, now);

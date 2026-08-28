@@ -7,6 +7,7 @@ import CityDesigner from './CityDesigner98';
 import QuestGraphDesigner98 from './QuestGraphDesigner98';
 import InteriorDesigner98 from './InteriorDesigner98';
 import WorldDirector98 from './WorldDirector98';
+import LivingRealmDirector916 from './LivingRealmDirector916';
 import {
   getAllBooks, saveBook, deleteBook, type Book,
   getCustomNPCs, saveCustomNPC, deleteCustomNPC, type CustomNPC,
@@ -22,7 +23,7 @@ interface Props {
   onMapsChanged?: () => void;
 }
 
-type EditorTab = 'items' | 'spells' | 'classes' | 'maps' | 'quests98' | 'interiors98' | 'director98' | 'books' | 'npcs' | 'monsters';
+type EditorTab = 'items' | 'spells' | 'classes' | 'maps' | 'quests98' | 'interiors98' | 'director98' | 'realm916' | 'books' | 'npcs' | 'monsters';
 // Backward-compatible capability marker: City Designer · Live
 
 export default function GameEditor({ player, setPlayer: _setPlayer, onClose, onMapsChanged }: Props) {
@@ -36,6 +37,7 @@ export default function GameEditor({ player, setPlayer: _setPlayer, onClose, onM
     { id: 'quests98', label: 'Quest Graph 9.8', icon: '🕸' },
     { id: 'interiors98', label: 'Interiors 9.8', icon: '🚪' },
     { id: 'director98', label: 'World Director 9.8', icon: '🌍' },
+    { id: 'realm916', label: 'Living Realm 9.16', icon: '🏰' },
     { id: 'books', label: 'Books', icon: '📚' },
     { id: 'npcs', label: 'NPCs', icon: '🧙' },
     { id: 'monsters', label: 'Monsters', icon: '👹' },
@@ -81,6 +83,7 @@ export default function GameEditor({ player, setPlayer: _setPlayer, onClose, onM
           {tab === 'quests98' && <QuestGraphDesigner98 />}
           {tab === 'interiors98' && <InteriorDesigner98 />}
           {tab === 'director98' && <WorldDirector98 />}
+          {tab === 'realm916' && <LivingRealmDirector916 />}
           {tab === 'books' && <BookCreator />}
           {tab === 'npcs' && <NPCCreator />}
           {tab === 'monsters' && <MonsterCreator />}

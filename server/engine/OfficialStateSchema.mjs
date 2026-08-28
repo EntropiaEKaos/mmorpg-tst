@@ -125,6 +125,7 @@ export function freshPlayerState(now = Date.now()) {
     dungeon: { active: false, runId: null, wave: 0, maxWaves: 0, killsRemaining: 0, highestWave: 0, clears: 0 },
     welcomeMailSent: false,
     lastGatherAt: 0, lastMailAt: 0, lastPvpAttack: 0,
+    livingRealm: { faction:{id:null,reputation:0,rank:0,joinedAt:0,defectionUntil:0,history:[]}, crafting:{skills:{},crafted:0,masterworks:0,log:[]}, taming:{skill:1,xp:0,animals:[],activeId:null,breedingCount:0}, lastNodeAttackAt:0 },
   };
 }
 
@@ -132,6 +133,7 @@ export function freshGlobalState() {
   return {
     version: OFFICIAL_STATE_SCHEMA_VERSION,
     auctions: [], mail: [], credits: {}, eventRewards: {}, event: null, eventSequence: 0,
+    livingRealm: { nodes:{}, chronicle:[], sequence:0 },
   };
 }
 
@@ -189,6 +191,19 @@ export function normalizePlayerState(saved, now = Date.now()) {
     clears: int(saved.dungeon?.clears, 0, 1_000_000, 0),
   };
   base.welcomeMailSent = Boolean(saved.welcomeMailSent);
+  if (isRecord(saved.livingRealm)) {
+    const lr=saved.livingRealm;
+    base.livingRealm.faction={
+      id:text(lr.faction?.id,100)||null, reputation:int(lr.faction?.reputation,-5000,100000,0), rank:int(lr.faction?.rank,0,5,0),
+      joinedAt:Math.max(0,Number(lr.faction?.joinedAt)||0), defectionUntil:Math.max(0,Number(lr.faction?.defectionUntil)||0),
+      history:Array.isArray(lr.faction?.history)?lr.faction.history.filter(isRecord).slice(-10).map(entry=>({id:text(entry.id,100),leftAt:Math.max(0,Number(entry.leftAt)||0)})):[],
+    };
+    const skills={}; if(isRecord(lr.crafting?.skills)) for(const [id,skill] of Object.entries(lr.crafting.skills).slice(0,40)){const key=slug(id);if(key)skills[key]={level:int(skill?.level,1,100,1),xp:int(skill?.xp,0,1000000,0)}}
+    base.livingRealm.crafting={skills,crafted:int(lr.crafting?.crafted,0,100000000,0),masterworks:int(lr.crafting?.masterworks,0,100000000,0),log:Array.isArray(lr.crafting?.log)?lr.crafting.log.filter(isRecord).slice(-100).map(clone):[]};
+    const animals=Array.isArray(lr.taming?.animals)?lr.taming.animals.filter(isRecord).slice(-40).map(clone):[];
+    base.livingRealm.taming={skill:int(lr.taming?.skill,1,100,1),xp:int(lr.taming?.xp,0,1000000,0),animals,activeId:animals.some(a=>a.id===lr.taming?.activeId)?lr.taming.activeId:null,breedingCount:int(lr.taming?.breedingCount,0,1000000,0)};
+    base.livingRealm.lastNodeAttackAt=Math.max(0,Number(lr.lastNodeAttackAt)||0);
+  }
   return base;
 }
 
@@ -221,6 +236,11 @@ export function normalizeGlobalState(raw) {
 
   base.event = isRecord(raw.event) ? clone(raw.event) : null;
   base.eventSequence = int(raw.eventSequence, 0, 999_999, 0);
+  if (isRecord(raw.livingRealm)) {
+    const lr=raw.livingRealm; const nodes={};
+    if(isRecord(lr.nodes)) for(const [id,node] of Object.entries(lr.nodes).slice(0,200)){const key=text(id,100);if(key&&isRecord(node))nodes[key]=clone(node)}
+    base.livingRealm={nodes,chronicle:Array.isArray(lr.chronicle)?lr.chronicle.filter(isRecord).slice(-250).map(clone):[],sequence:int(lr.sequence,0,999999999,0)};
+  }
   return base;
 }
 
@@ -252,5 +272,6 @@ export function exportPlayerState(state) {
     titles: s.titles,
     dungeon: { highestWave: s.dungeon.highestWave, clears: s.dungeon.clears },
     welcomeMailSent: s.welcomeMailSent,
+    livingRealm: s.livingRealm,
   });
 }

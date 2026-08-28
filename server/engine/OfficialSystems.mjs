@@ -17,6 +17,8 @@ import { DEFAULT_OFFICIAL_STATE_FILE, OfficialStateRepository } from './Official
 import { officialPlayerLifecycleDomain } from './OfficialPlayerLifecycleDomain.mjs';
 import { officialSnapshotReadModel } from './OfficialSnapshotReadModel.mjs';
 import { officialRuntimeCoordinator } from './OfficialRuntimeCoordinator.mjs';
+import { livingRealmDomain } from './LivingRealmDomain.mjs';
+import { contentDB } from './ContentDB.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
   OFFICIAL_COIN_STORE, OFFICIAL_BOOKS,
@@ -33,7 +35,9 @@ export class OfficialSystems {
     this.repository = new OfficialStateRepository(dbFile);
     this.global = freshGlobalState();
     this.contentEvents = [];
+    this.livingRealmContent = {};
     this.load();
+    this.syncLivingRealmContent();
   }
 
   load() {
@@ -46,6 +50,8 @@ export class OfficialSystems {
   save() {
     return this.repository.save(this.global);
   }
+
+  syncLivingRealmContent() { return livingRealmDomain.syncContent(this,{nodes:contentDB.get('nodes'),factions:contentDB.get('factions'),materials:contentDB.get('materials'),craftingRecipes:contentDB.get('craftingRecipes'),tamingSpecies:contentDB.get('tamingSpecies')}); }
 
   syncWorldEvents(events = []) {
     this.contentEvents = Array.isArray(events)
@@ -248,6 +254,21 @@ export class OfficialSystems {
   publicPvp(player) {
     return officialPvpDomain.publicState(this, player);
   }
+
+
+  livingRealmTick(now=Date.now()){ return livingRealmDomain.tick(this,now); }
+  livingRealmSnapshot(player=null){ return livingRealmDomain.publicRealm(this,player); }
+  joinFaction(player,factionId){ return livingRealmDomain.joinFaction(this,player,factionId); }
+  defectFaction(player,factionId){ return livingRealmDomain.defectFaction(this,player,factionId); }
+  donateNode(player,nodeId,amount){ return livingRealmDomain.donateNodeGold(this,player,nodeId,amount); }
+  declareNodeWar(player,nodeId){ return livingRealmDomain.declareNodeWar(this,player,nodeId); }
+  attackNode(player,nodeId){ return livingRealmDomain.attackNode(this,player,nodeId); }
+  claimNode(player,nodeId){ return livingRealmDomain.claimNeutralNode(this,player,nodeId); }
+  advancedCraft(player,recipeId){ return livingRealmDomain.advancedCraft(this,player,recipeId); }
+  tameAnimal(player,speciesId,nearbyMonsters=[]){ return livingRealmDomain.tame(this,player,speciesId,nearbyMonsters); }
+  breedAnimals(player,parentAId,parentBId){ return livingRealmDomain.breed(this,player,parentAId,parentBId); }
+  activateTamedAnimal(player,animalId){ return livingRealmDomain.activateAnimal(this,player,animalId); }
+  livingRealmMonsterKill(player,monster){ return livingRealmDomain.onMonsterKill(this,player,monster); }
 
   snapshot(player, nearbyPlayers = []) {
     return officialSnapshotReadModel.snapshot(this, player, nearbyPlayers);

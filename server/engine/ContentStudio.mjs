@@ -26,6 +26,8 @@ const CITY_STYLES = Object.freeze(['royal','harbor','ironwood','alpine','marsh',
 const CITY_LANDMARK_KINDS = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower','house']);
 const CITY_PROP_KINDS = new Set(['banner','lamp','statue','brazier','crystal','grave','tent','sign','barrel','cart','pine','mushroom','anchor','rune']);
 const NAMEPLATE_MODES = Object.freeze(['nearby','always','hidden']);
+const NODE_SPECIALIZATIONS = Object.freeze(['military','commercial','arcane','religious','industrial','wild','neutral']);
+const TAME_RARITIES = Object.freeze(['common','uncommon','rare','epic','legendary','mythical']);
 
 const field = (id, label = id, kind = 'text', extra = {}) => Object.freeze({ id, label, kind, ...extra });
 
@@ -108,6 +110,27 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('id', 'ID'), field('name', 'Name'), field('rolls', 'Rolls', 'number'),
     field('description', 'Description', 'textarea'), field('entries', 'Loot entries', 'json'),
   ]),
+  nodes: Object.freeze([
+    field('id','ID'), field('name','Name'), field('mapId','Map'), field('specialization','Specialization'),
+    field('x','Center X','number'), field('y','Center Y','number'), field('radius','Influence radius','number'), field('enabled','Enabled','boolean'),
+    field('maxHp','Base siege HP','number'), field('stageThresholds','Stage XP thresholds','json'), field('taxRate','Tax %','number'),
+  ]),
+  factions: Object.freeze([
+    field('id','ID'), field('name','Name'), field('icon','Icon'), field('color','Color'), field('ideology','Ideology','textarea'),
+    field('hqMapId','HQ map'), field('bonuses','Bonuses','json'), field('enemies','Enemy faction IDs','json'),
+  ]),
+  materials: Object.freeze([
+    field('id','ID'), field('name','Name'), field('icon','Icon'), field('category','Category'), field('tier','Tier','number'), field('baseQuality','Base quality','number'),
+  ]),
+  craftingRecipes: Object.freeze([
+    field('id','ID'), field('name','Name'), field('profession','Profession'), field('stationType','Station'), field('difficulty','Difficulty','number'),
+    field('levelRequired','Required level','number'), field('inputs','Inputs','json'), field('output','Output','json'),
+  ]),
+  tamingSpecies: Object.freeze([
+    field('id','ID'), field('name','Name'), field('icon','Icon'), field('monsterId','Monster ID'), field('rarity','Rarity'), field('levelRequired','Required level','number'),
+    field('mapId','Habitat map'), field('temperament','Temperament','number'), field('favoriteFood','Favorite food'), field('breedable','Breedable','boolean'),
+    field('roles','Roles','json'), field('baseTraits','Base traits','json'),
+  ]),
   gmRoster: Object.freeze([
     field('id', 'ID'), field('name', 'Character name'), field('note', 'GM note', 'textarea'),
   ]),
@@ -178,6 +201,22 @@ export function validateStudioRecord(type, record) {
   if (!ID_RE.test(id)) return 'id must be 2-100 letters, numbers, dash or underscore';
   const nameError = requiredText(record, 'name', 100);
   if (nameError) return nameError;
+
+  if (type === 'nodes') {
+    if (!NODE_SPECIALIZATIONS.includes(String(record.specialization || 'neutral'))) return 'node specialization is not supported';
+    for (const [key,min,max] of [['x',1,78],['y',1,78],['radius',2,30],['maxHp',500,1000000],['taxRate',0,25]]) { const e=numberIn(record,key,min,max,{required:true}); if(e)return e; }
+    if (record.enabled !== undefined && typeof record.enabled !== 'boolean') return 'enabled must be boolean';
+    if (!Array.isArray(record.stageThresholds) || record.stageThresholds.length < 7) return 'stageThresholds must contain 7 XP thresholds';
+    return null;
+  }
+  if (type === 'factions') {
+    if (record.enemies !== undefined && !Array.isArray(record.enemies)) return 'enemies must be an array';
+    if (record.bonuses !== undefined && (!record.bonuses || typeof record.bonuses !== 'object' || Array.isArray(record.bonuses))) return 'bonuses must be an object';
+    return optionalColor(record);
+  }
+  if (type === 'materials') { let e=numberIn(record,'tier',1,10,{required:true,integer:true}); if(e)return e; return numberIn(record,'baseQuality',1,100,{required:true}); }
+  if (type === 'craftingRecipes') { let e=numberIn(record,'difficulty',1,100,{required:true}); if(e)return e; e=numberIn(record,'levelRequired',1,100000,{required:true,integer:true}); if(e)return e; if(!Array.isArray(record.inputs)||!record.inputs.length)return 'inputs must be a non-empty array'; if(!record.output||typeof record.output!=='object'||Array.isArray(record.output))return 'output must be an object'; return null; }
+  if (type === 'tamingSpecies') { if(!TAME_RARITIES.includes(String(record.rarity||'')))return 'taming rarity is not supported'; let e=numberIn(record,'levelRequired',1,100000,{required:true,integer:true}); if(e)return e; e=numberIn(record,'temperament',0,100,{required:true}); if(e)return e; if(record.roles!==undefined&&!Array.isArray(record.roles))return 'roles must be an array'; if(record.baseTraits!==undefined&&(!record.baseTraits||typeof record.baseTraits!=='object'||Array.isArray(record.baseTraits)))return 'baseTraits must be an object'; if(record.breedable!==undefined&&typeof record.breedable!=='boolean')return 'breedable must be boolean'; return null; }
 
   if (type === 'monsters') {
     for (const [key,min,max] of [['aggroRadius',1,30],['leashRadius',2,60],['patrolRadius',0,20],['fleeAtHp',0,0.8],['telegraphMs',100,5000],['telegraphRadius',1,12],['staggerThreshold',20,500]]) {

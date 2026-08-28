@@ -115,6 +115,9 @@ export function rollLoot(monster, goldBonus = 0, contentItems = [], mapId = mons
     drops.push({ id: `mat_${Date.now()}_${Math.random()}`, name: mat, icon: '🦴', quantity: 1, value: 10, type: 'misc' });
   }
 
+  const beastLike=/wolf|stag|boar|bear|hound|raven|stalker/i.test(String(monster?.name||''));
+  if(beastLike && Math.random()<0.30) drops.push({id:`hide_${Date.now()}_${Math.random()}`,name:'Beast Hide',icon:'◩',quantity:monster.type==='boss'?3:monster.type==='elite'?2:1,value:24,type:'material'});
+
   const equipChance = monster.type === 'boss' ? 0.8 : monster.type === 'elite' ? 0.3 : 0.04;
   if (Math.random() < equipChance) {
     // Pick a valid item based on monster level

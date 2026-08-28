@@ -16,6 +16,16 @@ function detail(value) { return { ok: Boolean(value), detail: value ?? null }; }
 function detailWithOk(value) { return { ok: Boolean(value?.ok), detail: value ?? null }; }
 
 const ACTIONS = Object.freeze({
+  faction_join: { run:(systems,player,payload)=>detailWithOk(systems.joinFaction(player,payload.factionId)) },
+  faction_defect: { run:(systems,player,payload)=>detailWithOk(systems.defectFaction(player,payload.factionId)) },
+  node_donate: { run:(systems,player,payload)=>detailWithOk(systems.donateNode(player,payload.nodeId,payload.amount)) },
+  node_declare_war: { run:(systems,player,payload)=>detailWithOk(systems.declareNodeWar(player,payload.nodeId)) },
+  node_attack: { run:(systems,player,payload)=>detailWithOk(systems.attackNode(player,payload.nodeId)) },
+  node_claim: { run:(systems,player,payload)=>detailWithOk(systems.claimNode(player,payload.nodeId)) },
+  craft_advanced: { run:(systems,player,payload)=>detailWithOk(systems.advancedCraft(player,payload.recipeId)) },
+  tame_animal: { run:(systems,player,payload,ctx)=>detailWithOk(systems.tameAnimal(player,payload.speciesId,ctx.nearbyMonsters||[])) },
+  breed_animals: { run:(systems,player,payload)=>detailWithOk(systems.breedAnimals(player,payload.parentAId,payload.parentBId)) },
+  tame_activate: { run:(systems,player,payload)=>detailWithOk(systems.activateTamedAnimal(player,payload.animalId||null)) },
   pet_buy: {
     run: (systems, player, payload) => bool(systems.buyPet(player, payload.petId)),
   },
