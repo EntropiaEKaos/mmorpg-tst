@@ -1,0 +1,88 @@
+name: Mor'ia 9.34 Combat Progression PT-BR
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-34-combat-progression-ptbr.py'
+      - '.github/workflows/moria-9-34-combat-progression-ptbr.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.34 combat progression PT-BR
+        run: python tools/upgrade-moria-9-34-combat-progression-ptbr.py
+      - name: Verify localized ownership and documentation
+        run: |
+          grep -q "tr('TALENT TREE')" src/components/TalentTree.tsx
+          grep -q "title={tr('Action Bar')}" src/components/ActionBar.tsx
+          grep -q "tr('CASTING')" src/components/CastBar.tsx
+          grep -q "tr('DPS Meter')" src/components/DPSMeter.tsx
+          grep -q "import { t as tr } from '../i18n';" src/components/Tooltip.tsx
+          grep -q "panel === 'talents'" src/visualQa.tsx
+          grep -q "panel === 'actionbar'" src/visualQa.tsx
+          grep -q "panel === 'castbar'" src/visualQa.tsx
+          grep -q "panel === 'dps'" src/visualQa.tsx
+          grep -q "Mor'ia 9.34" docs/MORIA_9_34_COMBAT_PROGRESSION_PTBR.md
+          test -f tools/capture-moria-9-34.mjs
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Install stable visual QA browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npm audit --audit-level=high
+          npx playwright install --with-deps chromium
+      - name: Capture and assert Mor'ia 9.34 visuals
+        run: |
+          rm -rf artifacts/moria-9.34-screenshots
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-vite.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null
+          node tools/capture-moria-9-34.mjs
+          test -s artifacts/moria-9.34-screenshots/talents.png
+          test -s artifacts/moria-9.34-screenshots/actionbar.png
+          test -s artifacts/moria-9.34-screenshots/castbar.png
+          test -s artifacts/moria-9.34-screenshots/dps.png
+      - name: Upload Mor'ia 9.34 screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9.34-screenshots
+          path: artifacts/moria-9.34-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit validated Mor'ia 9.34 pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/i18n/pt-BR.928.json src/components/TalentTree.tsx src/components/ActionBar.tsx src/components/CastBar.tsx src/components/DPSMeter.tsx src/components/Tooltip.tsx src/visualQa.tsx tools/capture-moria-9-34.mjs docs/MORIA_9_34_COMBAT_PROGRESSION_PTBR.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.34): localize combat progression and add visual QA'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr
