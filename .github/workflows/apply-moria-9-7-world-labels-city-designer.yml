@@ -1,0 +1,35 @@
+name: Apply Mor'ia 9.7 World Labels City Designer
+on:
+  push:
+    branches: [moria-9.7-reference-visual-convergence]
+    paths:
+      - 'tools/apply-moria-9-7-world-labels-city-designer.py'
+      - '.github/workflows/apply-moria-9-7-world-labels-city-designer.yml'
+permissions:
+  contents: write
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.7-reference-visual-convergence
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply 9.7 world labels and city designer
+        run: python3 tools/apply-moria-9-7-world-labels-city-designer.py
+      - name: Validate client
+        run: npm ci && npm audit && npm run typecheck && npm run build
+      - name: Validate server
+        run: npm ci --prefix server --no-fund && npm audit --prefix server && npm run check --prefix server && npm test --prefix server
+      - name: Commit validated changes and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f tools/apply-moria-9-7-world-labels-city-designer.py
+          rm -f .github/workflows/apply-moria-9-7-world-labels-city-designer.yml
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(9.7): smart world labels and direct city authoring"
+          git push origin HEAD:moria-9.7-reference-visual-convergence
