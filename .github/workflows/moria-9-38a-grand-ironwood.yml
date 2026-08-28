@@ -4,6 +4,7 @@ on:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
       - 'tools/upgrade-moria-9-38a-grand-ironwood.py'
+      - 'tools/fix-moria-9-38a-forest-sample.py'
       - '.github/workflows/moria-9-38a-grand-ironwood.yml'
 permissions:
   contents: write
@@ -21,7 +22,9 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply Mor'ia 9.38A Grand Ironwood
-        run: python tools/upgrade-moria-9-38a-grand-ironwood.py
+        run: |
+          python tools/upgrade-moria-9-38a-grand-ironwood.py
+          python tools/fix-moria-9-38a-forest-sample.py
       - name: Verify Grand Ironwood source contract
         run: |
           test -s server/engine/GrandIronwood.mjs
@@ -35,6 +38,7 @@ jobs:
           grep -q "urbanPlans" server/engine/ContentStudio.mjs
           grep -q "migrateGrandIronwoodData" server/engine/ContentDB.mjs
           grep -q "roadToTenVersion = 1" server/engine/ContentDB.mjs
+          grep -q "map.tiles\[58\]\[90\].type, 'grass'" server/test/grand-ironwood-9-38.test.mjs
           node --check server/engine/GrandIronwood.mjs
           node --check server/engine/World.mjs
           node --check server/engine/ContentDB.mjs
