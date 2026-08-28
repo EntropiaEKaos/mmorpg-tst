@@ -16,6 +16,38 @@ if addition not in text:
     text = text.replace(anchor, addition, 1)
 visual.write_text(text, encoding='utf-8')
 
+tooltip = Path('src/components/Tooltip.tsx')
+text = tooltip.read_text(encoding='utf-8')
+old_enter = """  const handleEnter = useCallback(() => {
+    if (disabled) return;
+    timerRef.current = setTimeout(() => {
+"""
+new_enter = """  const handleEnter = useCallback(() => {
+    if (disabled) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+"""
+if new_enter not in text:
+    if old_enter not in text:
+        raise SystemExit('Tooltip enter anchor not found')
+    text = text.replace(old_enter, new_enter, 1)
+old_events = """      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      className=\"inline-flex\"
+"""
+new_events = """      onPointerEnter={handleEnter}
+      onPointerLeave={handleLeave}
+      onFocus={handleEnter}
+      onBlur={handleLeave}
+      data-tooltip-trigger=\"true\"
+      className=\"inline-flex\"
+"""
+if new_events not in text:
+    if old_events not in text:
+        raise SystemExit('Tooltip event anchor not found')
+    text = text.replace(old_events, new_events, 1)
+tooltip.write_text(text, encoding='utf-8')
+
 capture = Path('tools/capture-moria-9-34.mjs')
 text = capture.read_text(encoding='utf-8')
 text = text.replace(
@@ -40,7 +72,8 @@ new_action = """  if (panel === 'actionbar') {
     const spellSlot = page.locator('[data-qa-actionbar] .moria-hotbar-slot').first();
     const tooltipTrigger = spellSlot.locator('..');
     const triggerClass = await tooltipTrigger.getAttribute('class');
-    if (!triggerClass?.includes('inline-flex')) throw new Error(`Mor'ia 9.34 tooltip trigger wrapper not found: ${triggerClass}`);
+    const triggerQa = await tooltipTrigger.getAttribute('data-tooltip-trigger');
+    if (!triggerClass?.includes('inline-flex') || triggerQa !== 'true') throw new Error(`Mor'ia 9.34 tooltip trigger wrapper not found: ${triggerClass} / ${triggerQa}`);
     await tooltipTrigger.hover();
     await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForTimeout(180);
@@ -65,18 +98,23 @@ A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate
 1. a Árvore de Talentos ainda exibia `You have` em inglês;
 2. `actionbar.png` podia ser aceito mesmo com a barra fora do enquadramento visível.
 
+Durante o endurecimento do gate, o hover automatizado também expôs fragilidade na ativação do tooltip baseada apenas em eventos de mouse.
+
 ## Correções
 
 - adiciona `You have -> Você tem` ao catálogo PT-BR;
 - fixa uma posição determinística da Action Bar apenas no `visual-qa.html`;
 - o capturador exige que a janela `action-bar` tenha dimensões reais e esteja completamente dentro da viewport 1440x1000;
 - o capturador valida o título `Barra de Ações` sem depender da capitalização visual aplicada pelo CSS;
-- o QA ancora o hover no pai exato do primeiro slot de magia, confirma que esse pai é o wrapper `inline-flex` do Tooltip, aguarda o portal visível e exige: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
+- o Tooltip real usa `pointerenter/pointerleave` e também `focus/blur`, evitando depender exclusivamente de eventos de mouse e melhorando suporte a teclado/pen;
+- agendamentos de tooltip anteriores são cancelados antes de um novo timer, evitando timers concorrentes;
+- wrappers reais recebem `data-tooltip-trigger=\"true\"` para QA estrutural sem alterar regras de jogo;
+- o QA ancora o hover no pai exato do primeiro slot de magia, confirma o wrapper real, aguarda o portal visível e exige: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
 - adiciona `You have` à lista de vazamentos proibidos do print de Talentos.
 
 ## Escopo
 
-Nenhuma regra de combate, cooldown, dano, progressão, talento, item ou autoridade do servidor é alterada. A mudança é de apresentação e qualidade da prova visual.
+Nenhuma regra de combate, cooldown, dano, progressão, talento, item ou autoridade do servidor é alterada. A mudança é de apresentação, acessibilidade de interação e qualidade da prova visual.
 
 ## Gate
 
