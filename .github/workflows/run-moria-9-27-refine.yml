@@ -1,14 +1,13 @@
-name: Mor'ia 9.27 Visual Refinement
+name: Mor'ia 9.27 Release Closure
 on:
   push:
     branches: [moria-9.27-deep-visual-revamp]
     paths:
-      - 'tools/moria-9-27-refine.trigger'
       - '.github/workflows/run-moria-9-27-refine.yml'
 permissions:
   contents: write
 jobs:
-  refine:
+  close:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -23,8 +22,18 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             server/package-lock.json
-      - name: Apply final night-sensitive lighting polish
-        run: python tools/polish-moria-9-27-night-lighting.py
+      - name: Prepare release documentation
+        run: python tools/close-moria-9-27.py
+      - name: Verify final visual evidence
+        run: |
+          grep -q "Mor'ia 9.27 — Deep Visual Revamp" README.md
+          for f in \
+            docs/screenshots/moria-9-27-login-revamp.png \
+            docs/screenshots/moria-9-27-world-day.png \
+            docs/screenshots/moria-9-27-world-night.png \
+            docs/screenshots/moria-9-27-world-storm.png \
+            docs/screenshots/moria-9-27-inventory-hud.png; do test -s "$f"; grep -q "$f" README.md; done
+          test -s docs/MORIA_9_27_DEEP_VISUAL_REVAMP.md
       - run: npm ci
       - run: npm audit
       - run: npm run typecheck
@@ -41,11 +50,25 @@ jobs:
       - run: npm audit --prefix server
       - run: npm run check --prefix server
       - run: npm test --prefix server
-      - name: Commit validated final lighting pass
+      - name: Remove temporary 9.27 release tooling
+        run: |
+          git rm -f \
+            .github/workflows/capture-moria-9-27.yml \
+            .github/workflows/run-moria-9-27-refine.yml \
+            .github/workflows/run-moria-9-27-visual-revamp.yml \
+            tools/apply-moria-9-27-visual-revamp.py \
+            tools/capture927.mjs \
+            tools/close-moria-9-27.py \
+            tools/moria-9-27-refine.trigger \
+            tools/moria-9-27.trigger \
+            tools/polish-moria-9-27-atmosphere.py \
+            tools/polish-moria-9-27-depth.py \
+            tools/polish-moria-9-27-night-lighting.py \
+            tools/refine-moria-9-27-visual.py
+      - name: Commit release-ready tree
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/game/cityPresentation.ts src/components/GameScreen.tsx server/test/visual-revamp-9-27.test.mjs
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'feat(9.27): make city lighting react to night'
+          git add README.md docs/MORIA_9_27_DEEP_VISUAL_REVAMP.md
+          git commit -m 'docs(9.27): finalize visual revamp release evidence'
           git push origin HEAD:moria-9.27-deep-visual-revamp
