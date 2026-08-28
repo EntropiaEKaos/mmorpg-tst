@@ -8,6 +8,7 @@ export const MAX_MAP_DIMENSION = 192;
 export const TILE_SIZE = 32;
 
 export type SettlementClass = 'wilderness' | 'town' | 'city' | 'capital';
+export type UrbanPlan = 'royal-grid' | 'harbor-crescent';
 export interface UrbanBounds { x: number; y: number; width: number; height: number; }
 
 export type BiomeType = 'plains' | 'snow' | 'swamp' | 'desert' | 'shadow';
@@ -27,6 +28,7 @@ export interface GameMap {
   width?: number;
   height?: number;
   settlementClass?: SettlementClass;
+  urbanPlan?: UrbanPlan;
   urbanBounds?: UrbanBounds;
   seed?: number;
   spawnPoint: Position;
@@ -84,6 +86,7 @@ function settlementClassOf(value: unknown, mapId = ''): SettlementClass {
   return (['wilderness','town','city','capital'] as const).includes(requested as SettlementClass) ? requested as SettlementClass : 'city';
 }
 function mapDimension(value: unknown, fallback = MAP_WIDTH): number { return integer(value, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, fallback); }
+function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const requested = String(value || (mapId === 'sunreach_coast' ? 'harbor-crescent' : 'royal-grid')); return requested === 'harbor-crescent' ? 'harbor-crescent' : 'royal-grid'; }
 function normalizeUrbanBounds(raw: unknown, width: number, height: number, townCenter: Position, settlementClass: SettlementClass): UrbanBounds {
   const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Partial<UrbanBounds> : {};
   const radius = settlementClass === 'capital' ? Math.min(36, Math.floor(Math.min(width, height) / 3)) : Math.min(14, Math.floor(Math.min(width, height) / 4));
@@ -129,13 +132,14 @@ function hydrateMapIdentity(map: GameMap): GameMap {
   const width = mapDimension(map.width, MAP_WIDTH);
   const height = mapDimension(map.height, MAP_HEIGHT);
   const settlementClass = settlementClassOf(map.settlementClass, map.id);
+  const urbanPlan = urbanPlanOf(map.urbanPlan, map.id);
   const townCenter = { x: cityCoord(map.townCenter?.x, Math.floor(width / 2), width), y: cityCoord(map.townCenter?.y, Math.floor(height / 2), height) };
   const style = VALID_CITY_STYLES.has(map.cityStyle) ? map.cityStyle : undefined;
   const hydrated = withCityDefaults({
     id: map.id, name: map.name, style, biome: map.biome, townCenter, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor,
     districts: normalizeDistricts(map.districts, width, height, settlementClass), landmarks: normalizeLandmarks(map.landmarks, width, height, settlementClass), props: normalizeProps(map.props, width, height, settlementClass),
   });
-  return { ...map, width, height, settlementClass, urbanBounds: normalizeUrbanBounds(map.urbanBounds, width, height, townCenter, settlementClass), townCenter, cityStyle: hydrated.style, cityAccent: hydrated.cityAccent, roofColor: hydrated.roofColor, wallColor: hydrated.wallColor, roadColor: hydrated.roadColor, districts: hydrated.districts, landmarks: hydrated.landmarks, props: hydrated.props };
+  return { ...map, width, height, settlementClass, urbanPlan, urbanBounds: normalizeUrbanBounds(map.urbanBounds, width, height, townCenter, settlementClass), townCenter, cityStyle: hydrated.style, cityAccent: hydrated.cityAccent, roofColor: hydrated.roofColor, wallColor: hydrated.wallColor, roadColor: hydrated.roadColor, districts: hydrated.districts, landmarks: hydrated.landmarks, props: hydrated.props };
 }
 
 export function getMapDimensions(map: Pick<GameMap, 'width' | 'height'> | undefined): { width: number; height: number } {
@@ -233,6 +237,7 @@ export function syncServerMaps(rawMaps: unknown): void {
     const width = mapDimension(raw.width, base?.width || MAP_WIDTH);
     const height = mapDimension(raw.height, base?.height || MAP_HEIGHT);
     const settlementClass = settlementClassOf(raw.settlementClass ?? base?.settlementClass, id);
+    const urbanPlan = urbanPlanOf(raw.urbanPlan ?? base?.urbanPlan, id);
     const spawnBase = base?.spawnPoint || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
     const townBase = base?.townCenter || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
     const portals = Array.isArray(raw.portals)
@@ -244,7 +249,7 @@ export function syncServerMaps(rawMaps: unknown): void {
     };
     next[id] = hydrateMapIdentity({
       id,
-      width, height, settlementClass, urbanBounds: normalizeUrbanBounds(raw.urbanBounds ?? base?.urbanBounds, width, height, townCenter, settlementClass),
+      width, height, settlementClass, urbanPlan, urbanBounds: normalizeUrbanBounds(raw.urbanBounds ?? base?.urbanBounds, width, height, townCenter, settlementClass),
       name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : (base?.name || id),
       description: typeof raw.description === 'string' ? raw.description.trim().slice(0, 300) : (base?.description || ''),
       biome,
@@ -330,8 +335,36 @@ function isInboundTarget(mapId: string, x: number, y: number): boolean {
   return Object.values(MAPS).some(map => map.portals.some(portal => portal.targetMap === mapId && portal.targetSpawn.x === x && portal.targetSpawn.y === y));
 }
 
+function harborShoreY(map: GameMap, x: number): number {
+  return Math.round(map.townCenter.y + 32 + Math.abs(x - map.townCenter.x) * 0.16);
+}
+
+function harborCapitalTile(map: GameMap, x: number, y: number): Tile | null {
+  if (!map.urbanBounds) return null;
+  const minX = map.urbanBounds.x, minY = map.urbanBounds.y;
+  const maxX = minX + map.urbanBounds.width - 1, maxY = minY + map.urbanBounds.height - 1;
+  const cx = map.townCenter.x, cy = map.townCenter.y;
+  const shoreY = harborShoreY(map, x);
+  const pierXs = [cx - 30, cx - 12, cx + 12, cx + 30];
+  const pier = pierXs.some(px => Math.abs(x - px) <= 1) && y >= shoreY - 1 && y <= shoreY + 18;
+  const breakwater = Math.abs(y - (cy + 62)) <= 1 && x >= cx - 36 && x <= cx + 36 && Math.abs(x - cx) > 5;
+  if (pier || breakwater) return { type:'bridge', walkable:true, blocksSight:false };
+  if (y >= shoreY) return { type:'water', walkable:false, blocksSight:false };
+  if (x < minX || x > maxX || y < minY || y > maxY) return null;
+  const gate = (y === minY && Math.abs(x - cx) <= 2) || (x === maxX && Math.abs(y - cy) <= 2);
+  if (gate) return { type:'path', walkable:true, blocksSight:false };
+  const landWall = y === minY || ((x === minX || x === maxX) && y < shoreY - 3);
+  if (landWall) return { type:'wall', walkable:false, blocksSight:true };
+  const quay = y >= shoreY - 3 && y < shoreY;
+  const major = Math.abs(x - cx) <= 1 || Math.abs(y - cy) <= 1;
+  const merchant = Math.abs(y - (cy + 18)) <= 1;
+  const secondary = Math.abs(x - (cx - 28)) <= 1 || Math.abs(x - (cx + 28)) <= 1;
+  return { type:(quay || major || merchant || secondary) ? 'path' : 'floor', walkable:true, blocksSight:false };
+}
+
 function capitalUrbanTile(map: GameMap, x: number, y: number): Tile | null {
   if (map.settlementClass !== 'capital' || !map.urbanBounds) return null;
+  if (map.urbanPlan === 'harbor-crescent') return harborCapitalTile(map, x, y);
   const minX = map.urbanBounds.x, minY = map.urbanBounds.y;
   const maxX = minX + map.urbanBounds.width - 1, maxY = minY + map.urbanBounds.height - 1;
   if (x < minX || x > maxX || y < minY || y > maxY) return null;

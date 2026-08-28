@@ -13,6 +13,7 @@ import { ALPHA_SYSTEMS_CONTENT } from './AlphaSystemsContent.mjs';
 import { LIVING_REALM_CONTENT } from './LivingRealmContent.mjs';
 import { ROAD_TO_TEN_CONTENT } from './RoadToTenContent.mjs';
 import { GRAND_ELDORIA_VERSION, migrateGrandEldoriaData } from './GrandEldoria.mjs';
+import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandSunreachData } from './GrandSunreach.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -197,9 +198,11 @@ export class ContentDB {
   }
 
   migrateGrandCapitalV1() {
-    if (Number(this.data.grandCapitalVersion) >= GRAND_ELDORIA_VERSION) return false;
+    if (Number(this.data.grandCapitalVersion) >= GRAND_CAPITAL_SCHEMA_VERSION) return false;
+    // Eldoria remains idempotent; schema 3 adds the first independent harbor capital.
     migrateGrandEldoriaData(this.data);
-    this.data.grandCapitalVersion = GRAND_ELDORIA_VERSION;
+    migrateGrandSunreachData(this.data);
+    this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
     this.save();
     return true;
   }

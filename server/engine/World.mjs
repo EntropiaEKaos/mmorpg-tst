@@ -4,6 +4,7 @@
 // ===================================================================
 
 import { GRAND_ELDORIA_BUILTIN_WORLD_CONFIG } from './GrandEldoria.mjs';
+import { GRAND_SUNREACH_BUILTIN_WORLD_CONFIG } from './GrandSunreach.mjs';
 
 class Monster {
   constructor(data) {
@@ -17,6 +18,7 @@ const MIN_MAP_DIMENSION = 40;
 const MAX_MAP_DIMENSION = 192;
 const SETTLEMENT_CLASSES = Object.freeze(['wilderness','town','city','capital']);
 const SETTLEMENT_CLASS_SET = new Set(SETTLEMENT_CLASSES);
+const URBAN_PLANS = new Set(['royal-grid','harbor-crescent']);
 const BIOMES = new Set(['plains', 'snow', 'swamp', 'desert', 'shadow']);
 const BIOME_SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
 const CITY_STYLES = new Set(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
@@ -39,6 +41,7 @@ const CITY_KINDS = ['keep','market','temple','depot','gate'];
 
 const MAP_CONFIG = Object.freeze({
   eldoria: GRAND_ELDORIA_BUILTIN_WORLD_CONFIG,
+  sunreach_coast: GRAND_SUNREACH_BUILTIN_WORLD_CONFIG,
   frostpeak: {
     id: 'frostpeak', name: 'Frostpeak', description: 'Frozen mountain city. Frigid and deadly.', biome: 'snow',
     spawnPoint: { x: 70, y: 40 }, townCenter: { x: 65, y: 40 }, townRange: 8, seed: 1337,
@@ -165,6 +168,8 @@ function normalizeConfig(record, base = null) {
   const height = integer(record?.height, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, base?.height || MAP_HEIGHT);
   const requestedSettlement = String(record?.settlementClass || base?.settlementClass || (id === 'eldoria' ? 'capital' : 'city'));
   const settlementClass = SETTLEMENT_CLASS_SET.has(requestedSettlement) ? requestedSettlement : 'city';
+  const requestedUrbanPlan = String(record?.urbanPlan || base?.urbanPlan || (id === 'sunreach_coast' ? 'harbor-crescent' : 'royal-grid'));
+  const urbanPlan = settlementClass === 'capital' && URBAN_PLANS.has(requestedUrbanPlan) ? requestedUrbanPlan : 'royal-grid';
   const baseSpawn = base?.spawnPoint || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
   const baseTown = base?.townCenter || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
   const rawPortals = Array.isArray(record?.portals) ? record.portals : (base?.portals || []);
@@ -176,7 +181,7 @@ function normalizeConfig(record, base = null) {
   const urbanBounds = normalizeUrbanBounds(record?.urbanBounds ?? base?.urbanBounds, width, height, townCenter, settlementClass);
   const cityIdentity = defaultCityIdentity(id, biome, townCenter, record || {}, base, width, height, settlementClass);
   return {
-    id, width, height, settlementClass, urbanBounds,
+    id, width, height, settlementClass, urbanPlan, urbanBounds,
     name: typeof record?.name === 'string' && record.name.trim() ? record.name.trim().slice(0, 80) : (base?.name || id.charAt(0).toUpperCase() + id.slice(1)),
     description: typeof record?.description === 'string' ? record.description.trim().slice(0, 300) : (base?.description || ''),
     biome,
@@ -218,8 +223,37 @@ function normalizeConfig(record, base = null) {
   };
 }
 
+function harborShoreY(config, x) {
+  return Math.round(config.townCenter.y + 32 + Math.abs(x - config.townCenter.x) * 0.16);
+}
+
+function harborCapitalTile(config, x, y) {
+  const bounds = config.urbanBounds;
+  if (!bounds) return null;
+  const minX = Number(bounds.x), minY = Number(bounds.y);
+  const maxX = minX + Number(bounds.width) - 1, maxY = minY + Number(bounds.height) - 1;
+  const cx = config.townCenter.x, cy = config.townCenter.y;
+  const shoreY = harborShoreY(config, x);
+  const pierXs = [cx - 30, cx - 12, cx + 12, cx + 30];
+  const pier = pierXs.some(px => Math.abs(x - px) <= 1) && y >= shoreY - 1 && y <= shoreY + 18;
+  const breakwater = Math.abs(y - (cy + 62)) <= 1 && x >= cx - 36 && x <= cx + 36 && Math.abs(x - cx) > 5;
+  if (pier || breakwater) return { type:'bridge', walkable:true, blocksSight:false };
+  if (y >= shoreY) return { type:'water', walkable:false, blocksSight:false };
+  if (x < minX || x > maxX || y < minY || y > maxY) return null;
+  const gate = (y === minY && Math.abs(x - cx) <= 2) || (x === maxX && Math.abs(y - cy) <= 2);
+  if (gate) return { type:'path', walkable:true, blocksSight:false };
+  const landWall = y === minY || ((x === minX || x === maxX) && y < shoreY - 3);
+  if (landWall) return { type:'wall', walkable:false, blocksSight:true };
+  const quay = y >= shoreY - 3 && y < shoreY;
+  const major = Math.abs(x - cx) <= 1 || Math.abs(y - cy) <= 1;
+  const merchant = Math.abs(y - (cy + 18)) <= 1;
+  const secondary = Math.abs(x - (cx - 28)) <= 1 || Math.abs(x - (cx + 28)) <= 1;
+  return { type:(quay || major || merchant || secondary) ? 'path' : 'floor', walkable:true, blocksSight:false };
+}
+
 function capitalUrbanTile(config, x, y) {
   if (config?.settlementClass !== 'capital') return null;
+  if (config.urbanPlan === 'harbor-crescent') return harborCapitalTile(config, x, y);
   const bounds = config.urbanBounds;
   if (!bounds) return null;
   const minX = Number(bounds.x), minY = Number(bounds.y);
@@ -227,9 +261,6 @@ function capitalUrbanTile(config, x, y) {
   if (x < minX || x > maxX || y < minY || y > maxY) return null;
   if (x === minX || x === maxX || y === minY || y === maxY) return { type:'wall', walkable:false, blocksSight:true };
   const cx = config.townCenter.x, cy = config.townCenter.y;
-  // 9.36D: capitals read as cities instead of a uniform floor plane. Five-tile
-  // royal axes anchor navigation; plazas and promenades remain ordinary walkable
-  // path tiles, so client prediction and authoritative collision stay identical.
   const royalAxes = Math.abs(x - cx) <= 2 || Math.abs(y - cy) <= 2;
   const secondaryBoulevards = Math.abs(x - (cx - 28)) <= 1 || Math.abs(x - (cx + 28)) <= 1 || Math.abs(y - (cy - 28)) <= 1 || Math.abs(y - (cy + 28)) <= 1;
   const innerRing = Math.abs(x - (minX + 14)) <= 1 || Math.abs(x - (maxX - 14)) <= 1 || Math.abs(y - (minY + 14)) <= 1 || Math.abs(y - (maxY - 14)) <= 1;
@@ -316,7 +347,7 @@ class WorldManager {
   getDefinitions() {
     return Array.from(this.configs.values()).map(config => ({
       id: config.id, name: config.name, description: config.description, biome: config.biome, access: config.access || 'public',
-      width: config.width, height: config.height, settlementClass: config.settlementClass, urbanBounds: { ...config.urbanBounds },
+      width: config.width, height: config.height, settlementClass: config.settlementClass, urbanPlan: config.urbanPlan, urbanBounds: { ...config.urbanBounds },
       levelRequired: config.levelRequired, seed: config.seed,
       spawnX: config.spawnPoint.x, spawnY: config.spawnPoint.y,
       townX: config.townCenter.x, townY: config.townCenter.y, townRange: config.townRange,
