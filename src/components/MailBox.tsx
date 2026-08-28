@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Player, Item } from '../game/types';
 import { getMail, markMailRead, claimMail, deleteMail, sendMail, type MailItem } from '../game/content';
+import { t as tr } from '../i18n';
 
 interface Props {
   player: Player;
@@ -24,7 +25,7 @@ export default function MailBox({ player, inventory, setInventory, onClose, addM
     if (!claimed) return;
     if (claimed.gold && claimed.gold > 0) {
       onClaimGold(claimed.gold);
-      addMessage('Mail', `Claimed ${claimed.gold} gold from mail.`, '#f4e04d', 'loot');
+      addMessage(tr('Mail'), `Resgatado: ${claimed.gold} de ouro do correio.`, '#f4e04d', 'loot');
     }
     if (claimed.attachedItem) {
       const newInv = [...inventory, {
@@ -32,7 +33,7 @@ export default function MailBox({ player, inventory, setInventory, onClose, addM
         type: 'misc' as const, quantity: 1, value: claimed.attachedItem.value,
       }];
       setInventory(newInv);
-      addMessage('Mail', `Claimed ${claimed.attachedItem.icon} ${claimed.attachedItem.name}`, '#f4e04d', 'loot');
+      addMessage(tr('Mail'), `Resgatado: ${claimed.attachedItem.icon} ${tr(claimed.attachedItem.name)}`, '#f4e04d', 'loot');
     }
     refresh();
     setActive(null);
@@ -54,7 +55,7 @@ export default function MailBox({ player, inventory, setInventory, onClose, addM
             </h2>
             <div className="text-xs text-amber-200/60">{unreadCount} unread · {mail.length} total</div>
           </div>
-          <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-2xl">✕</button>
+          <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-2xl" aria-label={tr('Close mailbox')}>✕</button>
         </div>
 
         {!active && !composing && (
@@ -81,7 +82,7 @@ export default function MailBox({ player, inventory, setInventory, onClose, addM
                         <div className={`font-bold text-sm ${m.read ? 'text-amber-200/70' : 'text-amber-100'}`}>
                           {!m.read && <span className="text-amber-400">● </span>}{m.subject}
                         </div>
-                        <div className="text-[10px] text-amber-200/50">From: {m.from} · {new Date(m.sentAt).toLocaleDateString()}</div>
+                        <div className="text-[10px] text-amber-200/50">{tr('From:')} {tr(m.from)} · {new Date(m.sentAt).toLocaleDateString('pt-BR')}</div>
                       </div>
                       {(m.gold || m.attachedItem) && !m.claimed && <span className="text-green-400 text-xs">🎁</span>}
                     </div>
@@ -94,19 +95,19 @@ export default function MailBox({ player, inventory, setInventory, onClose, addM
 
         {active && !composing && (
           <div className="flex-1 flex flex-col">
-            <button onClick={() => setActive(null)} className="text-amber-300 hover:text-amber-100 text-xs mb-3 self-start">← Back to inbox</button>
+            <button onClick={() => setActive(null)} className="text-amber-300 hover:text-amber-100 text-xs mb-3 self-start">← {tr('Back to inbox')}</button>
             <div className="rounded-lg border-2 border-amber-700/50 p-4 flex-1 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.3)' }}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-bold text-amber-100">{active.subject}</h3>
+                <h3 className="text-lg font-bold text-amber-100">{tr(active.subject)}</h3>
                 {active.isSystem && <span className="text-[10px] px-2 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-700/50">SYSTEM</span>}
               </div>
-              <div className="text-xs text-amber-200/60 mb-3">From: {active.from} · {new Date(active.sentAt).toLocaleString()}</div>
-              <div className="text-amber-100/90 text-sm leading-relaxed whitespace-pre-wrap">{active.body}</div>
+              <div className="text-xs text-amber-200/60 mb-3">{tr('From:')} {tr(active.from)} · {new Date(active.sentAt).toLocaleString('pt-BR')}</div>
+              <div className="text-amber-100/90 text-sm leading-relaxed whitespace-pre-wrap">{tr(active.body)}</div>
               {(active.gold || active.attachedItem) && (
                 <div className="mt-4 p-3 rounded border border-green-700/50 bg-green-900/20">
                   <div className="text-xs text-green-300 mb-2 tracking-widest">📦 ATTACHMENTS</div>
                   {active.gold && <div className="text-amber-300 text-sm">🪙 {active.gold} gold</div>}
-                  {active.attachedItem && <div className="text-amber-100 text-sm">{active.attachedItem.icon} {active.attachedItem.name}</div>}
+                  {active.attachedItem && <div className="text-amber-100 text-sm">{active.attachedItem.icon} {tr(active.attachedItem.name)}</div>}
                   {!active.claimed ? (
                     <button onClick={() => handleClaim(active)} className="mt-2 px-4 py-1.5 rounded bg-gradient-to-b from-green-500 to-green-700 text-white text-xs font-bold">
                       Claim Attachments
@@ -151,11 +152,11 @@ function ComposeMail({ player, onClose, refresh }: { player: Player; onClose: ()
     <div className="flex-1 flex flex-col">
       <button onClick={onClose} className="text-amber-300 hover:text-amber-100 text-xs mb-3 self-start">← Cancel</button>
       <div className="space-y-2">
-        <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="Recipient character name..."
+        <input value={to} onChange={(e) => setTo(e.target.value)} placeholder={tr('Recipient character name...')}
                className="w-full px-3 py-2 rounded bg-black/60 border border-amber-900/50 text-amber-100 text-sm focus:outline-none focus:border-amber-500" />
-        <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject..."
+        <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={tr('Subject...')}
                className="w-full px-3 py-2 rounded bg-black/60 border border-amber-900/50 text-amber-100 text-sm focus:outline-none focus:border-amber-500" />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Your message..." rows={6}
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={tr('Your message...')} rows={6}
                   className="w-full px-3 py-2 rounded bg-black/60 border border-amber-900/50 text-amber-100 text-sm focus:outline-none focus:border-amber-500" />
         <button onClick={send} disabled={!to.trim() || !subject.trim()}
                 className="w-full py-2 rounded bg-gradient-to-b from-amber-500 to-amber-700 text-black font-bold text-sm disabled:opacity-40">

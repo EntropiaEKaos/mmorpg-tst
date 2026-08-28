@@ -1,0 +1,16 @@
+import { chromium } from 'playwright';
+import { mkdir } from 'node:fs/promises';
+
+const output = 'artifacts/moria-9.32-screenshots';
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
+
+for (const panel of ['library', 'mail', 'social']) {
+  await page.goto(`http://127.0.0.1:4173/visual-qa.html?panel=${panel}`, { waitUntil: 'networkidle' });
+  await page.locator(`[data-visual-qa-ready="${panel}"]`).waitFor({ state: 'visible' });
+  await page.screenshot({ path: `${output}/${panel}.png`, fullPage: true });
+}
+
+await browser.close();
+console.log(`Captured Mor'ia 9.32 screenshots in ${output}`);
