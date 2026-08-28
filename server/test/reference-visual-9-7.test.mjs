@@ -96,9 +96,9 @@ test('9.7 city designer directly manipulates authoritative building footprints',
   const designer = await read('src/components/CityDesigner.tsx');
   const studio = await read('server/engine/ContentStudio.mjs');
   const admin = await read('server/adminPanel.mjs');
-  assert.match(designer, /DIRECT MANIPULATION/);
+  assert.match(designer, /DESIGNER DE CIDADE · EDIÇÃO DIRETA/);
   assert.match(designer, /onPointerMove=\{dragMove\}/);
-  assert.match(designer, /SELECTED BUILDING/);
+  assert.match(designer, /CONSTRUÇÃO SELECIONADA/);
   assert.match(designer, /'house'/);
   assert.match(studio, /monsterNameplateMode/);
   assert.match(studio, /bossNameplateAlwaysVisible/);

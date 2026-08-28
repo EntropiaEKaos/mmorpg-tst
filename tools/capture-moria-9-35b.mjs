@@ -18,7 +18,8 @@ const playerBox = await page.locator('[data-minimap-player="true"]').boundingBox
 if (!minimapBox || !farBox || !playerBox) throw new Error('9.35B minimap proof elements are missing');
 if (farBox.x + farBox.width / 2 <= minimapBox.x + minimapBox.width / 2) throw new Error('9.35B far landmark collapsed into legacy 80-tile half on minimap');
 if (playerBox.x + playerBox.width / 2 <= minimapBox.x + minimapBox.width / 2 || playerBox.y + playerBox.height / 2 <= minimapBox.y + minimapBox.height / 2) throw new Error('9.35B far-side player is not mapped into the expected minimap quadrant');
-await page.screenshot({ path: `${output}/grand-minimap.png`, fullPage: true });
+const minimapProof = page.locator('[data-grand-minimap-proof="true"]');
+await minimapProof.screenshot({ path: `${output}/grand-minimap.png` });
 
 await page.goto('http://127.0.0.1:4173/visual-qa.html?panel=grand-city-designer', { waitUntil: 'networkidle' });
 await page.locator('[data-visual-qa-ready="grand-city-designer"]').waitFor({ state: 'visible' });
@@ -35,7 +36,15 @@ await farBuilding.waitFor({ state: 'visible' });
 const buildingBox = await farBuilding.boundingBox();
 if (!previewBox || !buildingBox) throw new Error('9.35B City Designer visual proof elements are missing');
 if (buildingBox.x + buildingBox.width / 2 <= previewBox.x + previewBox.width / 2) throw new Error('9.35B City Designer placed x=124 landmark on the legacy half of the map');
-await page.screenshot({ path: `${output}/grand-city-designer.png`, fullPage: true });
+const designerRoot = page.locator('[data-city-designer-root="true"]');
+const designerText = await designerRoot.innerText();
+for (const forbidden of ['CITY DESIGNER', 'DIRECT MANIPULATION', 'City style', 'RESET LOCAL', 'Select and drag', 'buildings', 'blocked tiles', 'SELECTED BUILDING', 'DUPLICATE', 'DELETE', 'Royal Capital', 'nearby']) {
+  if (designerText.includes(forbidden)) throw new Error(`9.35B.1 City Designer English visual leak: ${forbidden}`);
+}
+for (const required of ['DESIGNER DE CIDADE', 'ESTILO DA CIDADE', 'Capital Real', 'Próximo', '160×160', 'CAPITAL', '3/64 construções']) {
+  if (!designerText.includes(required)) throw new Error(`9.35B.1 City Designer PT-BR proof missing: ${required}`);
+}
+await designerRoot.screenshot({ path: `${output}/grand-city-designer.png` });
 
 await browser.close();
 console.log(`Captured Mor'ia 9.35B grand-capital client screenshots in ${output}`);

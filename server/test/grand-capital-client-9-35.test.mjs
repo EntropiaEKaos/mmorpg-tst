@@ -40,3 +40,21 @@ test('9.35B visual proof owns a synthetic 160x160 capital with far-side content'
   assert.match(source, /qa_far_keep/);
   assert.match(source, /x: 136, y: 118/);
 });
+
+
+test('9.35B.1 City Designer keeps internal IDs while presenting PT-BR authoring labels', () => {
+  const source = read('src/components/CityDesigner.tsx');
+  assert.match(source, /DESIGNER DE CIDADE · EDIÇÃO DIRETA/);
+  assert.match(source, /OPTION_LABELS/);
+  assert.match(source, /nearby: 'Próximo'/);
+  assert.match(source, /data-city-designer-root/);
+  assert.doesNotMatch(source, /CITY DESIGNER · DIRECT MANIPULATION/);
+  assert.doesNotMatch(source, />RESET LOCAL<\/button>/);
+});
+
+test('9.35B.1 screenshot proof is tightly framed instead of full-page empty space', () => {
+  const source = read('tools/capture-moria-9-35b.mjs');
+  assert.match(source, /minimapProof\.screenshot/);
+  assert.match(source, /designerRoot\.screenshot/);
+  assert.doesNotMatch(source, /fullPage: true/);
+});

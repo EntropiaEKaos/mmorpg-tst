@@ -39,3 +39,10 @@ O harness cria `qa_grand_capital`, uma capital sintética 160×160 com conteúdo
 
 ### Próximo passo — 9.36 Grand Eldoria
 Com servidor e cliente dimension-aware, Eldoria pode ser expandida deliberadamente para 160×160 com distritos, muralhas, vias, landmarks, housing e serviços planejados como uma capital real, sem ampliar automaticamente as demais regiões.
+
+
+## 9.35B.1 — acabamento da prova visual
+
+A revisão humana do primeiro artefato confirmou a geometria 160×160, mas rejeitou dois pontos de apresentação: o minimapa ocupava uma área muito pequena dentro de um screenshot de página inteira e o City Designer ainda expunha rótulos técnicos em inglês. Este passe não altera autoridade, IDs, enumerações ou dimensões.
+
+O City Designer mantém valores internos como `nearby`, `always`, `hidden`, `house` e `keep`, porém apresenta labels PT-BR. Os screenshots passam a recortar exatamente o cartão de prova do minimapa e a raiz do editor, eliminando espaço vazio e tornando a inspeção humana útil. O Playwright também falha se os principais rótulos ingleses reaparecerem na superfície renderizada.

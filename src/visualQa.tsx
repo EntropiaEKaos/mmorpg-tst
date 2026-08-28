@@ -153,7 +153,7 @@ function VisualQa() {
       {panel === 'actionbar' && <div data-qa-actionbar><GlobalTooltipRenderer /><ActionBar player={qaPlayer} spells={VOCATIONS.knight.spells} potions={{ hp: 4, mp: 3, hpg: 1 }} onCastSpell={() => {}} onUsePotion={() => {}} /></div>}
       {panel === 'castbar' && <CastVisualQa />}
       {panel === 'dps' && <DPSMeter onClose={() => {}} />}
-      {panel === 'grand-minimap' && <div className="relative z-10 flex min-h-screen items-center justify-center"><WorldMiniMap player={QA_GRAND_PLAYER} monsters={[]} mapId="qa_grand_capital" /></div>}
+      {panel === 'grand-minimap' && <div className="relative z-10 flex min-h-screen items-center justify-center p-6"><div data-grand-minimap-proof="true" className="rounded border border-amber-300/25 bg-black/65 p-4 shadow-2xl"><div className="mb-3"><div className="text-sm font-black tracking-wider text-amber-100">NOVA AURORIA · CAPITAL 160×160</div><div className="text-[10px] text-amber-100/55">Prova de escala · jogador 136,118 · Bastião do Horizonte 124,72</div></div><WorldMiniMap player={QA_GRAND_PLAYER} monsters={[]} mapId="qa_grand_capital" /></div></div>}
       {panel === 'grand-city-designer' && <div className="relative z-10 p-4"><CityDesigner /></div>}
     </div>
   );
