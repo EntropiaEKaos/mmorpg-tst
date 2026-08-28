@@ -1,0 +1,50 @@
+name: Mor'ia 9.27 Visual Review
+on:
+  push:
+    branches: [moria-9.27-deep-visual-revamp]
+    paths:
+      - 'tools/capture927.mjs'
+      - '.github/workflows/capture-moria-9-27.yml'
+permissions:
+  contents: write
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.27-deep-visual-revamp
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx --yes playwright@1.55.0 install --with-deps chromium
+      - name: Serve client
+        run: |
+          npm run build
+          nohup python3 -m http.server 4173 -d dist >/tmp/moria927-http.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173 >/dev/null && break; sleep 1; done
+      - name: Capture real browser review
+        run: npx --yes -p playwright@1.55.0 node tools/capture927.mjs
+      - name: Validate screenshots
+        run: |
+          test -s docs/screenshots/moria-9-27-login-revamp.png
+          test -s docs/screenshots/moria-9-27-world-day.png
+          test ! -s browser-console.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moria-9-27-visual-review
+          path: |
+            docs/screenshots/moria-9-27-login-revamp.png
+            docs/screenshots/moria-9-27-world-day.png
+            browser-console.txt
+      - name: Commit screenshots
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/screenshots/moria-9-27-login-revamp.png docs/screenshots/moria-9-27-world-day.png
+          git commit -m 'docs(9.27): add visual revamp browser evidence' || exit 0
+          git push origin HEAD:moria-9.27-deep-visual-revamp
