@@ -17,6 +17,7 @@ import CityDesigner from './components/CityDesigner';
 import GrandEldoriaPanorama from './components/GrandEldoriaPanorama';
 import GrandSunreachPanorama from './components/GrandSunreachPanorama';
 import GrandIronwoodPanorama from './components/GrandIronwoodPanorama';
+import GrandFrostpeakPanorama from './components/GrandFrostpeakPanorama';
 import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge from './components/LocaleBridge';
 import { saveBook, sendSystemMail } from './game/content';
@@ -223,6 +224,29 @@ function AuthoritativeGrandIronwoodQa({ mode }: { mode: IronwoodQaMode }) {
   return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-ironwood-server-ready="panorama"><GrandIronwoodPanorama /></div>;
 }
 
+
+const FROSTPEAK_QA_PLAYER = { ...QA_PLAYER, mapId: 'frostpeak', pos: { x: 118, y: 116 } } as unknown as Player;
+type FrostpeakQaMode = 'frostpeak-minimap' | 'frostpeak-city-designer' | 'frostpeak-panorama';
+
+function AuthoritativeGrandFrostpeakQa({ mode }: { mode: FrostpeakQaMode }) {
+  const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading');
+  const [error,setError]=useState('');
+  useEffect(()=>{
+    let active=true; const params=new URLSearchParams(window.location.search); const base=params.get('qaServer')||'http://127.0.0.1:3000'; const token=params.get('qaToken')||'';
+    fetch(`${base}/admin/api/maps?token=${encodeURIComponent(token)}`,{cache:'no-store'}).then(async response=>{if(!response.ok) throw new Error(`Servidor de conteúdo respondeu ${response.status}`); return response.json();}).then(payload=>{
+      if(!active)return; const records=Array.isArray(payload?.items)?payload.items:[]; const frostpeak=records.find((record:any)=>record?.id==='frostpeak');
+      if(!frostpeak||Number(frostpeak.width)!==160||Number(frostpeak.height)!==160||frostpeak.settlementClass!=='capital'||frostpeak.urbanPlan!=='terraced-bastion'||!Array.isArray(frostpeak.landmarks)||frostpeak.landmarks.length!==41) throw new Error('Grand Frostpeak autoritativa 160×160 não foi recebida do servidor');
+      syncServerMaps(records);setStatus('ready');
+    }).catch(reason=>{if(!active)return;setError(reason instanceof Error?reason.message:String(reason));setStatus('error');});return()=>{active=false;};
+  },[]);
+  if(status==='loading') return <div className="relative z-10 p-8 text-cyan-100" data-grand-frostpeak-server-loading="true">Sincronizando Grand Frostpeak com o servidor autoritativo…</div>;
+  if(status==='error') return <div className="relative z-10 p-8 text-red-200" data-grand-frostpeak-server-error="true">{error}</div>;
+  const map=MAPS.frostpeak;
+  if(mode==='frostpeak-minimap') return <div className="relative z-10 flex min-h-screen items-center justify-center p-6"><div data-grand-frostpeak-server-ready="minimap" className="rounded-xl border border-cyan-200/30 bg-black/75 p-4 shadow-2xl"><div className="mb-3"><div className="text-sm font-black tracking-wider text-cyan-50">GRAND FROSTPEAK · CAPITAL ALPINA 160×160</div><div className="mt-1 text-[10px] text-cyan-50/55">Servidor autoritativo · {map.districts.length} distritos · {map.landmarks.length} marcos · 4 acessos · jogador 118,116</div></div><WorldMiniMap player={FROSTPEAK_QA_PLAYER} monsters={[]} mapId="frostpeak" /></div></div>;
+  if(mode==='frostpeak-city-designer') return <div className="relative z-10 p-4" data-grand-frostpeak-server-ready="designer"><CityDesigner /></div>;
+  return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-frostpeak-server-ready="panorama"><GrandFrostpeakPanorama /></div>;
+}
+
 function VisualQa() {
   const panel = new URLSearchParams(window.location.search).get('panel') || 'library';
   const [inventory, setInventory] = useState<Item[]>([
@@ -258,6 +282,9 @@ function VisualQa() {
       {panel === 'ironwood-minimap' && <AuthoritativeGrandIronwoodQa mode="ironwood-minimap" />}
       {panel === 'ironwood-city-designer' && <AuthoritativeGrandIronwoodQa mode="ironwood-city-designer" />}
       {panel === 'ironwood-panorama' && <AuthoritativeGrandIronwoodQa mode="ironwood-panorama" />}
+      {panel === 'frostpeak-minimap' && <AuthoritativeGrandFrostpeakQa mode="frostpeak-minimap" />}
+      {panel === 'frostpeak-city-designer' && <AuthoritativeGrandFrostpeakQa mode="frostpeak-city-designer" />}
+      {panel === 'frostpeak-panorama' && <AuthoritativeGrandFrostpeakQa mode="frostpeak-panorama" />}
     </div>
   );
 }

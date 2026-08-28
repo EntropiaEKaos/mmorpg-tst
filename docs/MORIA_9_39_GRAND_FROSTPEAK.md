@@ -42,3 +42,9 @@ A 9.39B fará minimapa, City Designer e panorâmica autoritativa com prova visua
 ### Neve como terreno real
 
 A 9.39 também transforma `snow` em tile de terreno caminhável de primeira classe no cliente e no renderer. Biomas nevados deixam de herdar grama verde como piso aberto; pátios de Frostpeak e áreas externas agora usam neve real, mantendo servidor e cliente em paridade.
+
+## 9.39B — Prova visual autoritativa
+
+A validação visual usa a mesma Grand Frostpeak entregue pelo servidor e sincronizada no cliente. O gate captura minimapa, City Designer e panorama pelo renderer de produção. As asserções exigem 160×160, `terraced-bastion`, 12 distritos, 41 construções, quatro acessos, densidade mínima de neve/caminhos/muralhas e pixels claros suficientes para provar que o terreno nevado está realmente renderizado.
+
+A 9.39 só pode ser aprovada depois do CI visual e da inspeção humana dos três PNGs.
