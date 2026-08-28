@@ -7,6 +7,8 @@ import { getActiveSetBonuses } from '../game/itemSets';
 import { T as Tooltip } from './Tooltip';
 import LivingRealmPlayerPanel916 from './LivingRealmPlayerPanel916';
 import RoadToTenPlayerPanel926 from './RoadToTenPlayerPanel926';
+import VocationPortrait from './VocationPortrait';
+import { t as tr } from '../i18n';
 
 interface Props {
   player: Player;
@@ -60,19 +62,19 @@ export default function CharacterPanel({ player, onClose, onUnequip, official }:
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl border-2"
-                 style={{ background: `radial-gradient(circle, ${vocation?.color || '#8b2e2e'}40, rgba(0,0,0,0.3))`, borderColor: vocation?.color || '#8b2e2e', boxShadow: `0 0 20px ${vocation?.color || '#8b2e2e'}60` }}>
-              {vocation?.icon || '⚔'}
+            <div className="relative shrink-0">
+              <VocationPortrait id={player.vocation} color={vocation?.color || '#e5c477'} active size="hero" />
+              <span className="absolute right-1 top-1 rounded-md border border-black/40 bg-black/55 px-1.5 py-0.5 text-sm shadow-lg">{vocation?.icon || '⚔'}</span>
             </div>
             <div>
               <h2 className="text-2xl font-black tracking-wide text-transparent bg-clip-text"
                   style={{ backgroundImage: `linear-gradient(180deg, ${vocation?.color || '#f4e04d'} 0%, #8b6914 100%)` }}>
                 {player.name}
               </h2>
-              <div className="text-amber-200/70 text-xs">{vocation?.name || 'Unknown'} · Level {player.level}</div>
+              <div className="text-amber-200/70 text-xs">{tr(vocation?.name || 'Unknown')} · {tr('Level')} {player.level}</div>
             </div>
           </div>
-          <button onClick={onClose} className="moria-button flex h-9 w-9 items-center justify-center rounded-xl text-sm text-slate-400" aria-label="Close character panel">✕</button>
+          <button onClick={onClose} className="moria-button flex h-9 w-9 items-center justify-center rounded-xl text-sm text-slate-400" aria-label={tr('Close character panel')}>✕</button>
         </div>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
@@ -87,11 +89,11 @@ export default function CharacterPanel({ player, onClose, onUnequip, official }:
                     <Tooltip key={slot} position="right" content={
                       eq ? (
                         <div>
-                          <div className="font-bold" style={{ color: RARITY_COLORS[eq.rarity] }}>{eq.name}</div>
-                          <div className="text-[9px] text-amber-200/60 uppercase">{slot} · {eq.rarity}</div>
-                          <div className="text-[10px] text-amber-200/50 mt-1">Click to unequip</div>
+                          <div className="font-bold" style={{ color: RARITY_COLORS[eq.rarity] }}>{tr(eq.name)}</div>
+                          <div className="text-[9px] text-amber-200/60 uppercase">{tr(slot)} · {tr(eq.rarity)}</div>
+                          <div className="text-[10px] text-amber-200/50 mt-1">{tr('Click to unequip')}</div>
                         </div>
-                      ) : <div className="text-amber-200/60">{label} (empty)</div>
+                      ) : <div className="text-amber-200/60">{tr(label)} ({tr('empty')})</div>
                     }>
                       <button
                         onClick={() => eq && onUnequip(slot)}
@@ -105,7 +107,7 @@ export default function CharacterPanel({ player, onClose, onUnequip, official }:
                         }}
                       >
                         <div className="text-2xl" style={{ filter: eq ? `drop-shadow(0 0 4px ${RARITY_COLORS[eq.rarity]})` : 'none' }}>{eq?.icon || icon}</div>
-                        <div className="text-[8px] text-amber-200/60 mt-0.5">{label}</div>
+                        <div className="text-[8px] text-amber-200/60 mt-0.5">{tr(label)}</div>
                       </button>
                     </Tooltip>
                   );
@@ -164,9 +166,9 @@ export default function CharacterPanel({ player, onClose, onUnequip, official }:
                     <div key={spell.id} className={`flex items-center gap-1.5 p-1 rounded text-xs ${unlocked ? 'bg-black/30 border border-green-700/30' : 'bg-black/30 border border-red-700/30 opacity-60'}`}>
                       <span className="text-base">{unlocked ? spell.icon : '🔒'}</span>
                       <div className="flex-1 min-w-0">
-                        <div className={unlocked ? 'font-bold' : 'font-bold text-red-300/70'} style={{ color: unlocked ? spell.color : undefined }}>{spell.name}</div>
+                        <div className={unlocked ? 'font-bold' : 'font-bold text-red-300/70'} style={{ color: unlocked ? spell.color : undefined }}>{tr(spell.name)}</div>
                         <div className="text-[9px] text-amber-200/50">
-                          {unlocked ? `${spell.damage} ${spell.type === 'heal' ? 'heal' : 'dmg'} · ${spell.mana}MP` : `Unlocks at Lv ${spell.levelRequired}`}
+                          {unlocked ? `${spell.damage} ${spell.type === 'heal' ? tr('heal') : tr('dmg')} · ${spell.mana}MP` : `${tr('Unlocks at Lv')} ${spell.levelRequired}`}
                         </div>
                       </div>
                       <span className="text-[9px]" style={{ color: unlocked ? '#2ecc71' : '#ff6060' }}>{unlocked ? '✓' : `Lv${spell.levelRequired}`}</span>
@@ -187,11 +189,11 @@ export default function CharacterPanel({ player, onClose, onUnequip, official }:
                     <div key={set.setId} className="p-1.5 rounded border border-amber-600/50 bg-amber-900/20">
                       <div className="flex items-center gap-1 text-xs">
                         <span>{set.icon}</span>
-                        <span className="text-amber-300 font-bold">{set.name}</span>
+                        <span className="text-amber-300 font-bold">{tr(set.name)}</span>
                         <span className="text-amber-400">({set.piecesEquipped})</span>
                       </div>
                       {set.activeBonuses.map((b, i) => (
-                        <div key={i} className="text-[10px] text-green-400 pl-4">✓ {b.description}</div>
+                        <div key={i} className="text-[10px] text-green-400 pl-4">✓ {tr(b.description)}</div>
                       ))}
                     </div>
                   ))}
@@ -202,7 +204,7 @@ export default function CharacterPanel({ player, onClose, onUnequip, official }:
             {vocation && (
               <div className="p-2 rounded border border-amber-900/40 bg-black/30">
                 <div className="text-[10px] text-amber-200/60 tracking-widest mb-1">✨ PASSIVE</div>
-                <div className="text-xs text-amber-100">{vocation.passive}</div>
+                <div className="text-xs text-amber-100">{tr(vocation.passive)}</div>
               </div>
             )}
           </div>
@@ -225,7 +227,7 @@ export default function CharacterPanel({ player, onClose, onUnequip, official }:
                   <div className="space-y-1">
                     {Object.entries(officialState.professions || {}).map(([name, value]: any) => (
                       <div key={name} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 flex items-center justify-between text-xs">
-                        <span className="capitalize text-amber-200/80">{name}</span>
+                        <span className="capitalize text-amber-200/80">{tr(name)}</span>
                         <span className="text-amber-300 font-bold">Lv {value.level} · {value.xp} xp</span>
                       </div>
                     ))}
@@ -273,18 +275,18 @@ export default function CharacterPanel({ player, onClose, onUnequip, official }:
                     {BLESSINGS.map((b) => {
                       const owned = getBlessings(player).includes(b.id);
                       return <div key={b.id} className={`flex items-center gap-2 p-1.5 rounded text-xs ${owned ? 'bg-green-900/20 border border-green-700/40' : 'bg-black/30 border border-gray-700/30 opacity-50'}`}>
-                        <span>{b.icon}</span><div className="flex-1 min-w-0"><div className={owned ? 'text-green-300 font-bold' : 'text-gray-400'}>{b.name}</div><div className="text-[9px] text-amber-200/50 truncate">{b.description}</div></div>{owned && <span className="text-green-400">✓</span>}
+                        <span>{b.icon}</span><div className="flex-1 min-w-0"><div className={owned ? 'text-green-300 font-bold' : 'text-gray-400'}>{tr(b.name)}</div><div className="text-[9px] text-amber-200/50 truncate">{tr(b.description)}</div></div>{owned && <span className="text-green-400">✓</span>}
                       </div>;
                     })}
                   </div>
                 </div>
                 <div>
                   <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">⛏ PROFESSIONS</div>
-                  <div className="space-y-1">{(['miner', 'herbalist', 'fisher'] as const).map((prof) => { const data = getProfessions(player)[prof]; return <div key={prof} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 text-xs flex justify-between"><span className="capitalize text-amber-200/80">{prof}</span><b className="text-amber-300">Lv {data.level}</b></div>; })}</div>
+                  <div className="space-y-1">{(['miner', 'herbalist', 'fisher'] as const).map((prof) => { const data = getProfessions(player)[prof]; return <div key={prof} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 text-xs flex justify-between"><span className="capitalize text-amber-200/80">{tr(prof)}</span><b className="text-amber-300">Lv {data.level}</b></div>; })}</div>
                 </div>
                 <div>
                   <div className="text-[10px] text-amber-200/60 tracking-widest mb-1.5">🏰 REPUTATION</div>
-                  {FACTIONS.map((faction) => { const value = getReputation(player)[faction.id] || 0; const level = getRepLevel(faction.id, value); return <div key={faction.id} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 text-xs flex justify-between"><span>{faction.icon} {faction.name}</span><b style={{ color: level.color }}>{level.name} · {value}</b></div>; })}
+                  {FACTIONS.map((faction) => { const value = getReputation(player)[faction.id] || 0; const level = getRepLevel(faction.id, value); return <div key={faction.id} className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 text-xs flex justify-between"><span>{faction.icon} {tr(faction.name)}</span><b style={{ color: level.color }}>{tr(level.name)} · {value}</b></div>; })}
                 </div>
                 <div className="bg-black/30 rounded px-2 py-1 border border-amber-900/30 text-xs">⚡ Stamina: {Math.floor(getStamina(player) / 60)}h · {Math.round(getStaminaMultiplier(getStamina(player)) * 100)}% XP</div>
               </>
@@ -322,7 +324,7 @@ function StatRow({ icon, label, value, base, color }: { icon: string; label: str
   const bonus = value - base;
   return (
     <div className="bg-black/40 rounded px-2 py-1 border border-amber-900/30 flex items-center justify-between">
-      <span className="text-amber-200/70 text-[11px]">{icon} {label}</span>
+      <span className="text-amber-200/70 text-[11px]">{icon} {tr(label)}</span>
       <span className="font-bold text-sm">
         <span style={{ color }}>{value}</span>
         {bonus > 0 && <span className="text-green-400 text-[10px]"> (+{bonus})</span>}
@@ -334,7 +336,7 @@ function StatRow({ icon, label, value, base, color }: { icon: string; label: str
 function SimpleStat({ icon, label, value, color }: { icon: string; label: string; value: string; color: string }) {
   return (
     <div className="bg-black/40 rounded px-2 py-1 border border-amber-900/30 flex items-center justify-between">
-      <span className="text-amber-200/70 text-[11px]">{icon} {label}</span>
+      <span className="text-amber-200/70 text-[11px]">{icon} {tr(label)}</span>
       <span className="font-bold text-sm" style={{ color }}>{value}</span>
     </div>
   );

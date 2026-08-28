@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Player } from '../game/types';
 import { BESTIARY, getBestiaryProgress } from '../game/bestiary';
+import { t as tr } from '../i18n';
 
 interface Props {
   player: Player;
@@ -35,8 +36,8 @@ export default function Bestiary({ player, onClose }: Props) {
           <div className="min-w-0">
             <div className="moria-eyebrow">Field knowledge</div>
             <div className="mt-1 flex items-end gap-3">
-              <h2 className="moria-title text-2xl font-black">📖 Bestiary</h2>
-              <span className="mb-0.5 text-[10px] font-bold text-slate-500">{completedCount}/{BESTIARY.length} mastered</span>
+              <h2 className="moria-title text-2xl font-black">📖 {tr('Bestiary')}</h2>
+              <span className="mb-0.5 text-[10px] font-bold text-slate-500">{completedCount}/{BESTIARY.length} {tr('mastered')}</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -44,7 +45,7 @@ export default function Bestiary({ player, onClose }: Props) {
               <div className="mb-1 flex justify-between text-[8px] font-bold tracking-wider text-slate-500"><span>DISCOVERY</span><span>{completionPct}%</span></div>
               <div className="h-1.5 overflow-hidden rounded-full bg-black/55"><div className="h-full rounded-full bg-gradient-to-r from-amber-700 to-amber-200" style={{ width: `${completionPct}%` }} /></div>
             </div>
-            <button onClick={onClose} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400" aria-label="Close bestiary">✕</button>
+            <button onClick={onClose} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400" aria-label={tr('Close bestiary')}>✕</button>
           </div>
         </div>
 
@@ -53,7 +54,7 @@ export default function Bestiary({ player, onClose }: Props) {
             const active = selectedCategory === category.id;
             return (
               <button key={category.id} onClick={() => setSelectedCategory(category.id)} className={`shrink-0 rounded-xl border px-3 py-2 text-[10px] font-black tracking-wide transition-all ${active ? 'border-amber-200/35 bg-amber-200/10 text-amber-100' : 'border-white/[0.06] bg-white/[0.02] text-slate-500 hover:border-white/[0.12] hover:text-slate-300'}`}>
-                {category.icon} {category.name.toUpperCase()}
+                {category.icon} {tr(category.name).toUpperCase()}
               </button>
             );
           })}
@@ -74,10 +75,10 @@ export default function Bestiary({ player, onClose }: Props) {
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-black/25 text-2xl" style={{ filter: `drop-shadow(0 0 6px ${typeColor}66)` }}>{entry.emoji}</span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="truncate text-xs font-black" style={{ color: entry.type !== 'normal' ? typeColor : '#e2e8f0' }}>{entry.name}</span>
-                        {entry.type !== 'normal' && <span className="rounded-md border px-1 py-0.5 text-[7px] font-black uppercase" style={{ borderColor: `${typeColor}55`, color: typeColor }}>{entry.type}</span>}
+                        <span className="truncate text-xs font-black" style={{ color: entry.type !== 'normal' ? typeColor : '#e2e8f0' }}>{tr(entry.name)}</span>
+                        {entry.type !== 'normal' && <span className="rounded-md border px-1 py-0.5 text-[7px] font-black uppercase" style={{ borderColor: `${typeColor}55`, color: typeColor }}>{tr(entry.type)}</span>}
                       </div>
-                      <div className="mt-0.5 truncate text-[9px] text-slate-500">📍 {entry.location}</div>
+                      <div className="mt-0.5 truncate text-[9px] text-slate-500">📍 {tr(entry.location)}</div>
                       <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-black/55"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: completed ? '#58d6a8' : `linear-gradient(90deg, ${typeColor}88, ${typeColor})` }} /></div>
                     </div>
                     <div className="shrink-0 text-right">
@@ -96,14 +97,14 @@ export default function Bestiary({ player, onClose }: Props) {
                 <div className="flex items-center gap-4">
                   <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-white/[0.07] bg-black/25 text-5xl shadow-inner">{selectedEntry.emoji}</div>
                   <div className="min-w-0 flex-1">
-                    <div className="moria-eyebrow" style={{ color: selectedEntry.type === 'boss' ? '#ffd87b' : selectedEntry.type === 'elite' ? '#b88aff' : '#94a3b8' }}>{selectedEntry.category} · {selectedEntry.type}</div>
-                    <div className="moria-title mt-1 truncate text-2xl font-black">{selectedEntry.name}</div>
-                    <div className="mt-1 text-[10px] text-slate-500">Known habitat · {selectedEntry.location}</div>
+                    <div className="moria-eyebrow" style={{ color: selectedEntry.type === 'boss' ? '#ffd87b' : selectedEntry.type === 'elite' ? '#b88aff' : '#94a3b8' }}>{tr(selectedEntry.category)} · {tr(selectedEntry.type)}</div>
+                    <div className="moria-title mt-1 truncate text-2xl font-black">{tr(selectedEntry.name)}</div>
+                    <div className="mt-1 text-[10px] text-slate-500">{tr('Known habitat')} · {tr(selectedEntry.location)}</div>
                   </div>
                 </div>
 
                 <div className="mt-4 rounded-xl border-l-2 bg-black/20 p-3 text-xs italic leading-5 text-slate-400" style={{ borderColor: selectedEntry.type === 'boss' ? '#ffd87b' : selectedEntry.type === 'elite' ? '#b88aff' : '#64748b' }}>
-                  “{selectedEntry.description}”
+                  “{tr(selectedEntry.description)}”
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -148,8 +149,8 @@ export default function Bestiary({ player, onClose }: Props) {
 function Stat({ icon, label, value, color }: { icon: string; label: string; value: string | number; color: string }) {
   return (
     <div className="moria-card min-w-0 rounded-xl p-2.5">
-      <div className="text-[8px] font-bold tracking-widest text-slate-500">{icon} {label.toUpperCase()}</div>
-      <div className="mt-1 truncate text-sm font-black" style={{ color }} title={String(value)}>{value}</div>
+      <div className="text-[8px] font-bold tracking-widest text-slate-500">{icon} {tr(label).toUpperCase()}</div>
+      <div className="mt-1 truncate text-sm font-black" style={{ color }} title={String(value)}>{typeof value === 'string' ? tr(value) : value}</div>
     </div>
   );
 }
@@ -157,9 +158,9 @@ function Stat({ icon, label, value, color }: { icon: string; label: string; valu
 function InfoGroup({ title, items, color }: { title: string; items: string[]; color: string }) {
   return (
     <div className="mt-4">
-      <div className="moria-eyebrow mb-2 text-[8px]" style={{ color }}>{title}</div>
+      <div className="moria-eyebrow mb-2 text-[8px]" style={{ color }}>{tr(title)}</div>
       <div className="flex flex-wrap gap-1.5">
-        {items.map((item, index) => <span key={`${item}-${index}`} className="moria-chip rounded-lg px-2 py-1 text-[10px] capitalize" style={{ borderColor: `${color}40`, color }}>{item}</span>)}
+        {items.map((item, index) => <span key={`${item}-${index}`} className="moria-chip rounded-lg px-2 py-1 text-[10px] capitalize" style={{ borderColor: `${color}40`, color }}>{tr(item)}</span>)}
       </div>
     </div>
   );
