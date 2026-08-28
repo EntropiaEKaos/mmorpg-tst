@@ -19,6 +19,7 @@ jobs:
       - name: Apply Mor'ia 9.8
         run: |
           python3 tools/apply-moria-9-8-world-depth.py
+          python3 tools/fix-moria-9-8-validation.py
       - name: Validate client and server
         run: |
           npm ci
@@ -79,6 +80,6 @@ jobs:
       - name: Remove temporary release tooling
         run: |
           git pull --rebase origin moria-9.8-world-gameplay-depth
-          git rm -f .github/workflows/run-moria-9-8-world-depth.yml tools/apply-moria-9-8-world-depth.py tools/moria-9-8.trigger
+          git rm -f .github/workflows/run-moria-9-8-world-depth.yml tools/apply-moria-9-8-world-depth.py tools/fix-moria-9-8-validation.py tools/moria-9-8.trigger
           git commit -m "chore(9.8): remove temporary release tooling"
           git push origin HEAD:moria-9.8-world-gameplay-depth
