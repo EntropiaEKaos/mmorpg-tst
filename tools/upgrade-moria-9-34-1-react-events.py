@@ -83,6 +83,11 @@ TOOLTIP.write_text(text, encoding='utf-8')
 
 CAPTURE = Path('tools/capture-moria-9-34.mjs')
 capture = CAPTURE.read_text(encoding='utf-8')
+parent_locator = "const tooltipTrigger = spellSlot.locator('..');"
+if parent_locator not in capture:
+    raise SystemExit('Action Bar tooltip parent locator anchor not found')
+capture = capture.replace(parent_locator, "const tooltipTrigger = spellSlot.locator('xpath=..');", 1)
+
 old_focus = """    await spellSlot.focus();
     const focused = await spellSlot.evaluate((node) => node === document.activeElement);
     if (!focused) throw new Error(\"Mor'ia 9.34 spell proof slot did not receive focus\");
@@ -118,7 +123,8 @@ doc = doc.replace(
     '- a captura prova slot habilitado, foco real, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
     '- a captura prova slot habilitado, `hover` real, estado local aberto, portal real no `document.body` e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
 )
-if 'data-tooltip-open' not in doc or '`document.body`' not in doc:
+doc += '\n- O harness usa `xpath=..` explicitamente para resolver o wrapper pai do slot, evitando ambiguidade de seletor no Playwright.\n'
+if 'data-tooltip-open' not in doc or '`document.body`' not in doc or '`xpath=..`' not in doc:
     raise SystemExit('9.34.1 documentation instrumentation anchor not found')
 DOC.write_text(doc, encoding='utf-8')
 
