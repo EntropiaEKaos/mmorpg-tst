@@ -333,7 +333,7 @@ function buildTileCache(size: number) {
   }, size));
 }
 
-function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: number, y: number, size: number) {
+function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: number, y: number, size: number, worldX = 0, worldY = 0, time = 0) {
   const px = Math.max(1, Math.round(size / 32));
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -367,17 +367,29 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
     ctx.fillStyle = 'rgba(255,239,196,.055)';
     ctx.fillRect(x + px*2, y + px*2, size - px*4, px);
   }
+  const variation = hash(worldX, worldY, type.length);
+  if ((type === 'path' || type === 'floor') && variation > .58) {
+    ctx.fillStyle = `rgba(42,34,27,${.06 + variation * .06})`;
+    const ox = Math.floor(hash(worldX, worldY, 22) * size * .58) + size * .12;
+    const oy = Math.floor(hash(worldY, worldX, 31) * size * .56) + size * .14;
+    ctx.fillRect(x + ox, y + oy, Math.max(px, size * .18), px);
+    if (variation > .82) { ctx.fillRect(x + ox + size*.10, y + oy + px, px, Math.max(px, size*.13)); ctx.fillStyle = 'rgba(119,130,72,.10)'; ctx.fillRect(x + ox - px, y + oy - px, px*2, px*2); }
+  } else if (type === 'grass') {
+    const ox = Math.floor(hash(worldX, worldY, 41) * size), oy = Math.floor(hash(worldY, worldX, 53) * size);
+    ctx.fillStyle = variation > .72 ? 'rgba(215,224,126,.17)' : 'rgba(18,50,22,.16)'; ctx.fillRect(x + ox, y + oy, px, px * (variation > .5 ? 2 : 1));
+    if (variation > .88) { ctx.fillStyle = 'rgba(255,218,128,.26)'; ctx.fillRect(x + ((ox + px*5) % size), y + ((oy + px*3) % size), px, px); }
+  } else if (type === 'sand' && variation > .62) { ctx.fillStyle = 'rgba(116,88,50,.09)'; ctx.fillRect(x + size*.18, y + size*(.28 + variation*.25), size*.48, px); }
+  if (type === 'water') {
+    const wave = (Math.sin(time / 430 + worldX * .7 + worldY * .31) + 1) * .5; ctx.fillStyle = `rgba(220,245,255,${.05 + wave*.11})`; ctx.fillRect(x + size*.12, y + size * (.28 + wave * .20), size*(.22 + wave*.22), px);
+  } else if (type === 'lava') {
+    const pulse = (Math.sin(time / 260 + worldX + worldY * .6) + 1) * .5; ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = `rgba(255,118,35,${.08 + pulse*.18})`; ctx.fillRect(x + size*.20, y + size*.32, size*.58, size*.34); ctx.globalCompositeOperation = 'source-over';
+  }
   ctx.restore();
 }
 
-export function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, size: number) {
-  ctx.imageSmoothingEnabled = false;
-  buildTileCache(size);
-  const cached = tileCache.get(`${tile.type}_${size}`);
-  if (cached) {
-    ctx.drawImage(cached, x, y, size, size);
-    drawMaterialFinish(ctx, tile.type, x, y, size);
-  }
+export function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, size: number, worldX = 0, worldY = 0, time = 0) {
+  ctx.imageSmoothingEnabled = false; buildTileCache(size); const cached = tileCache.get(`${tile.type}_${size}`);
+  if (cached) { ctx.drawImage(cached, x, y, size, size); drawMaterialFinish(ctx, tile.type, x, y, size, worldX, worldY, time); }
 }
 
 export function drawPlayer(
@@ -414,7 +426,7 @@ export function drawMonster(
   const bob = Math.sin(time / 300 + x) * 1;
   const cx = x + size / 2;
   const cy = y + size / 2 + bob;
-  const entitySize = size * msSize;
+  const entitySize = size * msSize * 1.08;
 
   // Layered contact shadow anchors sprites to the terrain without a blurry halo.
   ctx.fillStyle = 'rgba(0,0,0,0.16)';
@@ -539,6 +551,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
+  if (building.type !== 'tree_deco') { const gs=ctx.createLinearGradient(sx,sy+h*.70,sx,sy+h); gs.addColorStop(0,'rgba(0,0,0,0)'); gs.addColorStop(1,'rgba(0,0,0,.30)'); ctx.fillStyle=gs; ctx.fillRect(sx-tileSize*.08,sy+h*.58,w+tileSize*.22,h*.42+tileSize*.08); }
 
   if (building.type === 'tree_deco') {
     drawTile(ctx, { type: 'tree', walkable: false }, sx, sy, tileSize);

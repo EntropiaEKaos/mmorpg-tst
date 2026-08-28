@@ -57,6 +57,7 @@ import Weather from './Weather';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawWorldCinematicPass } from '../game/worldVisualRevamp927';
+import { drawProjectile927, drawParticle927 } from '../game/combatVfx927';
 import { drawHousing } from '../game/housingPresentation';
 import { createWorldLabelQueue } from '../game/worldNameplates';
 import { enforceNpcSpatialIntegrity } from '../game/spatialIntegrity';
@@ -2141,7 +2142,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       for (let x = 0; x < VIEW_W + 1; x++) {
         const tx = cam.x + x, ty = cam.y + y;
         if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) continue;
-        drawTile(ctx, world[ty][tx], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE);
+        drawTile(ctx,world[ty][tx],x*TILE_SIZE,y*TILE_SIZE,TILE_SIZE,tx,ty,now);
         drawCityTileOverlay(ctx, MAPS[currentMapIdRef.current] || MAPS.eldoria, tx, ty, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, world[ty][tx].type);
       }
     }
@@ -2159,9 +2160,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       for (let y = 0; y < VIEW_H + 1; y++) {
         for (let x = 0; x < VIEW_W + 1; x++) {
           const tx = cam.x + x, ty = cam.y + y;
-          if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT && world[ty][tx].type === 'grass') {
-            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-          }
+          if(tx>=0&&tx<MAP_WIDTH&&ty>=0&&ty<MAP_HEIGHT&&world[ty][tx].type==='grass'){ctx.globalAlpha=.76+(((tx*17+ty*31)%11)/11)*.18;ctx.fillRect(x*TILE_SIZE,y*TILE_SIZE,TILE_SIZE,TILE_SIZE);ctx.globalAlpha=1;}
         }
       }
     }
@@ -2393,38 +2392,14 @@ export default function GameScreen({ account, onLogout }: Props) {
         ctx.strokeStyle = pr.color;
         ctx.lineWidth = 3;
         ctx.stroke();
-      } else {
-        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 16);
-        grad.addColorStop(0, pr.color);
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 16, 0, Math.PI * 2);
-        ctx.fill();
-        if (pr.emoji) {
-          ctx.font = '16px system-ui';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(pr.emoji, cx, cy);
-        } else {
-          ctx.fillStyle = '#fff';
-          ctx.beginPath();
-          ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
+      } else {const q=Math.max(0,t-.09),px=(pr.from.x+(pr.to.x-pr.from.x)*q-cam.x+.5)*TILE_SIZE,py=(pr.from.y+(pr.to.y-pr.from.y)*q-cam.y+.5)*TILE_SIZE;drawProjectile927(ctx,pr,cx,cy,px,py);}
     }
 
     // Particles
     for (const pp of particlesRef.current) {
       const sx = (pp.pos.x - cam.x + 0.5) * TILE_SIZE;
       const sy = (pp.pos.y - cam.y + 0.5) * TILE_SIZE;
-      ctx.globalAlpha = pp.life;
-      ctx.fillStyle = pp.color;
-      ctx.beginPath();
-      ctx.arc(sx, sy, pp.size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      drawParticle927(ctx,pp,sx,sy);
     }
 
     // Floating texts

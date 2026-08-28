@@ -391,7 +391,7 @@ export function drawAvatar(
     drawMount(ctx, cx, feetY + cell * 2, size, mount || { id: 'legacy', icon: fallbackMountIcon, color: vocationColor }, direction, time);
     drawPixelHuman(ctx, cx, feetY - cell * 6, size * 0.84, direction, style, colors, addonMask, time);
   } else {
-    drawPixelHuman(ctx, cx, feetY, size, direction, style, colors, addonMask, time);
+    drawPixelHuman(ctx, cx, feetY, size * 1.08, direction, style, colors, addonMask, time);
   }
 
   // 9.7.1 safe-stack policy: anchor to the authored sprite top, never the tile center.
