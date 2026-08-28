@@ -6,6 +6,7 @@ on:
       - 'tools/upgrade-moria-9-40a-grand-shadowfen.py'
       - 'tools/fix-moria-9-40a-fresh-shadowfen.py'
       - 'tools/fix-moria-9-40a-east-gate.py'
+      - 'tools/fix-moria-9-40a-legacy-tests-and-travel.py'
       - '.github/workflows/moria-9-40a-grand-shadowfen.yml'
 permissions:
   contents: write
@@ -24,10 +25,11 @@ jobs:
           cache: npm
       - name: Apply Mor'ia 9.40A Grand Shadowfen
         run: |
-          python -m py_compile tools/upgrade-moria-9-40a-grand-shadowfen.py tools/fix-moria-9-40a-fresh-shadowfen.py tools/fix-moria-9-40a-east-gate.py
+          python -m py_compile tools/upgrade-moria-9-40a-grand-shadowfen.py tools/fix-moria-9-40a-fresh-shadowfen.py tools/fix-moria-9-40a-east-gate.py tools/fix-moria-9-40a-legacy-tests-and-travel.py
           python tools/upgrade-moria-9-40a-grand-shadowfen.py
           python tools/fix-moria-9-40a-fresh-shadowfen.py
           python tools/fix-moria-9-40a-east-gate.py
+          python tools/fix-moria-9-40a-legacy-tests-and-travel.py
       - name: Verify Grand Shadowfen source contract
         run: |
           set -euxo pipefail
@@ -47,6 +49,9 @@ jobs:
           test "$(grep -Fc 'migrateGrandShadowfenData(this.data);' server/engine/ContentDB.mjs)" -ge 2
           grep -Fq "GRAND_SHADOWFEN_MAP" server/engine/AlphaContent.mjs
           grep -Fq "targetMap:'shadowfen', targetX:80, targetY:138" server/engine/GrandEldoria.mjs
+          grep -Fq "world.getMap('emberhold').width" server/test/grand-capital-foundation-9-35.test.mjs
+          grep -Fq "data.grandCapitalVersion>=GRAND_CAPITAL_SCHEMA_VERSION" server/test/grand-frostpeak-9-39.test.mjs
+          grep -Fq "const voidPortal = WORLD.getMap('shadowfen').portals.find" server/test/hardening.test.mjs
           node --check server/engine/GrandShadowfen.mjs
           node --check server/engine/World.mjs
           node --check server/engine/ContentDB.mjs
@@ -73,7 +78,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add server/engine/GrandShadowfen.mjs server/engine/GrandEldoria.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs src/game/maps.ts server/test/grand-shadowfen-9-40.test.mjs docs/MORIA_9_40_GRAND_SHADOWFEN.md
+          git add server/engine/GrandShadowfen.mjs server/engine/GrandEldoria.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs src/game/maps.ts server/test/grand-shadowfen-9-40.test.mjs docs/MORIA_9_40_GRAND_SHADOWFEN.md server/test/grand-capital-foundation-9-35.test.mjs server/test/grand-eldoria-9-36.test.mjs server/test/grand-sunreach-9-37.test.mjs server/test/grand-frostpeak-9-39.test.mjs server/test/hardening.test.mjs
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'feat(9.40a): build authoritative Grand Shadowfen'
           git push origin HEAD:moria-9.28-character-i18n-ptbr
