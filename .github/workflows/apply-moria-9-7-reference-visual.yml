@@ -1,0 +1,66 @@
+name: Apply Mor'ia 9.7 Reference Visual Convergence
+
+on:
+  push:
+    branches:
+      - moria-9.7-reference-visual-convergence
+    paths:
+      - tools/apply-moria-9-7-reference-visual.py
+      - .github/workflows/apply-moria-9-7-reference-visual.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Materialize 9.7 visual convergence
+        run: python tools/apply-moria-9-7-reference-visual.py
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Audit client dependencies
+        run: npm audit
+
+      - name: Typecheck client
+        run: npm run typecheck
+
+      - name: Build client
+        run: npm run build
+
+      - name: Install server dependencies
+        run: npm ci --prefix server --no-fund
+
+      - name: Audit server dependencies
+        run: npm audit --prefix server
+
+      - name: Check server syntax
+        run: npm run check --prefix server
+
+      - name: Run server tests
+        run: npm test --prefix server
+
+      - name: Commit validated 9.7 presentation and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f tools/apply-moria-9-7-reference-visual.py
+          rm -f .github/workflows/apply-moria-9-7-reference-visual.yml
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(9.7): converge world and characters toward pixel reference"
+          git push origin HEAD:moria-9.7-reference-visual-convergence
