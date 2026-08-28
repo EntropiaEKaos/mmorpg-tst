@@ -1,0 +1,86 @@
+name: Mor'ia 9.35B.1 City Designer Polish
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-35b1-city-designer-polish.py'
+      - '.github/workflows/moria-9-35b1-city-designer-polish.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.35B.1 visual polish
+        run: python tools/upgrade-moria-9-35b1-city-designer-polish.py
+      - name: Verify PT-BR visual surface and focused proof
+        run: |
+          grep -q "DESIGNER DE CIDADE · EDIÇÃO DIRETA" src/components/CityDesigner.tsx
+          grep -q "Capital Real" src/components/CityDesigner.tsx
+          grep -q "nearby: 'Próximo'" src/components/CityDesigner.tsx
+          grep -q "data-city-designer-root" src/components/CityDesigner.tsx
+          grep -q "data-grand-minimap-proof" src/visualQa.tsx
+          grep -q "minimapProof.screenshot" tools/capture-moria-9-35b.mjs
+          grep -q "designerRoot.screenshot" tools/capture-moria-9-35b.mjs
+          ! grep -q "fullPage: true" tools/capture-moria-9-35b.mjs
+          grep -q "9.35B.1 — acabamento da prova visual" docs/MORIA_9_35_GRAND_CAPITAL_FOUNDATION.md
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Install stable visual QA browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npm audit --audit-level=high
+          npx playwright install --with-deps chromium
+      - name: Capture and assert Mor'ia 9.35B.1 visuals
+        run: |
+          rm -rf artifacts/moria-9.35b-screenshots
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-vite.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null
+          node tools/capture-moria-9-35b.mjs
+          test -s artifacts/moria-9.35b-screenshots/grand-minimap.png
+          test -s artifacts/moria-9.35b-screenshots/grand-city-designer.png
+          test $(stat -c%s artifacts/moria-9.35b-screenshots/grand-minimap.png) -gt 15000
+          test $(stat -c%s artifacts/moria-9.35b-screenshots/grand-city-designer.png) -gt 80000
+      - name: Upload Mor'ia 9.35B.1 screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9.35b.1-screenshots
+          path: artifacts/moria-9.35b-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit validated Mor'ia 9.35B.1 pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/CityDesigner.tsx src/visualQa.tsx tools/capture-moria-9-35b.mjs server/test/grand-capital-client-9-35.test.mjs docs/MORIA_9_35_GRAND_CAPITAL_FOUNDATION.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'fix(9.35b.1): polish grand-capital visual proof'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr
