@@ -32,11 +32,17 @@ const assertNoLegacyEnglish = async (surface, forbidden) => {
   const hits = forbidden.filter(term => text.includes(term.toUpperCase()));
   if (hits.length) throw new Error(`${surface}: untranslated visible labels: ${hits.join(', ')}`);
 };
+const assertPortuguese = async (surface, required) => {
+  const text = (await page.locator('body').innerText()).toUpperCase();
+  const missing = required.filter(term => !text.includes(term.toUpperCase()));
+  if (missing.length) throw new Error(`${surface}: expected PT-BR labels missing: ${missing.join(', ')}`);
+};
 
 await page.goto('http://127.0.0.1:4173', { waitUntil:'networkidle' });
 await page.waitForFunction(() => document.documentElement.lang === 'pt-BR');
 await page.waitForTimeout(500);
 await captureText('login');
+await assertPortuguese('login', ['MUNDO ONLINE PERSISTENTE','CONTA SEGURA','ENTRAR','CADASTRAR','RECUPERAR','JOGO RÁPIDO OFFLINE']);
 await assertNoLegacyEnglish('login', ['LOGIN','REGISTER','RECOVER','ACCOUNT NAME','PASSWORD','OFFLINE QUICK PLAY','PERSISTENT ONLINE REALM']);
 await screenshot('moria-9-28-login-ptbr.png');
 
@@ -44,9 +50,11 @@ await screenshot('moria-9-28-login-ptbr.png');
 await page.getByRole('button', { name:'CADASTRAR', exact:true }).click();
 await page.locator('input[autocomplete="username"]').fill('revisao928');
 await page.locator('input[autocomplete="new-password"]').fill('SenhaForte928!');
+await assertPortuguese('registration form', ['NOME DA CONTA','SENHA','CRIAR CONTA']);
 await assertNoLegacyEnglish('registration form', ['ACCOUNT NAME','PASSWORD','CREATE ACCOUNT']);
 await page.locator('button.moria-button-primary').last().click();
 await page.getByRole('button', { name:/SALVEI.*CONTINUAR/i }).waitFor({ state:'visible', timeout:10000 });
+await assertPortuguese('recovery code', ['RECUPERAÇÃO DE CONTA','SALVE SEU CÓDIGO DE RECUPERAÇÃO','SALVEI O CÓDIGO','CONTINUAR']);
 await assertNoLegacyEnglish('recovery code', ['ACCOUNT RECOVERY','SAVE YOUR RECOVERY CODE','I SAVED IT','CONTINUE']);
 await page.getByRole('button', { name:/SALVEI.*CONTINUAR/i }).click();
 
@@ -56,6 +64,7 @@ await previews.first().waitFor({ state:'visible', timeout:10000 });
 await page.waitForTimeout(350);
 if (await previews.count() !== 14) throw new Error(`expected 14 vocation previews, got ${await previews.count()}`);
 await captureText('characters-top');
+await assertPortuguese('character creation', ['CRIE SEU PERSONAGEM','NOME DO PERSONAGEM','VOCAÇÃO','CAVALEIRO','PALADINO','FEITICEIRO']);
 await assertNoLegacyEnglish('character creation', ['CHARACTER NAME','VOCATION','SELECTED','CHOOSE','CREATE HERO','KNIGHT','SORCERER','DRUID','ROGUE','PRIEST','RANGER','NECROMANCER','SHAMAN','TEMPLAR']);
 await screenshot('moria-9-28-character-creation-a.png');
 const scrollBox = previews.first().locator('xpath=ancestor::div[contains(@class,"moria-scrollbar")]').first();
@@ -79,6 +88,7 @@ await screenshot('moria-9-28-gameplay-ptbr-character.png');
 await page.keyboard.press('i');
 await page.waitForTimeout(450);
 await captureText('inventory');
+await assertPortuguese('inventory', ['INVENTÁRIO']);
 await assertNoLegacyEnglish('inventory', ['INVENTORY','EQUIP','UNEQUIP','CRAFT','RECIPE','INGREDIENTS','STATS','REQUIREMENTS']);
 await screenshot('moria-9-28-inventory-ptbr.png');
 
