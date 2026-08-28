@@ -331,6 +331,20 @@ function drawMount(
   drawSpriteMatrix(ctx, cx, feetY + bob, size * 0.92, frame, { b: body, d: dark, l: light, k: '#211b17' }, mirror);
 }
 
+export interface AvatarNameplateOptions {
+  nameplateOffsetY?: number;
+  nameplateScale?: number;
+  nameplateBarWidth?: number;
+  nameplateBarHeight?: number;
+  nameplateFontSize?: number;
+  nameplateShowValues?: boolean;
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+}
+
 export function drawAvatar(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -348,6 +362,7 @@ export function drawAvatar(
   mount?: AvatarMount | null,
   mana = 0,
   maxMana = 0,
+  nameplate?: AvatarNameplateOptions | null,
 ) {
   const colors: AvatarColors = {
     head: safeColor(appearance?.colors?.head, DEFAULT_COLORS.head),
@@ -377,38 +392,44 @@ export function drawAvatar(
     drawPixelHuman(ctx, cx, feetY, size, direction, style, colors, addonMask, time);
   }
 
+  // 9.7 compact nameplate policy. Values are map-authored through Content Studio,
+  // but bounded here so a bad presentation edit can never explode the renderer.
   const hpPct = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
   const manaPct = Math.max(0, Math.min(1, mana / Math.max(1, maxMana)));
-  const barW = Math.max(38, Math.round(size * 1.28));
-  const barH = Math.max(4, Math.round(size / 10));
+  const scale = clampNumber(nameplate?.nameplateScale, 0.55, 1.5, 0.82);
+  const offsetY = clampNumber(nameplate?.nameplateOffsetY, -32, 12, -9);
+  const barW = Math.round(clampNumber(nameplate?.nameplateBarWidth, 18, 64, 30) * scale);
+  const barH = Math.max(2, Math.round(clampNumber(nameplate?.nameplateBarHeight, 2, 8, 3) * scale));
+  const fontSize = Math.max(7, Math.round(clampNumber(nameplate?.nameplateFontSize, 7, 14, 8) * scale));
+  const showValues = nameplate?.nameplateShowValues === true;
   const barX = Math.round(cx - barW / 2);
-  const hpBarY = Math.round(y - size * 0.34);
-  const manaBarY = hpBarY + barH + 2;
-  const nameY = hpBarY - 6;
+  const nameY = Math.round(y + offsetY);
+  const hpBarY = nameY + 3;
+  const manaBarY = hpBarY + barH + 1;
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.font = `bold ${Math.max(10, Math.round(size * 0.30))}px monospace`;
+  ctx.font = `bold ${fontSize}px monospace`;
   ctx.strokeStyle = 'rgba(0,0,0,0.95)';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = Math.max(2, Math.round(scale * 2));
   ctx.strokeText(name, cx, nameY);
   ctx.fillStyle = '#f4e6bd';
   ctx.fillText(name, cx, nameY);
 
-  ctx.fillStyle = '#08090a';
+  ctx.fillStyle = '#090a0b';
   ctx.fillRect(barX - 1, hpBarY - 1, barW + 2, barH + 2);
   ctx.fillRect(barX - 1, manaBarY - 1, barW + 2, barH + 2);
-  ctx.fillStyle = '#481318';
+  ctx.fillStyle = '#4b171b';
   ctx.fillRect(barX, hpBarY, barW, barH);
-  ctx.fillStyle = '#d12635';
+  ctx.fillStyle = '#d93643';
   ctx.fillRect(barX, hpBarY, Math.round(barW * hpPct), barH);
-  ctx.fillStyle = '#10284d';
+  ctx.fillStyle = '#122949';
   ctx.fillRect(barX, manaBarY, barW, barH);
-  ctx.fillStyle = '#2877d4';
+  ctx.fillStyle = '#3781d8';
   ctx.fillRect(barX, manaBarY, Math.round(barW * manaPct), barH);
 
-  if (size >= 38) {
-    ctx.font = 'bold 6px monospace';
+  if (showValues && barW >= 32) {
+    ctx.font = `bold ${Math.max(6, fontSize - 2)}px monospace`;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#fff8ef';
     ctx.fillText(`${Math.max(0, Math.round(hp))}/${Math.max(0, Math.round(maxHp))}`, cx, hpBarY + barH / 2);

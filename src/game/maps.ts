@@ -34,6 +34,14 @@ export interface GameMap {
   districts: CityDistrict[];
   landmarks: CityLandmark[];
   props: CityProp[];
+  nameplateOffsetY?: number;
+  nameplateScale?: number;
+  nameplateBarWidth?: number;
+  nameplateBarHeight?: number;
+  nameplateFontSize?: number;
+  nameplateShowValues?: boolean;
+  residentialRingEnabled?: boolean;
+  residentialRingDensity?: number;
 }
 
 const BIOME_SEEDS: Record<BiomeType, number> = { plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 };
@@ -195,6 +203,14 @@ export function syncServerMaps(rawMaps: unknown): void {
       districts: Array.isArray(raw.districts) ? normalizeDistricts(raw.districts) : (base?.districts || []),
       landmarks: Array.isArray(raw.landmarks) ? normalizeLandmarks(raw.landmarks) : (base?.landmarks || []),
       props: Array.isArray(raw.props) ? normalizeProps(raw.props) : (base?.props || []),
+      nameplateOffsetY: Number.isFinite(Number(raw.nameplateOffsetY)) ? Math.max(-32, Math.min(12, Number(raw.nameplateOffsetY))) : base?.nameplateOffsetY,
+      nameplateScale: Number.isFinite(Number(raw.nameplateScale)) ? Math.max(.55, Math.min(1.5, Number(raw.nameplateScale))) : base?.nameplateScale,
+      nameplateBarWidth: Number.isFinite(Number(raw.nameplateBarWidth)) ? Math.max(18, Math.min(64, Number(raw.nameplateBarWidth))) : base?.nameplateBarWidth,
+      nameplateBarHeight: Number.isFinite(Number(raw.nameplateBarHeight)) ? Math.max(2, Math.min(8, Number(raw.nameplateBarHeight))) : base?.nameplateBarHeight,
+      nameplateFontSize: Number.isFinite(Number(raw.nameplateFontSize)) ? Math.max(7, Math.min(14, Number(raw.nameplateFontSize))) : base?.nameplateFontSize,
+      nameplateShowValues: typeof raw.nameplateShowValues === 'boolean' ? raw.nameplateShowValues : base?.nameplateShowValues,
+      residentialRingEnabled: typeof raw.residentialRingEnabled === 'boolean' ? raw.residentialRingEnabled : (base?.residentialRingEnabled ?? false),
+      residentialRingDensity: integer(raw.residentialRingDensity, 0, 10, base?.residentialRingDensity ?? 0),
       portals,
     });
   }

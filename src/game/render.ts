@@ -1,5 +1,5 @@
 import type { Tile } from './types';
-import { drawAvatar, type AvatarAppearance, type AvatarMount } from './playerAvatar';
+import { drawAvatar, type AvatarAppearance, type AvatarMount, type AvatarNameplateOptions } from './playerAvatar';
 import { drawClassicMonsterSprite, drawClassicNpcSprite } from './classicEntityPresentation';
 
 const tileCache = new Map<string, HTMLCanvasElement>();
@@ -357,8 +357,9 @@ export function drawPlayer(
   mount?: AvatarMount | null,
   mana = 0,
   maxMana = 0,
+  nameplate?: AvatarNameplateOptions | null,
 ) {
-  drawAvatar(ctx, x, y, size, direction, name, hp, maxHp, time, vocationColor, mounted, mountIcon, appearance, mount, mana, maxMana);
+  drawAvatar(ctx, x, y, size, direction, name, hp, maxHp, time, vocationColor, mounted, mountIcon, appearance, mount, mana, maxMana, nameplate);
 }
 
 export function drawMonster(
@@ -630,5 +631,22 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
     ctx.fillStyle=accent;ctx.fillRect(sx+w*.08,wallTop+wallH*.20,4,wallH*.55);ctx.fillRect(sx+w*.90,wallTop+wallH*.20,4,wallH*.55);
   }
 
+  ctx.restore();
+}
+
+
+// Foreground roof pass: entities can walk behind real architecture without visually
+// appearing on top of the roof. This changes only compositing, never collision.
+export function drawBuildingOcclusion(ctx: CanvasRenderingContext2D, sx: number, sy: number, building: Building, tileSize: number) {
+  if (['tree_deco','well','obelisk','graveyard','arena','market','dock'].includes(building.type)) return;
+  const w = building.w * tileSize;
+  const h = building.h * tileSize;
+  const roof = building.roofColor || '#8b3a2a';
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  drawPixelRoofTiles(ctx, sx, sy, w, h, roof);
+  // Eave shadow separates the foreground roof from a character passing behind it.
+  ctx.fillStyle = 'rgba(20,16,12,.34)';
+  ctx.fillRect(sx - 3, sy + h * .455, w + 6, Math.max(2, Math.round(tileSize * .07)));
   ctx.restore();
 }

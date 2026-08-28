@@ -73,6 +73,9 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('levelRequired', 'Required level', 'number'), field('seed', 'Seed', 'number'), field('spawnX', 'Spawn X', 'number'), field('spawnY', 'Spawn Y', 'number'),
     field('townX', 'Town X', 'number'), field('townY', 'Town Y', 'number'), field('townRange', 'Town range', 'number'),
     field('cityStyle', 'City style', 'select', { optionKey: 'cityStyles' }), field('cityAccent', 'City accent'), field('roofColor', 'Roof color'), field('wallColor', 'Wall color'), field('roadColor', 'Road color'),
+    field('nameplateOffsetY', 'Nameplate Y offset', 'number'), field('nameplateScale', 'Nameplate scale', 'number'),
+    field('nameplateBarWidth', 'Nameplate bar width', 'number'), field('nameplateBarHeight', 'Nameplate bar height', 'number'), field('nameplateFontSize', 'Name font size', 'number'),
+    field('nameplateShowValues', 'Show HP/Mana values', 'boolean'), field('residentialRingEnabled', 'Decorative residential ring', 'boolean'), field('residentialRingDensity', 'Residential density', 'number'),
     field('districts', 'Districts', 'json'), field('landmarks', 'Landmarks', 'json'), field('props', 'Street props', 'json'),
     field('access', 'Access', 'select', { optionKey: 'mapAccess' }), field('portals', 'Portals', 'json'),
   ]),
@@ -249,6 +252,9 @@ export function validateStudioRecord(type, record) {
     if (record.portals !== undefined && !Array.isArray(record.portals)) return 'portals must be a JSON array';
     if (record.cityStyle !== undefined && record.cityStyle !== '' && !CITY_STYLES.includes(String(record.cityStyle))) return 'cityStyle is not supported';
     for (const key of ['cityAccent','roofColor','wallColor','roadColor']) if (record[key] !== undefined && record[key] !== '' && !COLOR_RE.test(String(record[key]))) return `${key} must be a CSS hex color`;
+    for (const [key,min,max] of [['nameplateOffsetY',-32,12],['nameplateScale',0.55,1.5],['nameplateBarWidth',18,64],['nameplateBarHeight',2,8],['nameplateFontSize',7,14],['residentialRingDensity',0,10]]) { const e=numberIn(record,key,min,max,{required:false}); if(e)return e; }
+    if (record.nameplateShowValues !== undefined && typeof record.nameplateShowValues !== 'boolean') return 'nameplateShowValues must be boolean';
+    if (record.residentialRingEnabled !== undefined && typeof record.residentialRingEnabled !== 'boolean') return 'residentialRingEnabled must be boolean';
     if (record.districts !== undefined) {
       if (!Array.isArray(record.districts) || record.districts.length > 8) return 'districts must be a JSON array with at most 8 entries';
       for (const entry of record.districts) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'district entries must be objects'; for (const key of ['x','y']) { const e=playableCoord(entry,key); if(e)return `district ${e}`; } const e=numberIn(entry,'radius',1,12,{required:true,integer:true}); if(e)return `district ${e}`; if(entry.color && !COLOR_RE.test(String(entry.color))) return 'district color must be a CSS hex color'; }
@@ -330,7 +336,7 @@ export function getContentStudioSchema(type, contentDB) {
     npcs: 'NPCs are synchronized to online clients and gate linked quests/services by server proximity.',
     spells: 'Published spells merge into vocation spell slots and execute server-side.',
     quests: 'Quest NPCs, prerequisites and kill targets are checked before publish.',
-    maps: 'Map edits rebuild deterministic terrain and live portal travel. City style, palette, districts, landmarks and street props drive the 9.6 runtime presentation and minimap. Built-in maps cannot be deleted.',
+    maps: 'Map edits rebuild deterministic terrain and live portal travel. City style, palette, districts, landmarks, street props, nameplates and residential presentation controls drive the runtime presentation and minimap. Built-in maps cannot be deleted.',
     events: 'World events rotate and reward participants from authoritative server state.',
     shops: 'Content shops extend the authoritative alpha merchant catalog and can be edited without a client rebuild.',
     lootTables: 'Loot tables are rolled server-side by monsters that reference them.',

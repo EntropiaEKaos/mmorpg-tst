@@ -52,7 +52,7 @@ import { loadLocal, saveLocal, applySave, persistSubSystems } from '../game/Save
 import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, getUILayout, saveUILayout, DEFAULT_UI_PANEL_ORDER, type UILayout, type CustomNPC, type CustomMonster } from '../game/content';
 import { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeServerSpells, serverNpcToClient, serverQuestToClient, spellContentSlug } from '../game/serverContentAdapters';
 import { getCityBuildings, drawCityDecor, drawCityTileOverlay } from '../game/cityPresentation';
-import { drawBuilding, type Building } from '../game/render';
+import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/render';
 import Weather from './Weather';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
@@ -2293,7 +2293,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     const isInvisible = p.buffs.some((b) => b.type === 'invisible');
     if (isInvisible) ctx.globalAlpha = 0.4;
     drawPlayer(ctx, px, py, TILE_SIZE, p.direction, p.name, p.hp, p.maxHp, now,
-      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount, p.mana, p.maxMana);
+      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount, p.mana, p.maxMana, MAPS[currentMapIdRef.current] || MAPS.eldoria);
     ctx.globalAlpha = 1;
 
     // Draw other players — authoritative server data takes priority
@@ -2304,7 +2304,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         const sy = (op.y - cam.y) * TILE_SIZE;
         if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
         const voc = VOCATIONS[op.vocation];
-        drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction || 'down', `${op.name} [Lv${op.level}]`, op.hp, op.maxHp, now, voc?.color || '#8b2e2e', op.mounted, op.mount?.icon, op.appearance, op.mount, Number(op.mana) || 0, Number(op.maxMana) || 0);
+        drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction || 'down', `${op.name} [Lv${op.level}]`, op.hp, op.maxHp, now, voc?.color || '#8b2e2e', op.mounted, op.mount?.icon, op.appearance, op.mount, Number(op.mana) || 0, Number(op.maxMana) || 0, MAPS[currentMapIdRef.current] || MAPS.eldoria);
       }
     } else {
       // LOCAL/RELAY: draw BroadcastChannel players or simulated bots
@@ -2376,6 +2376,15 @@ export default function GameScreen({ account, onLogout }: Props) {
         ctx.fill();
         ctx.restore();
       }
+    }
+
+    // Foreground architecture occlusion pass. Roofs are re-composited after
+    // players/pets so characters cannot visually stand on top of real houses.
+    for (const b of buildingsRef.current) {
+      const sx = (b.x - cam.x) * TILE_SIZE;
+      const sy = (b.y - cam.y) * TILE_SIZE;
+      if (sx > canvas.width || sy > canvas.height || sx + b.w * TILE_SIZE < 0 || sy + b.h * TILE_SIZE < 0) continue;
+      drawBuildingOcclusion(ctx, sx, sy, b, TILE_SIZE);
     }
 
     // Projectiles

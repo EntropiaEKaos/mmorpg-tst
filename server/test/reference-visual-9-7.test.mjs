@@ -48,3 +48,20 @@ test('9.7 night presentation preserves detail instead of crushing the world unde
   assert.match(day, /let darkness = 0\.38/);
   assert.doesNotMatch(day, /let darkness = 0\.55/);
 });
+
+test('9.7 editable compact nameplates and architecture occlusion stay presentation-only', () => {
+  const avatar = read('src/game/playerAvatar.ts');
+  const render = read('src/game/render.ts');
+  const screen = read('src/components/GameScreen.tsx');
+  const maps = read('src/game/maps.ts');
+  const city = read('src/game/cityPresentation.ts');
+  const studio = read('server/engine/ContentStudio.mjs');
+  assert.match(avatar, /nameplateOffsetY/);
+  assert.match(avatar, /nameplateShowValues/);
+  assert.match(render, /drawBuildingOcclusion/);
+  assert.match(screen, /Foreground architecture occlusion pass/);
+  assert.match(maps, /residentialRingEnabled/);
+  assert.match(city, /Disabled by default because/);
+  assert.match(studio, /Nameplate Y offset/);
+  assert.match(studio, /Decorative residential ring/);
+});
