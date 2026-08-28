@@ -1,0 +1,67 @@
+name: Mor'ia 9.38A Grand Ironwood
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-38a-grand-ironwood.py'
+      - '.github/workflows/moria-9-38a-grand-ironwood.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.38A Grand Ironwood
+        run: python tools/upgrade-moria-9-38a-grand-ironwood.py
+      - name: Verify Grand Ironwood source contract
+        run: |
+          test -s server/engine/GrandIronwood.mjs
+          test -s server/test/grand-ironwood-9-38.test.mjs
+          test -s docs/MORIA_9_38_GRAND_IRONWOOD.md
+          grep -q "GRAND_CAPITAL_SCHEMA_VERSION = 4" server/engine/GrandIronwood.mjs
+          grep -q "urbanPlan:'forest-rings'" server/engine/GrandIronwood.mjs
+          grep -q "forestCapitalTile" server/engine/World.mjs
+          grep -q "forestCapitalTile" src/game/maps.ts
+          grep -q "URBAN_PLANS" server/engine/ContentStudio.mjs
+          grep -q "urbanPlans" server/engine/ContentStudio.mjs
+          grep -q "migrateGrandIronwoodData" server/engine/ContentDB.mjs
+          grep -q "roadToTenVersion = 1" server/engine/ContentDB.mjs
+          node --check server/engine/GrandIronwood.mjs
+          node --check server/engine/World.mjs
+          node --check server/engine/ContentDB.mjs
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate focused Grand Ironwood contract
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          node --test server/test/grand-ironwood-9-38.test.mjs
+      - name: Validate complete server suite
+        run: npm test --prefix server
+      - name: Commit validated Mor'ia 9.38A pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/engine/GrandIronwood.mjs server/engine/GrandEldoria.mjs server/engine/GrandSunreach.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs server/engine/ContentStudio.mjs server/engine/ContentIntegrity.mjs src/game/maps.ts server/test/grand-ironwood-9-38.test.mjs docs/MORIA_9_38_GRAND_IRONWOOD.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.38a): build authoritative Grand Ironwood'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr
