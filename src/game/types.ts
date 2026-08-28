@@ -20,7 +20,7 @@ export interface Tile {
   type: TileType;
   walkable: boolean;
   blocksSight?: boolean;
-  variant?: 'swamp' | 'crystal';
+  variant?: 'swamp' | 'crystal' | 'storm';
 }
 
 export interface Position {

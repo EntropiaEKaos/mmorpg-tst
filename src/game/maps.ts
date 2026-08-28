@@ -568,7 +568,8 @@ export function generateMap(mapId: string): Tile[][] {
         }
       }
       const inCrystalUrban = mapData.urbanPlan === 'geode-chambers' && mapData.urbanBounds && x >= mapData.urbanBounds.x && x < mapData.urbanBounds.x + mapData.urbanBounds.width && y >= mapData.urbanBounds.y && y < mapData.urbanBounds.y + mapData.urbanBounds.height;
-      const variant: Tile['variant'] = inCrystalUrban && (type === 'wall' || type === 'floor' || type === 'path') ? 'crystal' : biome === 'swamp' && (type === 'water' || type === 'grass' || type === 'bridge') ? 'swamp' : undefined;
+      const inStormUrban = mapData.urbanPlan === 'tempest-archipelago' && mapData.urbanBounds && x >= mapData.urbanBounds.x && x < mapData.urbanBounds.x + mapData.urbanBounds.width && y >= mapData.urbanBounds.y && y < mapData.urbanBounds.y + mapData.urbanBounds.height;
+      const variant: Tile['variant'] = inCrystalUrban && (type === 'wall' || type === 'floor' || type === 'path') ? 'crystal' : inStormUrban && (type === 'water' || type === 'rock' || type === 'snow' || type === 'path' || type === 'bridge') ? 'storm' : biome === 'swamp' && (type === 'water' || type === 'grass' || type === 'bridge') ? 'swamp' : undefined;
       row.push({ type, walkable, blocksSight, ...(variant ? { variant } : {}) });
     }
     map.push(row);

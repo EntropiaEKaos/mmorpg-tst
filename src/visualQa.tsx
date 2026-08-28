@@ -21,6 +21,7 @@ import GrandFrostpeakPanorama from './components/GrandFrostpeakPanorama';
 import GrandShadowfenPanorama from './components/GrandShadowfenPanorama';
 import GrandEmberholdPanorama from './components/GrandEmberholdPanorama';
 import GrandCrystalDeepPanorama from './components/GrandCrystalDeepPanorama';
+import GrandStormwatchPanorama from './components/GrandStormwatchPanorama';
 import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge from './components/LocaleBridge';
 import { saveBook, sendSystemMail } from './game/content';
@@ -319,6 +320,19 @@ function AuthoritativeGrandCrystalDeepQa({ mode }: { mode: CrystalDeepQaMode }) 
   return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-crystal-deep-server-ready="panorama"><GrandCrystalDeepPanorama /></div>;
 }
 
+
+const STORMWATCH_QA_PLAYER = { ...QA_PLAYER, mapId: 'stormwatch_isle', pos: { x: 128, y: 128 } } as unknown as Player;
+type StormwatchQaMode = 'stormwatch-minimap' | 'stormwatch-city-designer' | 'stormwatch-panorama';
+function AuthoritativeGrandStormwatchQa({mode}:{mode:StormwatchQaMode}){
+  const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading');const [error,setError]=useState('');
+  useEffect(()=>{let active=true;const params=new URLSearchParams(window.location.search);const base=params.get('qaServer')||'http://127.0.0.1:3000';const token=params.get('qaToken')||'';fetch(`${base}/admin/api/maps?token=${encodeURIComponent(token)}`,{cache:'no-store'}).then(async response=>{if(!response.ok)throw new Error(`Servidor de conteúdo respondeu ${response.status}`);return response.json();}).then(payload=>{if(!active)return;const records=Array.isArray(payload?.items)?payload.items:[];const storm=records.find((record:any)=>record?.id==='stormwatch_isle');if(!storm||Number(storm.width)!==160||Number(storm.height)!==160||storm.settlementClass!=='capital'||storm.urbanPlan!=='tempest-archipelago'||!Array.isArray(storm.landmarks)||storm.landmarks.length!==42)throw new Error('Grand Stormwatch Isle autoritativa 160×160 não foi recebida do servidor');syncServerMaps(records);setStatus('ready');}).catch(reason=>{if(!active)return;setError(reason instanceof Error?reason.message:String(reason));setStatus('error');});return()=>{active=false;};},[]);
+  if(status==='loading')return <div className="relative z-10 p-8 text-cyan-100" data-grand-stormwatch-server-loading="true">Sincronizando Grand Stormwatch Isle com o servidor autoritativo…</div>;
+  if(status==='error')return <div className="relative z-10 p-8 text-red-200" data-grand-stormwatch-server-error="true">{error}</div>;const map=MAPS.stormwatch_isle;
+  if(mode==='stormwatch-minimap')return <div className="relative z-10 flex min-h-screen items-center justify-center p-6"><div data-grand-stormwatch-server-ready="minimap" className="rounded-xl border border-cyan-300/25 bg-black/80 p-4 shadow-2xl"><div className="mb-3"><div className="text-sm font-black tracking-wider text-cyan-50">GRAND STORMWATCH ISLE · CAPITAL INSULAR 160×160</div><div className="mt-1 text-[10px] text-cyan-100/55">Servidor autoritativo · {map.districts.length} distritos · {map.landmarks.length} marcos · 4 acessos físicos · jogador 128,128</div></div><WorldMiniMap player={STORMWATCH_QA_PLAYER} monsters={[]} mapId="stormwatch_isle" /></div></div>;
+  if(mode==='stormwatch-city-designer')return <div className="relative z-10 p-4" data-grand-stormwatch-server-ready="designer"><CityDesigner /></div>;
+  return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-stormwatch-server-ready="panorama"><GrandStormwatchPanorama /></div>;
+}
+
 function VisualQa() {
   const panel = new URLSearchParams(window.location.search).get('panel') || 'library';
   const [inventory, setInventory] = useState<Item[]>([
@@ -366,6 +380,9 @@ function VisualQa() {
       {panel === 'crystal-deep-minimap' && <AuthoritativeGrandCrystalDeepQa mode="crystal-deep-minimap" />}
       {panel === 'crystal-deep-city-designer' && <AuthoritativeGrandCrystalDeepQa mode="crystal-deep-city-designer" />}
       {panel === 'crystal-deep-panorama' && <AuthoritativeGrandCrystalDeepQa mode="crystal-deep-panorama" />}
+      {panel === 'stormwatch-minimap' && <AuthoritativeGrandStormwatchQa mode="stormwatch-minimap" />}
+      {panel === 'stormwatch-city-designer' && <AuthoritativeGrandStormwatchQa mode="stormwatch-city-designer" />}
+      {panel === 'stormwatch-panorama' && <AuthoritativeGrandStormwatchQa mode="stormwatch-panorama" />}
     </div>
   );
 }

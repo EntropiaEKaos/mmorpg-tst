@@ -98,6 +98,25 @@ function buildTileCache(size: number) {
     ctx.imageSmoothingEnabled=false;ctx.fillStyle='#424762';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));ctx.fillStyle='#65718c';ctx.fillRect(0,s*.28,s,s*.44);ctx.fillStyle='rgba(116,225,255,.34)';ctx.fillRect(0,s*.46,s,Math.max(px,s*.05));for(let i=0;i<5;i++){const x=Math.floor(hash(i,257)*s);ctx.fillStyle='rgba(166,143,238,.28)';ctx.fillRect(x,0,px,s);}
   },size));
 
+
+  tileCache.set(`water_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;const grad=ctx.createLinearGradient(0,0,s,s);grad.addColorStop(0,'#102b3b');grad.addColorStop(.5,'#173d50');grad.addColorStop(1,'#0b2130');ctx.fillStyle=grad;ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));
+    for(let i=0;i<8;i++){const y=Math.floor(hash(i,301)*s);const x=Math.floor(hash(i,307)*s*.55);ctx.fillStyle=i%3===0?'rgba(183,225,239,.32)':'rgba(92,142,165,.24)';ctx.fillRect(x,y,Math.max(px,s*(.16+hash(i,311)*.30)),px);}
+    ctx.fillStyle='rgba(4,14,23,.34)';ctx.fillRect(0,s-px,s,px);
+  },size));
+  tileCache.set(`rock_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#283845';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));for(let i=0;i<18;i++){const x=Math.floor(hash(i,313)*s),y=Math.floor(hash(i,317)*s);ctx.fillStyle=['#354b5a','#425866','#1e2f3b','#596975'][Math.floor(hash(i,319)*4)];ctx.fillRect(x,y,Math.max(px,s*.11),Math.max(px,s*.055));}ctx.fillStyle='rgba(187,222,232,.16)';ctx.fillRect(px,px,s*.48,px);ctx.fillStyle='rgba(4,12,18,.28)';ctx.fillRect(0,s-Math.max(px,s*.08),s,Math.max(px,s*.08));
+  },size));
+  tileCache.set(`snow_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#758a98';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));for(let i=0;i<16;i++){const x=Math.floor(hash(i,331)*s),y=Math.floor(hash(i,337)*s);ctx.fillStyle=hash(i,347)>.55?'rgba(205,226,234,.20)':'rgba(41,58,70,.18)';ctx.fillRect(x,y,Math.max(px,s*.10),px);}ctx.fillStyle='rgba(14,35,48,.13)';ctx.fillRect(0,s*.72,s,s*.28);
+  },size));
+  tileCache.set(`path_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#455a68';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));ctx.fillStyle='#647986';ctx.fillRect(0,s*.18,s,s*.64);for(let y=Math.round(s*.25);y<s;y+=Math.max(3,Math.round(s*.24))){ctx.fillStyle='rgba(17,33,43,.38)';ctx.fillRect(0,y,s,px);}ctx.fillStyle='rgba(129,222,248,.34)';ctx.fillRect(0,s*.48,s,Math.max(px,s*.035));
+  },size));
+  tileCache.set(`bridge_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#102d3e';ctx.fillRect(0,0,s,s);ctx.fillStyle='#5b6470';ctx.fillRect(2,0,s-4,s);const plank=Math.max(3,Math.round(s/6));for(let y=0;y<s;y+=plank){ctx.fillStyle=y%(plank*2)===0?'#69737c':'#4b555f';ctx.fillRect(3,y,s-6,Math.max(1,plank-1));ctx.fillStyle='rgba(185,225,235,.14)';ctx.fillRect(4,y,Math.max(1,s*.35),1);}ctx.fillStyle='#293943';ctx.fillRect(0,0,2,s);ctx.fillRect(s-2,0,2,s);ctx.fillStyle='rgba(108,218,245,.24)';ctx.fillRect(s*.48,0,Math.max(1,s*.04),s);
+  },size));
+
   tileCache.set(`water_${size}`, createTileCanvas((ctx, s) => {
     // Deep water gradient with depth
     const grad = ctx.createLinearGradient(0, 0, 0, s);
@@ -421,10 +440,10 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
   ctx.fillRect(x + size - px, y, px, size);
 
   if (type === 'water') {
-    ctx.fillStyle = variant === 'swamp' ? 'rgba(172,193,124,.12)' : 'rgba(217,241,255,.20)';
+    ctx.fillStyle = variant === 'swamp' ? 'rgba(172,193,124,.12)' : variant === 'storm' ? 'rgba(184,225,239,.13)' : 'rgba(217,241,255,.20)';
     ctx.fillRect(x + size*.12, y + size*.24, size*.28, px);
     ctx.fillRect(x + size*.56, y + size*.66, size*.22, px);
-    ctx.fillStyle = variant === 'swamp' ? 'rgba(10,39,31,.24)' : 'rgba(5,26,58,.18)';
+    ctx.fillStyle = variant === 'swamp' ? 'rgba(10,39,31,.24)' : variant === 'storm' ? 'rgba(3,20,31,.28)' : 'rgba(5,26,58,.18)';
     ctx.fillRect(x + size*.18, y + size*.83, size*.56, px);
   } else if (type === 'lava') {
     ctx.shadowColor = 'rgba(255,83,24,.45)';
@@ -434,7 +453,7 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
     ctx.fillRect(x + size*.59, y + size*.63, size*.18, px);
     ctx.shadowBlur = 0;
   } else if (type === 'grass' || type === 'sand' || type === 'snow') {
-    ctx.fillStyle = type === 'grass' ? (variant === 'swamp' ? 'rgba(141,158,87,.065)' : 'rgba(210,228,144,.08)') : type === 'snow' ? 'rgba(255,255,255,.16)' : 'rgba(255,235,174,.11)';
+    ctx.fillStyle = type === 'grass' ? (variant === 'swamp' ? 'rgba(141,158,87,.065)' : 'rgba(210,228,144,.08)') : type === 'snow' ? (variant === 'storm' ? 'rgba(194,221,230,.09)' : 'rgba(255,255,255,.16)') : 'rgba(255,235,174,.11)';
     ctx.fillRect(x + size*.22, y + size*.19, px, px);
     ctx.fillRect(x + size*.67, y + size*.72, px, px);
   } else if (type === 'path' || type === 'floor' || type === 'wood_floor' || type === 'bridge') {
@@ -462,7 +481,7 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
     }
   } else if (type === 'sand' && variation > .62) { ctx.fillStyle = 'rgba(116,88,50,.09)'; ctx.fillRect(x + size*.18, y + size*(.28 + variation*.25), size*.48, px); }
   if (type === 'water') {
-    const wave = (Math.sin(time / 430 + worldX * .7 + worldY * .31) + 1) * .5; ctx.fillStyle = variant === 'swamp' ? `rgba(171,192,120,${.025 + wave*.065})` : `rgba(220,245,255,${.05 + wave*.11})`; ctx.fillRect(x + size*.12, y + size * (.28 + wave * .20), size*(.22 + wave*.22), px);
+    const wave = (Math.sin(time / 430 + worldX * .7 + worldY * .31) + 1) * .5; ctx.fillStyle = variant === 'swamp' ? `rgba(171,192,120,${.025 + wave*.065})` : variant === 'storm' ? `rgba(166,219,236,${.035 + wave*.075})` : `rgba(220,245,255,${.05 + wave*.11})`; ctx.fillRect(x + size*.12, y + size * (.28 + wave * .20), size*(.22 + wave*.22), px);
   } else if (type === 'lava') {
     const pulse = (Math.sin(time / 260 + worldX + worldY * .6) + 1) * .5; ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = `rgba(255,118,35,${.08 + pulse*.18})`; ctx.fillRect(x + size*.20, y + size*.32, size*.58, size*.34); ctx.globalCompositeOperation = 'source-over';
   }
