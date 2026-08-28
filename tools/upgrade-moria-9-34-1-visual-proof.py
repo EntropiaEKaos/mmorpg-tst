@@ -18,6 +18,56 @@ visual.write_text(text, encoding='utf-8')
 
 tooltip = Path('src/components/Tooltip.tsx')
 text = tooltip.read_text(encoding='utf-8')
+old_bus = """// Singleton tooltip state
+let tooltipListeners: Array<(d: TooltipData | null) => void> = [];
+
+function showGlobalTooltip(data: TooltipData) {
+  tooltipListeners.forEach((fn) => fn(data));
+}
+
+function hideGlobalTooltip() {
+  tooltipListeners.forEach((fn) => fn(null));
+}
+"""
+new_bus = """// Browser-level tooltip event bus. This remains presentation-only while avoiding
+// module-instance coupling under HMR, split bundles and isolated visual-QA entrypoints.
+const TOOLTIP_SHOW_EVENT = 'moria-tooltip-show';
+const TOOLTIP_HIDE_EVENT = 'moria-tooltip-hide';
+
+function showGlobalTooltip(data: TooltipData) {
+  window.dispatchEvent(new CustomEvent<TooltipData>(TOOLTIP_SHOW_EVENT, { detail: data }));
+}
+
+function hideGlobalTooltip() {
+  window.dispatchEvent(new Event(TOOLTIP_HIDE_EVENT));
+}
+"""
+if new_bus not in text:
+    if old_bus not in text:
+        raise SystemExit('Tooltip singleton bus anchor not found')
+    text = text.replace(old_bus, new_bus, 1)
+old_effect = """  useEffect(() => {
+    tooltipListeners.push(setData);
+    return () => {
+      tooltipListeners = tooltipListeners.filter((fn) => fn !== setData);
+    };
+  }, []);
+"""
+new_effect = """  useEffect(() => {
+    const handleShow = (event: Event) => setData((event as CustomEvent<TooltipData>).detail);
+    const handleHide = () => setData(null);
+    window.addEventListener(TOOLTIP_SHOW_EVENT, handleShow);
+    window.addEventListener(TOOLTIP_HIDE_EVENT, handleHide);
+    return () => {
+      window.removeEventListener(TOOLTIP_SHOW_EVENT, handleShow);
+      window.removeEventListener(TOOLTIP_HIDE_EVENT, handleHide);
+    };
+  }, []);
+"""
+if new_effect not in text:
+    if old_effect not in text:
+        raise SystemExit('Tooltip renderer effect anchor not found')
+    text = text.replace(old_effect, new_effect, 1)
 old_enter = """  const handleEnter = useCallback(() => {
     if (disabled) return;
     timerRef.current = setTimeout(() => {
@@ -101,7 +151,7 @@ A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate
 1. a Árvore de Talentos ainda exibia `You have` em inglês;
 2. `actionbar.png` podia ser aceito mesmo com a barra fora do enquadramento visível.
 
-Durante o endurecimento do gate, a automação também expôs fragilidade na ativação do tooltip quando o foco ocorre em um controle filho.
+Durante o endurecimento do gate, a automação confirmou que o slot estava habilitado e recebia foco, mas o antigo barramento singleton não entregava o estado ao renderer no entrypoint isolado de QA. Isso revelou acoplamento desnecessário à identidade da instância do módulo.
 
 ## Correções
 
@@ -109,6 +159,7 @@ Durante o endurecimento do gate, a automação também expôs fragilidade na ati
 - fixa uma posição determinística da Action Bar apenas no `visual-qa.html`;
 - o capturador exige que a janela `action-bar` tenha dimensões reais e esteja completamente dentro da viewport 1440x1000;
 - o capturador valida o título `Barra de Ações` sem depender da capitalização visual aplicada pelo CSS;
+- substitui o array singleton de listeners por um barramento de eventos do navegador (`moria-tooltip-show` / `moria-tooltip-hide`), reduzindo fragilidade com HMR, chunks e entrypoints isolados sem alterar dados de jogo;
 - o Tooltip real usa `pointerenter/pointerleave` e `focus/blur` em fase de captura, garantindo a ativação quando o foco está no botão filho e melhorando suporte a teclado/pen;
 - agendamentos de tooltip anteriores são cancelados antes de um novo timer, evitando timers concorrentes;
 - wrappers reais recebem `data-tooltip-trigger=\"true\"` para QA estrutural sem alterar regras de jogo;
@@ -117,7 +168,7 @@ Durante o endurecimento do gate, a automação também expôs fragilidade na ati
 
 ## Escopo
 
-Nenhuma regra de combate, cooldown, dano, progressão, talento, item ou autoridade do servidor é alterada. A mudança é de apresentação, acessibilidade de interação e qualidade da prova visual.
+Nenhuma regra de combate, cooldown, dano, progressão, talento, item ou autoridade do servidor é alterada. A mudança é de apresentação, acessibilidade de interação e robustez da infraestrutura de tooltip/QA.
 
 ## Gate
 
