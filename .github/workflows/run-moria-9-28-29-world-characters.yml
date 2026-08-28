@@ -1,0 +1,43 @@
+name: Mor'ia 9.28-9.29 World & Characters
+on:
+  push:
+    branches: [moria-9.27-visual-rebirth]
+    paths:
+      - '.github/workflows/run-moria-9-28-29-world-characters.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.27-visual-rebirth
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - name: Apply terrain and character pass
+        run: python tools/apply-moria-9-28-29-world-characters.py
+      - run: npm ci
+      - run: npm audit
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Architecture budget
+        run: python -c "from pathlib import Path; p=Path('src/components/GameScreen.tsx'); print(p.stat().st_size); assert p.stat().st_size <= 155000"
+      - run: npm ci --prefix server --no-fund
+      - run: npm audit --prefix server
+      - run: npm run check --prefix server
+      - run: npm test --prefix server
+      - name: Commit validated pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json server/package.json server/package-lock.json src/game/render.ts src/game/playerAvatar.ts src/game/classicEntityPresentation.ts docs/MORIA_9_28_9_29_TERRAIN_CHARACTERS.md
+          git commit -m 'feat(9.29): deepen terrain and character readability'
+          git push origin HEAD:moria-9.27-visual-rebirth
