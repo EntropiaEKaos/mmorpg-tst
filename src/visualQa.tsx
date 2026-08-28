@@ -12,6 +12,8 @@ import TalentTree from './components/TalentTree';
 import ActionBar from './components/ActionBar';
 import CastBar, { triggerCast } from './components/CastBar';
 import DPSMeter from './components/DPSMeter';
+import WorldMiniMap from './components/WorldMiniMap';
+import CityDesigner from './components/CityDesigner';
 import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge from './components/LocaleBridge';
 import { saveBook, sendSystemMail } from './game/content';
@@ -19,6 +21,7 @@ import type { Item, Player } from './game/types';
 import { saveAuctionListings, setCoins } from './game/economy';
 import { VOCATIONS } from './game/classes';
 import { dpsMeter } from './game/dpsMeter';
+import { syncServerMaps } from './game/maps';
 
 const QA_PLAYER = {
   name: 'Aurora',
@@ -36,10 +39,36 @@ const QA_PLAYER = {
   activeQuests: [],
 } as unknown as Player;
 
+
+const QA_GRAND_MAP = {
+  id: 'qa_grand_capital', name: 'Nova Auroria', description: 'Capital sintética para prova visual de escala.', biome: 'plains',
+  width: 160, height: 160, settlementClass: 'capital', urbanBounds: { x: 28, y: 28, width: 104, height: 104 },
+  seed: 935, spawnX: 80, spawnY: 80, townX: 80, townY: 80, townRange: 18,
+  cityStyle: 'royal', cityAccent: '#d8b45a', roofColor: '#7e2f34', wallColor: '#c9b68d', roadColor: '#9b8764',
+  districts: [
+    { id: 'qa_civic', name: 'Distrito Cívico', icon: '♜', x: 80, y: 80, radius: 14, color: '#d8b45a' },
+    { id: 'qa_high', name: 'Distrito Alto', icon: '◇', x: 126, y: 68, radius: 11, color: '#caa6ff' },
+  ],
+  landmarks: [
+    { id: 'qa_sun_keep', name: 'Fortaleza Solar', kind: 'keep', icon: '♜', x: 70, y: 62, w: 18, h: 14 },
+    { id: 'qa_far_keep', name: 'Bastião do Horizonte', kind: 'tower', icon: '◆', x: 124, y: 72, w: 16, h: 12 },
+    { id: 'qa_grand_market', name: 'Grande Mercado', kind: 'market', icon: '⚖', x: 102, y: 110, w: 14, h: 10 },
+  ],
+  props: [
+    { id: 'qa_banner_far', kind: 'banner', x: 142, y: 118, color: '#d8b45a' },
+    { id: 'qa_statue', kind: 'statue', x: 80, y: 94, color: '#f5de8f' },
+  ],
+  portals: [{ x: 150, y: 80, targetMap: 'eldoria', targetX: 40, targetY: 40, label: 'Portal de Eldoria' }],
+};
+
+const QA_GRAND_PLAYER = { ...QA_PLAYER, mapId: 'qa_grand_capital', pos: { x: 136, y: 118 } } as unknown as Player;
+
 function seedVisualQa() {
   localStorage.removeItem('moria_books');
   localStorage.removeItem('moria_read_books_Aurora');
   localStorage.removeItem('moria_mail_Aurora');
+  localStorage.removeItem('moria_city_designer_maps');
+  syncServerMaps([QA_GRAND_MAP]);
   // Deterministic HUD position for screenshot proof. This only affects visual-qa.html.
   localStorage.setItem('moria:hud:action-bar:position', JSON.stringify({ x: 220, y: 820 }));
   saveBook({
@@ -124,6 +153,8 @@ function VisualQa() {
       {panel === 'actionbar' && <div data-qa-actionbar><GlobalTooltipRenderer /><ActionBar player={qaPlayer} spells={VOCATIONS.knight.spells} potions={{ hp: 4, mp: 3, hpg: 1 }} onCastSpell={() => {}} onUsePotion={() => {}} /></div>}
       {panel === 'castbar' && <CastVisualQa />}
       {panel === 'dps' && <DPSMeter onClose={() => {}} />}
+      {panel === 'grand-minimap' && <div className="relative z-10 flex min-h-screen items-center justify-center"><WorldMiniMap player={QA_GRAND_PLAYER} monsters={[]} mapId="qa_grand_capital" /></div>}
+      {panel === 'grand-city-designer' && <div className="relative z-10 p-4"><CityDesigner /></div>}
     </div>
   );
 }

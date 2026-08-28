@@ -3,7 +3,12 @@ import { CITY_STYLES, withCityDefaults, type CityStyle, type CityDistrict, type 
 
 export const MAP_WIDTH = 80;
 export const MAP_HEIGHT = 80;
+export const MIN_MAP_DIMENSION = 40;
+export const MAX_MAP_DIMENSION = 192;
 export const TILE_SIZE = 32;
+
+export type SettlementClass = 'wilderness' | 'town' | 'city' | 'capital';
+export interface UrbanBounds { x: number; y: number; width: number; height: number; }
 
 export type BiomeType = 'plains' | 'snow' | 'swamp' | 'desert' | 'shadow';
 
@@ -19,6 +24,10 @@ export interface GameMap {
   name: string;
   description: string;
   biome: BiomeType;
+  width?: number;
+  height?: number;
+  settlementClass?: SettlementClass;
+  urbanBounds?: UrbanBounds;
   seed?: number;
   spawnPoint: Position;
   portals: Portal[];
@@ -65,42 +74,71 @@ const VALID_BIOMES = new Set<BiomeType>(['plains', 'snow', 'swamp', 'desert', 's
 const VALID_CITY_STYLES = new Set<CityStyle>(CITY_STYLES);
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
-function cityCoord(value: unknown, fallback: number): number {
+function cityCoord(value: unknown, fallback: number, dimension = MAP_WIDTH): number {
   const n = Number(value);
-  return Number.isFinite(n) ? Math.max(1, Math.min(MAP_WIDTH - 2, Math.round(n))) : fallback;
+  return Number.isFinite(n) ? Math.max(1, Math.min(dimension - 2, Math.round(n))) : fallback;
 }
 function cityColor(value: unknown, fallback: string): string { return typeof value === 'string' && HEX_COLOR.test(value) ? value : fallback; }
-function normalizeDistricts(raw: unknown): CityDistrict[] {
+function settlementClassOf(value: unknown, mapId = ''): SettlementClass {
+  const requested = String(value || (mapId === 'eldoria' ? 'capital' : 'city'));
+  return (['wilderness','town','city','capital'] as const).includes(requested as SettlementClass) ? requested as SettlementClass : 'city';
+}
+function mapDimension(value: unknown, fallback = MAP_WIDTH): number { return integer(value, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, fallback); }
+function normalizeUrbanBounds(raw: unknown, width: number, height: number, townCenter: Position, settlementClass: SettlementClass): UrbanBounds {
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Partial<UrbanBounds> : {};
+  const radius = settlementClass === 'capital' ? Math.min(36, Math.floor(Math.min(width, height) / 3)) : Math.min(14, Math.floor(Math.min(width, height) / 4));
+  const x = integer(source.x, 1, width - 3, Math.max(1, townCenter.x - radius));
+  const y = integer(source.y, 1, height - 3, Math.max(1, townCenter.y - radius));
+  const maxWidth = Math.max(2, width - x - 1);
+  const maxHeight = Math.max(2, height - y - 1);
+  return { x, y, width: integer(source.width, 2, maxWidth, Math.min(maxWidth, radius * 2)), height: integer(source.height, 2, maxHeight, Math.min(maxHeight, radius * 2)) };
+}
+function cityBudgets(settlementClass: SettlementClass) {
+  const capital = settlementClass === 'capital';
+  return { districtLimit: capital ? 24 : 8, landmarkLimit: capital ? 64 : 12, propLimit: capital ? 320 : 80, districtRadiusLimit: capital ? 24 : 12, landmarkSizeLimit: capital ? 20 : 10 };
+}
+function normalizeDistricts(raw: unknown, width: number, height: number, settlementClass: SettlementClass): CityDistrict[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter((entry: any) => entry && typeof entry === 'object').slice(0, 8).map((entry: any, index) => ({
+  const { districtLimit, districtRadiusLimit } = cityBudgets(settlementClass);
+  return raw.filter((entry: any) => entry && typeof entry === 'object').slice(0, districtLimit).map((entry: any, index) => ({
     id: String(entry.id || `district_${index + 1}`).slice(0, 60), name: String(entry.name || `District ${index + 1}`).slice(0, 60), icon: String(entry.icon || '◇').slice(0, 8),
-    x: cityCoord(entry.x, 40), y: cityCoord(entry.y, 40), radius: Math.max(1, Math.min(12, Math.round(Number(entry.radius) || 4))), color: cityColor(entry.color, '#d8b45a'),
+    x: cityCoord(entry.x, Math.floor(width / 2), width), y: cityCoord(entry.y, Math.floor(height / 2), height), radius: Math.max(1, Math.min(districtRadiusLimit, Math.round(Number(entry.radius) || 4))), color: cityColor(entry.color, '#d8b45a'),
   }));
 }
-function normalizeLandmarks(raw: unknown): CityLandmark[] {
+function normalizeLandmarks(raw: unknown, width: number, height: number, settlementClass: SettlementClass): CityLandmark[] {
   const kinds = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower','house']);
   if (!Array.isArray(raw)) return [];
-  return raw.filter((entry: any) => entry && typeof entry === 'object').slice(0, 12).map((entry: any, index) => ({
+  const { landmarkLimit, landmarkSizeLimit } = cityBudgets(settlementClass);
+  return raw.filter((entry: any) => entry && typeof entry === 'object').slice(0, landmarkLimit).map((entry: any, index) => ({
     id: String(entry.id || `landmark_${index + 1}`).slice(0, 60), name: String(entry.name || `Landmark ${index + 1}`).slice(0, 60),
     kind: (kinds.has(String(entry.kind)) ? String(entry.kind) : 'market') as CityLandmark['kind'], icon: String(entry.icon || '◆').slice(0, 8),
-    x: cityCoord(entry.x, 40), y: cityCoord(entry.y, 40), w: Math.max(1, Math.min(10, Math.round(Number(entry.w) || 4))), h: Math.max(1, Math.min(10, Math.round(Number(entry.h) || 4))),
+    x: cityCoord(entry.x, Math.floor(width / 2), width), y: cityCoord(entry.y, Math.floor(height / 2), height), w: Math.max(1, Math.min(landmarkSizeLimit, Math.round(Number(entry.w) || 4))), h: Math.max(1, Math.min(landmarkSizeLimit, Math.round(Number(entry.h) || 4))),
   }));
 }
-function normalizeProps(raw: unknown): CityProp[] {
+function normalizeProps(raw: unknown, width: number, height: number, settlementClass: SettlementClass): CityProp[] {
   const kinds = new Set(['banner','lamp','statue','brazier','crystal','grave','tent','sign','barrel','cart','pine','mushroom','anchor','rune']);
   if (!Array.isArray(raw)) return [];
-  return raw.filter((entry: any) => entry && typeof entry === 'object' && kinds.has(String(entry.kind))).slice(0, 80).map((entry: any, index) => ({
-    id: String(entry.id || `prop_${index + 1}`).slice(0, 60), kind: String(entry.kind) as CityProp['kind'], x: cityCoord(entry.x, 40), y: cityCoord(entry.y, 40),
+  const { propLimit } = cityBudgets(settlementClass);
+  return raw.filter((entry: any) => entry && typeof entry === 'object' && kinds.has(String(entry.kind))).slice(0, propLimit).map((entry: any, index) => ({
+    id: String(entry.id || `prop_${index + 1}`).slice(0, 60), kind: String(entry.kind) as CityProp['kind'], x: cityCoord(entry.x, Math.floor(width / 2), width), y: cityCoord(entry.y, Math.floor(height / 2), height),
     color: typeof entry.color === 'string' && HEX_COLOR.test(entry.color) ? entry.color : undefined, label: typeof entry.label === 'string' ? entry.label.slice(0, 60) : undefined,
   }));
 }
 function hydrateMapIdentity(map: GameMap): GameMap {
+  const width = mapDimension(map.width, MAP_WIDTH);
+  const height = mapDimension(map.height, MAP_HEIGHT);
+  const settlementClass = settlementClassOf(map.settlementClass, map.id);
+  const townCenter = { x: cityCoord(map.townCenter?.x, Math.floor(width / 2), width), y: cityCoord(map.townCenter?.y, Math.floor(height / 2), height) };
   const style = VALID_CITY_STYLES.has(map.cityStyle) ? map.cityStyle : undefined;
   const hydrated = withCityDefaults({
-    id: map.id, name: map.name, style, biome: map.biome, townCenter: map.townCenter, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor,
-    districts: normalizeDistricts(map.districts), landmarks: normalizeLandmarks(map.landmarks), props: normalizeProps(map.props),
+    id: map.id, name: map.name, style, biome: map.biome, townCenter, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor,
+    districts: normalizeDistricts(map.districts, width, height, settlementClass), landmarks: normalizeLandmarks(map.landmarks, width, height, settlementClass), props: normalizeProps(map.props, width, height, settlementClass),
   });
-  return { ...map, cityStyle: hydrated.style, cityAccent: hydrated.cityAccent, roofColor: hydrated.roofColor, wallColor: hydrated.wallColor, roadColor: hydrated.roadColor, districts: hydrated.districts, landmarks: hydrated.landmarks, props: hydrated.props };
+  return { ...map, width, height, settlementClass, urbanBounds: normalizeUrbanBounds(map.urbanBounds, width, height, townCenter, settlementClass), townCenter, cityStyle: hydrated.style, cityAccent: hydrated.cityAccent, roofColor: hydrated.roofColor, wallColor: hydrated.wallColor, roadColor: hydrated.roadColor, districts: hydrated.districts, landmarks: hydrated.landmarks, props: hydrated.props };
+}
+
+export function getMapDimensions(map: Pick<GameMap, 'width' | 'height'> | undefined): { width: number; height: number } {
+  return { width: mapDimension(map?.width, MAP_WIDTH), height: mapDimension(map?.height, MAP_HEIGHT) };
 }
 
 const BASE_MAPS: Record<string, GameMap> = {
@@ -167,12 +205,12 @@ function seedFor(id: string, biome: BiomeType): number {
   return Math.max(1, (hash + BIOME_SEEDS[biome]) % 2_147_483_647);
 }
 
-function normalizePortal(raw: any): Portal | null {
+function normalizePortal(raw: any, width = MAP_WIDTH, height = MAP_HEIGHT): Portal | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const x = integer(raw.x ?? raw.pos?.x, 1, MAP_WIDTH - 2, -1);
-  const y = integer(raw.y ?? raw.pos?.y, 1, MAP_HEIGHT - 2, -1);
-  const targetX = integer(raw.targetX ?? raw.targetSpawn?.x, 1, MAP_WIDTH - 2, -1);
-  const targetY = integer(raw.targetY ?? raw.targetSpawn?.y, 1, MAP_HEIGHT - 2, -1);
+  const x = integer(raw.x ?? raw.pos?.x, 1, width - 2, -1);
+  const y = integer(raw.y ?? raw.pos?.y, 1, height - 2, -1);
+  const targetX = integer(raw.targetX ?? raw.targetSpawn?.x, 1, MAX_MAP_DIMENSION - 2, -1);
+  const targetY = integer(raw.targetY ?? raw.targetSpawn?.y, 1, MAX_MAP_DIMENSION - 2, -1);
   const targetMap = typeof raw.targetMap === 'string' ? raw.targetMap.trim().slice(0, 50) : '';
   if (x < 0 || y < 0 || targetX < 0 || targetY < 0 || !targetMap) return null;
   return {
@@ -191,34 +229,39 @@ export function syncServerMaps(rawMaps: unknown): void {
     const base = next[id];
     const requestedBiome = typeof raw.biome === 'string' ? raw.biome.trim().toLowerCase() as BiomeType : undefined;
     const biome = requestedBiome && VALID_BIOMES.has(requestedBiome) ? requestedBiome : (base?.biome || 'plains');
-    const spawnBase = base?.spawnPoint || { x: 40, y: 40 };
-    const townBase = base?.townCenter || { x: 40, y: 40 };
+    const width = mapDimension(raw.width, base?.width || MAP_WIDTH);
+    const height = mapDimension(raw.height, base?.height || MAP_HEIGHT);
+    const settlementClass = settlementClassOf(raw.settlementClass ?? base?.settlementClass, id);
+    const spawnBase = base?.spawnPoint || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
+    const townBase = base?.townCenter || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
     const portals = Array.isArray(raw.portals)
-      ? raw.portals.map(normalizePortal).filter((portal: Portal | null): portal is Portal => Boolean(portal)).slice(0, 20)
+      ? raw.portals.map((portal: any) => normalizePortal(portal, width, height)).filter((portal: Portal | null): portal is Portal => Boolean(portal)).slice(0, 20)
       : (base?.portals.map(portal => ({ ...portal, pos: { ...portal.pos }, targetSpawn: { ...portal.targetSpawn } })) || []);
+    const townCenter = {
+      x: integer(raw.townX ?? raw.townCenter?.x, 1, width - 2, townBase.x),
+      y: integer(raw.townY ?? raw.townCenter?.y, 1, height - 2, townBase.y),
+    };
     next[id] = hydrateMapIdentity({
       id,
+      width, height, settlementClass, urbanBounds: normalizeUrbanBounds(raw.urbanBounds ?? base?.urbanBounds, width, height, townCenter, settlementClass),
       name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : (base?.name || id),
       description: typeof raw.description === 'string' ? raw.description.trim().slice(0, 300) : (base?.description || ''),
       biome,
       seed: integer(raw.seed, 1, 2_147_483_646, base?.seed || seedFor(id, biome)),
       spawnPoint: {
-        x: integer(raw.spawnX ?? raw.spawnPoint?.x, 1, MAP_WIDTH - 2, spawnBase.x),
-        y: integer(raw.spawnY ?? raw.spawnPoint?.y, 1, MAP_HEIGHT - 2, spawnBase.y),
+        x: integer(raw.spawnX ?? raw.spawnPoint?.x, 1, width - 2, spawnBase.x),
+        y: integer(raw.spawnY ?? raw.spawnPoint?.y, 1, height - 2, spawnBase.y),
       },
-      townCenter: {
-        x: integer(raw.townX ?? raw.townCenter?.x, 1, MAP_WIDTH - 2, townBase.x),
-        y: integer(raw.townY ?? raw.townCenter?.y, 1, MAP_HEIGHT - 2, townBase.y),
-      },
+      townCenter,
       townRange: integer(raw.townRange, 0, 20, base?.townRange ?? 8),
       levelRequired: integer(raw.levelRequired, 1, 100_000, base?.levelRequired ?? 1),
       dangerLevel: typeof raw.dangerLevel === 'string' ? raw.dangerLevel.slice(0, 40) : base?.dangerLevel,
       cityStyle: (typeof raw.cityStyle === 'string' ? raw.cityStyle : base?.cityStyle) as CityStyle,
       cityAccent: cityColor(raw.cityAccent, base?.cityAccent || '#d8b45a'), roofColor: cityColor(raw.roofColor, base?.roofColor || '#7e2f34'),
       wallColor: cityColor(raw.wallColor, base?.wallColor || '#c9b68d'), roadColor: cityColor(raw.roadColor, base?.roadColor || '#9b8764'),
-      districts: Array.isArray(raw.districts) ? normalizeDistricts(raw.districts) : (base?.districts || []),
-      landmarks: Array.isArray(raw.landmarks) ? normalizeLandmarks(raw.landmarks) : (base?.landmarks || []),
-      props: Array.isArray(raw.props) ? normalizeProps(raw.props) : (base?.props || []),
+      districts: Array.isArray(raw.districts) ? normalizeDistricts(raw.districts, width, height, settlementClass) : (base?.districts || []),
+      landmarks: Array.isArray(raw.landmarks) ? normalizeLandmarks(raw.landmarks, width, height, settlementClass) : (base?.landmarks || []),
+      props: Array.isArray(raw.props) ? normalizeProps(raw.props, width, height, settlementClass) : (base?.props || []),
       nameplateOffsetY: Number.isFinite(Number(raw.nameplateOffsetY)) ? Math.max(-32, Math.min(12, Number(raw.nameplateOffsetY))) : base?.nameplateOffsetY,
       nameplateScale: Number.isFinite(Number(raw.nameplateScale)) ? Math.max(.55, Math.min(1.5, Number(raw.nameplateScale))) : base?.nameplateScale,
       nameplateBarWidth: Number.isFinite(Number(raw.nameplateBarWidth)) ? Math.max(18, Math.min(64, Number(raw.nameplateBarWidth))) : base?.nameplateBarWidth,
@@ -248,7 +291,15 @@ export function syncServerMaps(rawMaps: unknown): void {
   }
 
   const known = new Set(Object.keys(next));
-  for (const map of Object.values(next)) map.portals = map.portals.filter(portal => known.has(portal.targetMap));
+  for (const map of Object.values(next)) {
+    map.portals = map.portals.filter(portal => {
+      if (!known.has(portal.targetMap)) return false;
+      const target = next[portal.targetMap];
+      const targetWidth = target?.width || MAP_WIDTH;
+      const targetHeight = target?.height || MAP_HEIGHT;
+      return portal.targetSpawn.x >= 1 && portal.targetSpawn.x <= targetWidth - 2 && portal.targetSpawn.y >= 1 && portal.targetSpawn.y <= targetHeight - 2;
+    });
+  }
   for (const key of Object.keys(MAPS)) delete MAPS[key];
   Object.assign(MAPS, next);
 }
@@ -284,12 +335,13 @@ export function generateMap(mapId: string): Tile[][] {
   const rand = seededRandom(mapData.seed || seedFor(mapData.id, biome));
   const map: Tile[][] = [];
   const tc = mapData.townCenter;
+  const { width: mapWidth, height: mapHeight } = getMapDimensions(mapData);
 
-  for (let y = 0; y < MAP_HEIGHT; y++) {
+  for (let y = 0; y < mapHeight; y++) {
     const row: Tile[] = [];
-    for (let x = 0; x < MAP_WIDTH; x++) {
+    for (let x = 0; x < mapWidth; x++) {
       let type: Tile['type'] = 'grass'; let walkable = true; let blocksSight = false;
-      if (x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1) {
+      if (x === 0 || y === 0 || x === mapWidth - 1 || y === mapHeight - 1) {
         type = 'wall'; walkable = false; blocksSight = true;
       } else if ((mapData.spawnPoint.x === x && mapData.spawnPoint.y === y) || mapData.portals.some(portal => portal.pos.x === x && portal.pos.y === y) || isInboundTarget(mapId, x, y)) {
         type = 'path';
