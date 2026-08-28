@@ -7,6 +7,7 @@ on:
       - 'tools/fix-moria-9-39a-terraced-snow.py'
       - 'tools/fix-moria-9-39a-client-unused.py'
       - 'tools/fix-moria-9-39a-focused-contracts.py'
+      - 'tools/fix-moria-9-39a-legacy-tests-and-travel.py'
       - '.github/workflows/moria-9-39a-grand-frostpeak.yml'
 permissions:
   contents: write
@@ -25,11 +26,12 @@ jobs:
           cache: npm
       - name: Apply Mor'ia 9.39A Grand Frostpeak
         run: |
-          python -m py_compile tools/upgrade-moria-9-39a-grand-frostpeak.py tools/fix-moria-9-39a-terraced-snow.py tools/fix-moria-9-39a-client-unused.py tools/fix-moria-9-39a-focused-contracts.py
+          python -m py_compile tools/upgrade-moria-9-39a-grand-frostpeak.py tools/fix-moria-9-39a-terraced-snow.py tools/fix-moria-9-39a-client-unused.py tools/fix-moria-9-39a-focused-contracts.py tools/fix-moria-9-39a-legacy-tests-and-travel.py
           python tools/upgrade-moria-9-39a-grand-frostpeak.py
           python tools/fix-moria-9-39a-terraced-snow.py
           python tools/fix-moria-9-39a-client-unused.py
           python tools/fix-moria-9-39a-focused-contracts.py
+          python tools/fix-moria-9-39a-legacy-tests-and-travel.py
       - name: Verify Grand Frostpeak source contract
         run: |
           set -euxo pipefail
@@ -51,6 +53,8 @@ jobs:
           test "$(grep -Fc 'migrateGrandFrostpeakData(this.data);' server/engine/ContentDB.mjs)" -ge 2
           grep -Fq "const cx=map.townCenter.x;" src/game/maps.ts
           grep -Fq "landmarks.length,41" server/test/grand-frostpeak-9-39.test.mjs
+          grep -Fq "player.level = 14" server/test/hardening.test.mjs
+          grep -Fq "player.level = 15" server/test/hardening.test.mjs
           node --check server/engine/GrandFrostpeak.mjs
           node --check server/engine/World.mjs
           node --check server/engine/ContentDB.mjs
@@ -77,7 +81,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add server/engine/GrandFrostpeak.mjs server/engine/GrandEldoria.mjs server/engine/GrandIronwood.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs src/game/maps.ts src/game/types.ts src/game/render.ts server/test/grand-frostpeak-9-39.test.mjs docs/MORIA_9_39_GRAND_FROSTPEAK.md
+          git add server/engine/GrandFrostpeak.mjs server/engine/GrandEldoria.mjs server/engine/GrandIronwood.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs src/game/maps.ts src/game/types.ts src/game/render.ts server/test/grand-frostpeak-9-39.test.mjs server/test/grand-capital-foundation-9-35.test.mjs server/test/grand-eldoria-9-36.test.mjs server/test/grand-sunreach-9-37.test.mjs server/test/grand-ironwood-9-38.test.mjs server/test/hardening.test.mjs docs/MORIA_9_39_GRAND_FROSTPEAK.md
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'feat(9.39a): build authoritative Grand Frostpeak'
           git push origin HEAD:moria-9.28-character-i18n-ptbr
