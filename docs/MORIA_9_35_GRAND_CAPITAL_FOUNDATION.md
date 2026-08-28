@@ -1,0 +1,26 @@
+# Mor'ia 9.35 — Grand Capital Foundation
+
+## 9.35A — contrato autoritativo
+
+Este passe remove a suposição de que todo mapa do reino mede 80×80 sem alterar mapas legados. Mapas sem dimensões declaradas continuam exatamente em 80×80. Novos mapas podem declarar `width` e `height` entre 40 e 192 tiles; a escala-alvo para grandes capitais é 160×160.
+
+### Novos contratos de mapa
+- `width` / `height`: dimensões físicas autoritativas;
+- `settlementClass`: `wilderness`, `town`, `city` ou `capital`;
+- `urbanBounds`: retângulo da área urbana, separado do tamanho físico do mapa;
+- `townRange`: continua limitado a 0–20 e representa alcance local de serviços, nunca o tamanho da capital.
+
+### Orçamento de autoria
+Mapas comuns preservam 8 distritos, 12 landmarks e 80 props. Capitais podem usar até 24 distritos, 64 landmarks e 320 props, landmarks de até 20×20 e distritos de raio até 24.
+
+### Segurança espacial
+Spawn, centro urbano, landmarks, distritos, props, NPCs, monstros e houses passam a respeitar as dimensões reais do mapa. Portais validam a origem contra o mapa de origem e o destino contra as dimensões reais do mapa de destino. O runtime também descarta portais cujo destino esteja fora da área jogável.
+
+### Compatibilidade
+Os mapas existentes continuam 80×80 se não declararem dimensões. Housing já consumia `map.width`/`map.height` no runtime e agora o Studio deixa de bloquear coordenadas válidas acima de 78 em mapas grandes.
+
+## Gate 9.35A
+A fundação é aceita somente com auditoria de segurança, typecheck/build do cliente, testes completos do servidor e novos testes de regressão para 80×80, 160×160, teto 192×192, housing/NPCs/monstros acima de 78 e portais entre mapas de tamanhos diferentes.
+
+## Próximo passe — 9.35B
+O cliente passa a consumir dimensões reais no `maps.ts`, minimapa e City Designer. Um mapa sintético 160×160 será renderizado e capturado antes de iniciar a 9.36 Grand Eldoria.

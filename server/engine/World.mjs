@@ -11,6 +11,10 @@ class Monster {
 
 const MAP_WIDTH = 80;
 const MAP_HEIGHT = 80;
+const MIN_MAP_DIMENSION = 40;
+const MAX_MAP_DIMENSION = 192;
+const SETTLEMENT_CLASSES = Object.freeze(['wilderness','town','city','capital']);
+const SETTLEMENT_CLASS_SET = new Set(SETTLEMENT_CLASSES);
 const BIOMES = new Set(['plains', 'snow', 'swamp', 'desert', 'shadow']);
 const BIOME_SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
 const CITY_STYLES = new Set(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
@@ -96,17 +100,35 @@ function seedFor(id, biome) {
   return Math.max(1, (hash + (BIOME_SEEDS[biome] || 42)) % 2_147_483_647);
 }
 
-function normalizePortal(raw) {
+function normalizePortal(raw, width = MAP_WIDTH, height = MAP_HEIGHT) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const x = integer(raw.x ?? raw.pos?.x, 1, MAP_WIDTH - 2, -1);
-  const y = integer(raw.y ?? raw.pos?.y, 1, MAP_HEIGHT - 2, -1);
-  const targetX = integer(raw.targetX ?? raw.targetSpawn?.x, 1, MAP_WIDTH - 2, -1);
-  const targetY = integer(raw.targetY ?? raw.targetSpawn?.y, 1, MAP_HEIGHT - 2, -1);
+  const x = integer(raw.x ?? raw.pos?.x, 1, width - 2, -1);
+  const y = integer(raw.y ?? raw.pos?.y, 1, height - 2, -1);
+  // Destination bounds are checked after every map config is known.
+  const targetX = integer(raw.targetX ?? raw.targetSpawn?.x, 1, MAX_MAP_DIMENSION - 2, -1);
+  const targetY = integer(raw.targetY ?? raw.targetSpawn?.y, 1, MAX_MAP_DIMENSION - 2, -1);
   const targetMap = typeof raw.targetMap === 'string' ? raw.targetMap.trim().slice(0, 50) : '';
   if (x < 0 || y < 0 || targetX < 0 || targetY < 0 || !targetMap) return null;
   return {
     pos: { x, y }, targetMap, targetSpawn: { x: targetX, y: targetY },
     label: typeof raw.label === 'string' ? raw.label.trim().slice(0, 80) : '',
+  };
+}
+
+function normalizeUrbanBounds(raw, width, height, townCenter, settlementClass) {
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const radius = settlementClass === 'capital' ? Math.min(36, Math.floor(Math.min(width, height) / 3)) : Math.min(14, Math.floor(Math.min(width, height) / 4));
+  const fallbackX = Math.max(1, townCenter.x - radius);
+  const fallbackY = Math.max(1, townCenter.y - radius);
+  const x = integer(source.x, 1, width - 3, fallbackX);
+  const y = integer(source.y, 1, height - 3, fallbackY);
+  const maxWidth = Math.max(2, width - x - 1);
+  const maxHeight = Math.max(2, height - y - 1);
+  return {
+    x,
+    y,
+    width: integer(source.width, 2, maxWidth, Math.min(maxWidth, radius * 2)),
+    height: integer(source.height, 2, maxHeight, Math.min(maxHeight, radius * 2)),
   };
 }
 
@@ -116,20 +138,26 @@ function cityStyleFor(id, biome, requested) {
   return biome === 'snow' ? 'alpine' : biome === 'swamp' ? 'marsh' : biome === 'desert' ? 'forge' : biome === 'shadow' ? 'void' : 'royal';
 }
 function cityColor(value, fallback) { return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback; }
-function cityCoord(value, fallback) { return integer(value, 1, MAP_WIDTH - 2, fallback); }
-function defaultCityIdentity(id, biome, townCenter, record = {}, base = null) {
+function cityCoord(value, fallback, dimension = MAP_WIDTH) { return integer(value, 1, dimension - 2, fallback); }
+function defaultCityIdentity(id, biome, townCenter, record = {}, base = null, width = MAP_WIDTH, height = MAP_HEIGHT, settlementClass = 'city') {
+  const isCapital = settlementClass === 'capital';
+  const districtLimit = isCapital ? 24 : 8;
+  const landmarkLimit = isCapital ? 64 : 12;
+  const propLimit = isCapital ? 320 : 80;
+  const districtRadiusLimit = isCapital ? 24 : 12;
+  const landmarkSizeLimit = isCapital ? 20 : 10;
   const cityStyle = cityStyleFor(id, biome, record.cityStyle ?? base?.cityStyle);
   const [accent, roof, wall, road] = CITY_PALETTES[cityStyle];
   const offsets=[[-3,-8],[-9,-1],[5,-7],[6,1],[0,5]], sizes=[[6,5],[5,4],[4,5],[5,4],[3,3]], icons=['♜','⚖','✦','▣','◆'];
   const sourceLandmarks = Array.isArray(record.landmarks) && record.landmarks.length ? record.landmarks : (Array.isArray(base?.landmarks) && base.landmarks.length ? base.landmarks : CITY_LANDMARKS[cityStyle].map((name,index)=>({id:`${id}_landmark_${index+1}`,name,kind:CITY_KINDS[index],icon:icons[index],x:townCenter.x+offsets[index][0],y:townCenter.y+offsets[index][1],w:sizes[index][0],h:sizes[index][1]})));
-  const landmarks = sourceLandmarks.filter(x=>x&&typeof x==='object').slice(0,12).map((x,index)=>({id:String(x.id||`${id}_landmark_${index+1}`).slice(0,60),name:String(x.name||`Landmark ${index+1}`).slice(0,60),kind:String(x.kind||'market').slice(0,20),icon:String(x.icon||'◆').slice(0,8),x:cityCoord(x.x,townCenter.x),y:cityCoord(x.y,townCenter.y),w:integer(x.w,1,10,4),h:integer(x.h,1,10,4)}));
+  const landmarks = sourceLandmarks.filter(x=>x&&typeof x==='object').slice(0,landmarkLimit).map((x,index)=>({id:String(x.id||`${id}_landmark_${index+1}`).slice(0,60),name:String(x.name||`Landmark ${index+1}`).slice(0,60),kind:String(x.kind||'market').slice(0,20),icon:String(x.icon||'◆').slice(0,8),x:cityCoord(x.x,townCenter.x,width),y:cityCoord(x.y,townCenter.y,height),w:integer(x.w,1,landmarkSizeLimit,4),h:integer(x.h,1,landmarkSizeLimit,4)}));
   const districtOffsets=[[-5,-2],[5,-2],[-4,5],[5,5]];
   const sourceDistricts = Array.isArray(record.districts) && record.districts.length ? record.districts : (Array.isArray(base?.districts) && base.districts.length ? base.districts : districtOffsets.map((offset,index)=>({id:`${id}_district_${index+1}`,name:['Civic Ward','Market Ward','Temple Ward','Commons'][index],icon:['♜','⚖','✦','⌂'][index],x:townCenter.x+offset[0],y:townCenter.y+offset[1],radius:index===0?5:4,color:accent})));
-  const districts = sourceDistricts.filter(x=>x&&typeof x==='object').slice(0,8).map((x,index)=>({id:String(x.id||`${id}_district_${index+1}`).slice(0,60),name:String(x.name||`District ${index+1}`).slice(0,60),icon:String(x.icon||'◇').slice(0,8),x:cityCoord(x.x,townCenter.x),y:cityCoord(x.y,townCenter.y),radius:integer(x.radius,1,12,4),color:cityColor(x.color,accent)}));
+  const districts = sourceDistricts.filter(x=>x&&typeof x==='object').slice(0,districtLimit).map((x,index)=>({id:String(x.id||`${id}_district_${index+1}`).slice(0,60),name:String(x.name||`District ${index+1}`).slice(0,60),icon:String(x.icon||'◇').slice(0,8),x:cityCoord(x.x,townCenter.x,width),y:cityCoord(x.y,townCenter.y,height),radius:integer(x.radius,1,districtRadiusLimit,4),color:cityColor(x.color,accent)}));
   const propKinds={royal:['banner','lamp','statue','barrel','cart'],harbor:['anchor','lamp','barrel','cart','sign'],ironwood:['sign','barrel','cart','pine','banner'],alpine:['brazier','pine','banner','sign','barrel'],marsh:['lamp','mushroom','sign','barrel','grave'],forge:['brazier','banner','barrel','cart','sign'],crystal:['crystal','rune','lamp','crystal','sign'],storm:['banner','lamp','anchor','brazier','sign'],void:['grave','rune','brazier','statue','grave'],nightfall:['banner','brazier','grave','statue','sign'],sanctum:['rune','crystal','banner','lamp','statue']};
   const propOffsets=[[-8,5],[-5,4],[-2,4],[2,4],[5,4],[8,5],[-8,-5],[-5,-4],[-2,-4],[2,-4],[5,-4],[8,-5],[-10,0],[10,0],[0,7],[0,-10]];
   const sourceProps=Array.isArray(record.props)&&record.props.length?record.props:(Array.isArray(base?.props)&&base.props.length?base.props:propOffsets.map((offset,index)=>({id:`${id}_prop_${index+1}`,kind:propKinds[cityStyle][index%propKinds[cityStyle].length],x:townCenter.x+offset[0],y:townCenter.y+offset[1],color:accent})));
-  const props=sourceProps.filter(x=>x&&typeof x==='object').slice(0,80).map((x,index)=>({id:String(x.id||`${id}_prop_${index+1}`).slice(0,60),kind:String(x.kind||'banner').slice(0,20),x:cityCoord(x.x,townCenter.x),y:cityCoord(x.y,townCenter.y),color:cityColor(x.color,accent),label:typeof x.label==='string'?x.label.slice(0,60):undefined}));
+  const props=sourceProps.filter(x=>x&&typeof x==='object').slice(0,propLimit).map((x,index)=>({id:String(x.id||`${id}_prop_${index+1}`).slice(0,60),kind:String(x.kind||'banner').slice(0,20),x:cityCoord(x.x,townCenter.x,width),y:cityCoord(x.y,townCenter.y,height),color:cityColor(x.color,accent),label:typeof x.label==='string'?x.label.slice(0,60):undefined}));
   return {cityStyle,cityAccent:cityColor(record.cityAccent??base?.cityAccent,accent),roofColor:cityColor(record.roofColor??base?.roofColor,roof),wallColor:cityColor(record.wallColor??base?.wallColor,wall),roadColor:cityColor(record.roadColor??base?.roadColor,road),districts,landmarks,props};
 }
 
@@ -138,24 +166,29 @@ function normalizeConfig(record, base = null) {
   if (!id) return null;
   const requestedBiome = typeof record?.biome === 'string' ? record.biome.trim().toLowerCase() : '';
   const biome = BIOMES.has(requestedBiome) ? requestedBiome : (base?.biome || 'plains');
-  const baseSpawn = base?.spawnPoint || { x: 40, y: 40 };
-  const baseTown = base?.townCenter || { x: 40, y: 40 };
+  const width = integer(record?.width, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, base?.width || MAP_WIDTH);
+  const height = integer(record?.height, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, base?.height || MAP_HEIGHT);
+  const requestedSettlement = String(record?.settlementClass || base?.settlementClass || (id === 'eldoria' ? 'capital' : 'city'));
+  const settlementClass = SETTLEMENT_CLASS_SET.has(requestedSettlement) ? requestedSettlement : 'city';
+  const baseSpawn = base?.spawnPoint || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
+  const baseTown = base?.townCenter || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
   const rawPortals = Array.isArray(record?.portals) ? record.portals : (base?.portals || []);
-  const portals = rawPortals.map(normalizePortal).filter(Boolean).slice(0, 20);
+  const portals = rawPortals.map(portal => normalizePortal(portal, width, height)).filter(Boolean).slice(0, 20);
   const townCenter = {
-    x: integer(record?.townX ?? record?.townCenter?.x, 1, MAP_WIDTH - 2, baseTown.x),
-    y: integer(record?.townY ?? record?.townCenter?.y, 1, MAP_HEIGHT - 2, baseTown.y),
+    x: integer(record?.townX ?? record?.townCenter?.x, 1, width - 2, baseTown.x),
+    y: integer(record?.townY ?? record?.townCenter?.y, 1, height - 2, baseTown.y),
   };
-  const cityIdentity = defaultCityIdentity(id, biome, townCenter, record || {}, base);
+  const urbanBounds = normalizeUrbanBounds(record?.urbanBounds ?? base?.urbanBounds, width, height, townCenter, settlementClass);
+  const cityIdentity = defaultCityIdentity(id, biome, townCenter, record || {}, base, width, height, settlementClass);
   return {
-    id,
+    id, width, height, settlementClass, urbanBounds,
     name: typeof record?.name === 'string' && record.name.trim() ? record.name.trim().slice(0, 80) : (base?.name || id.charAt(0).toUpperCase() + id.slice(1)),
     description: typeof record?.description === 'string' ? record.description.trim().slice(0, 300) : (base?.description || ''),
     biome,
     seed: integer(record?.seed, 1, 2_147_483_646, base?.seed || seedFor(id, biome)),
     spawnPoint: {
-      x: integer(record?.spawnX ?? record?.spawnPoint?.x, 1, MAP_WIDTH - 2, baseSpawn.x),
-      y: integer(record?.spawnY ?? record?.spawnPoint?.y, 1, MAP_HEIGHT - 2, baseSpawn.y),
+      x: integer(record?.spawnX ?? record?.spawnPoint?.x, 1, width - 2, baseSpawn.x),
+      y: integer(record?.spawnY ?? record?.spawnPoint?.y, 1, height - 2, baseSpawn.y),
     },
     townCenter,
     ...cityIdentity,
@@ -222,7 +255,15 @@ class WorldManager {
     }
 
     const known = new Set(next.keys());
-    for (const config of next.values()) config.portals = config.portals.filter(portal => known.has(portal.targetMap));
+    for (const config of next.values()) {
+      config.portals = config.portals.filter(portal => {
+        if (!known.has(portal.targetMap)) return false;
+        const target = next.get(portal.targetMap);
+        return Boolean(target)
+          && portal.targetSpawn.x >= 1 && portal.targetSpawn.x <= target.width - 2
+          && portal.targetSpawn.y >= 1 && portal.targetSpawn.y <= target.height - 2;
+      });
+    }
     this.configs = next;
     this.rebuildMaps();
     return this.getDefinitions();
@@ -256,6 +297,7 @@ class WorldManager {
   getDefinitions() {
     return Array.from(this.configs.values()).map(config => ({
       id: config.id, name: config.name, description: config.description, biome: config.biome, access: config.access || 'public',
+      width: config.width, height: config.height, settlementClass: config.settlementClass, urbanBounds: { ...config.urbanBounds },
       levelRequired: config.levelRequired, seed: config.seed,
       spawnX: config.spawnPoint.x, spawnY: config.spawnPoint.y,
       townX: config.townCenter.x, townY: config.townCenter.y, townRange: config.townRange,
@@ -286,11 +328,11 @@ class WorldManager {
   generateFromConfig(config) {
     const rand = seededRandom(config.seed);
     const tiles = [];
-    for (let y = 0; y < MAP_HEIGHT; y++) {
+    for (let y = 0; y < config.height; y++) {
       const row = [];
-      for (let x = 0; x < MAP_WIDTH; x++) {
+      for (let x = 0; x < config.width; x++) {
         let type = 'grass'; let walkable = true; let blocksSight = false;
-        if (x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1) {
+        if (x === 0 || y === 0 || x === config.width - 1 || y === config.height - 1) {
           type = 'wall'; walkable = false; blocksSight = true;
         } else if ((config.spawnPoint.x === x && config.spawnPoint.y === y) || config.portals.some(portal => portal.pos.x === x && portal.pos.y === y)) {
           type = 'path';
@@ -328,7 +370,7 @@ class WorldManager {
       tiles.push(row);
     }
     return {
-      ...config, width: MAP_WIDTH, height: MAP_HEIGHT, tiles,
+      ...config, width: config.width, height: config.height, tiles,
       spawnPoint: { ...config.spawnPoint }, townCenter: { ...config.townCenter },
       portals: config.portals.map(portal => ({
         pos: { ...portal.pos }, targetMap: portal.targetMap, targetSpawn: { ...portal.targetSpawn }, label: portal.label || '',
@@ -354,8 +396,8 @@ class WorldManager {
     const nearest = preferred ? this.findNearestWalkable(map, preferred, 14) : null;
     if (nearest) return nearest;
     for (let attempt = 0; attempt < 300; attempt++) {
-      const x = 5 + Math.floor(Math.random() * 70);
-      const y = 5 + Math.floor(Math.random() * 70);
+      const x = 1 + Math.floor(Math.random() * Math.max(1, (map?.width || MAP_WIDTH) - 2));
+      const y = 1 + Math.floor(Math.random() * Math.max(1, (map?.height || MAP_HEIGHT) - 2));
       if (map?.tiles?.[y]?.[x]?.walkable) return { x, y };
     }
     return map?.spawnPoint ? { ...map.spawnPoint } : { x: 40, y: 40 };
@@ -407,4 +449,4 @@ class WorldManager {
 }
 
 export const WORLD = new WorldManager();
-export { Monster, WorldManager, MAP_CONFIG, MAP_WIDTH, MAP_HEIGHT, BIOMES };
+export { Monster, WorldManager, MAP_CONFIG, MAP_WIDTH, MAP_HEIGHT, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, SETTLEMENT_CLASSES, BIOMES };
