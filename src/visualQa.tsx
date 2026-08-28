@@ -20,6 +20,7 @@ import GrandIronwoodPanorama from './components/GrandIronwoodPanorama';
 import GrandFrostpeakPanorama from './components/GrandFrostpeakPanorama';
 import GrandShadowfenPanorama from './components/GrandShadowfenPanorama';
 import GrandEmberholdPanorama from './components/GrandEmberholdPanorama';
+import GrandCrystalDeepPanorama from './components/GrandCrystalDeepPanorama';
 import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge from './components/LocaleBridge';
 import { saveBook, sendSystemMail } from './game/content';
@@ -295,6 +296,29 @@ function AuthoritativeGrandEmberholdQa({ mode }: { mode: EmberholdQaMode }) {
   return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-emberhold-server-ready="panorama"><GrandEmberholdPanorama /></div>;
 }
 
+
+const CRYSTAL_DEEP_QA_PLAYER = { ...QA_PLAYER, mapId: 'crystal_deep', pos: { x: 108, y: 118 } } as unknown as Player;
+type CrystalDeepQaMode = 'crystal-deep-minimap' | 'crystal-deep-city-designer' | 'crystal-deep-panorama';
+
+function AuthoritativeGrandCrystalDeepQa({ mode }: { mode: CrystalDeepQaMode }) {
+  const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading');
+  const [error,setError]=useState('');
+  useEffect(()=>{
+    let active=true;const params=new URLSearchParams(window.location.search);const base=params.get('qaServer')||'http://127.0.0.1:3000';const token=params.get('qaToken')||'';
+    fetch(`${base}/admin/api/maps?token=${encodeURIComponent(token)}`,{cache:'no-store'}).then(async response=>{if(!response.ok)throw new Error(`Servidor de conteúdo respondeu ${response.status}`);return response.json();}).then(payload=>{
+      if(!active)return;const records=Array.isArray(payload?.items)?payload.items:[];const crystal=records.find((record:any)=>record?.id==='crystal_deep');
+      if(!crystal||Number(crystal.width)!==160||Number(crystal.height)!==160||crystal.settlementClass!=='capital'||crystal.urbanPlan!=='geode-chambers'||!Array.isArray(crystal.landmarks)||crystal.landmarks.length!==42)throw new Error('Grand Crystal Deep autoritativa 160×160 não foi recebida do servidor');
+      syncServerMaps(records);setStatus('ready');
+    }).catch(reason=>{if(!active)return;setError(reason instanceof Error?reason.message:String(reason));setStatus('error');});return()=>{active=false;};
+  },[]);
+  if(status==='loading')return <div className="relative z-10 p-8 text-cyan-100" data-grand-crystal-deep-server-loading="true">Sincronizando Grand Crystal Deep com o servidor autoritativo…</div>;
+  if(status==='error')return <div className="relative z-10 p-8 text-red-200" data-grand-crystal-deep-server-error="true">{error}</div>;
+  const map=MAPS.crystal_deep;
+  if(mode==='crystal-deep-minimap')return <div className="relative z-10 flex min-h-screen items-center justify-center p-6"><div data-grand-crystal-deep-server-ready="minimap" className="rounded-xl border border-cyan-300/25 bg-black/80 p-4 shadow-2xl"><div className="mb-3"><div className="text-sm font-black tracking-wider text-cyan-50">GRAND CRYSTAL DEEP · CAPITAL SUBTERRÂNEA 160×160</div><div className="mt-1 text-[10px] text-cyan-100/55">Servidor autoritativo · {map.districts.length} distritos · {map.landmarks.length} marcos · 4 poços/acessos físicos · jogador 108,118</div></div><WorldMiniMap player={CRYSTAL_DEEP_QA_PLAYER} monsters={[]} mapId="crystal_deep" /></div></div>;
+  if(mode==='crystal-deep-city-designer')return <div className="relative z-10 p-4" data-grand-crystal-deep-server-ready="designer"><CityDesigner /></div>;
+  return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-crystal-deep-server-ready="panorama"><GrandCrystalDeepPanorama /></div>;
+}
+
 function VisualQa() {
   const panel = new URLSearchParams(window.location.search).get('panel') || 'library';
   const [inventory, setInventory] = useState<Item[]>([
@@ -339,6 +363,9 @@ function VisualQa() {
       {panel === 'emberhold-minimap' && <AuthoritativeGrandEmberholdQa mode="emberhold-minimap" />}
       {panel === 'emberhold-city-designer' && <AuthoritativeGrandEmberholdQa mode="emberhold-city-designer" />}
       {panel === 'emberhold-panorama' && <AuthoritativeGrandEmberholdQa mode="emberhold-panorama" />}
+      {panel === 'crystal-deep-minimap' && <AuthoritativeGrandCrystalDeepQa mode="crystal-deep-minimap" />}
+      {panel === 'crystal-deep-city-designer' && <AuthoritativeGrandCrystalDeepQa mode="crystal-deep-city-designer" />}
+      {panel === 'crystal-deep-panorama' && <AuthoritativeGrandCrystalDeepQa mode="crystal-deep-panorama" />}
     </div>
   );
 }

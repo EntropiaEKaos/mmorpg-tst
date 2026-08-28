@@ -25,3 +25,10 @@ O renderer ganhou materiais cristalinos para parede, piso e galeria. O minimapa 
 A migração é `exact-default-only`: geometria 80×80 e coordenadas históricas precisam coincidir com os defaults para serem promovidas. Geometria administrativa bloqueia a migração colateral. Frostpeak, Shadowfen e Stormwatch só recebem novos destinos quando ainda usam os alvos antigos conhecidos.
 
 O schema global de Grandes Capitais avança para **8**. O gate 9.42A exige auditoria PT-BR, segurança npm, typecheck/build, teste focado e suíte completa. A aprovação visual fica reservada para o 9.42B com screenshots reais e inspeção humana.
+
+## 9.42B — Prova visual autoritativa
+
+- A prova visual sincroniza Crystal Deep diretamente do servidor autoritativo antes de renderizar.
+- Chromium captura minimapa, City Designer e panorama usando a mesma geração `geode-chambers` do gameplay.
+- O gate mede rocha, câmaras, galerias e uma paleta subterrânea ciano/violeta; não basta apenas produzir PNGs.
+- Crystal Deep só pode ser considerada aprovada após inspeção humana dos três screenshots.
