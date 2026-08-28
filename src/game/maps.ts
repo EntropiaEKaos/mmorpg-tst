@@ -8,7 +8,7 @@ export const MAX_MAP_DIMENSION = 192;
 export const TILE_SIZE = 32;
 
 export type SettlementClass = 'wilderness' | 'town' | 'city' | 'capital';
-export type UrbanPlan = 'royal-grid' | 'harbor-crescent' | 'forest-rings' | 'terraced-bastion' | 'marsh-wards';
+export type UrbanPlan = 'royal-grid' | 'harbor-crescent' | 'forest-rings' | 'terraced-bastion' | 'marsh-wards' | 'caldera-radials';
 export interface UrbanBounds { x: number; y: number; width: number; height: number; }
 
 export type BiomeType = 'plains' | 'snow' | 'swamp' | 'desert' | 'shadow';
@@ -86,7 +86,7 @@ function settlementClassOf(value: unknown, mapId = ''): SettlementClass {
   return (['wilderness','town','city','capital'] as const).includes(requested as SettlementClass) ? requested as SettlementClass : 'city';
 }
 function mapDimension(value: unknown, fallback = MAP_WIDTH): number { return integer(value, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, fallback); }
-function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const fallback: UrbanPlan = mapId === 'sunreach_coast' ? 'harbor-crescent' : mapId === 'ironwood' ? 'forest-rings' : mapId === 'frostpeak' ? 'terraced-bastion' : mapId === 'shadowfen' ? 'marsh-wards' : 'royal-grid'; const requested = String(value || fallback); return requested === 'harbor-crescent' || requested === 'forest-rings' || requested === 'terraced-bastion' || requested === 'marsh-wards' ? requested : 'royal-grid'; }
+function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const fallback: UrbanPlan = mapId === 'sunreach_coast' ? 'harbor-crescent' : mapId === 'ironwood' ? 'forest-rings' : mapId === 'frostpeak' ? 'terraced-bastion' : mapId === 'shadowfen' ? 'marsh-wards' : mapId === 'emberhold' ? 'caldera-radials' : 'royal-grid'; const requested = String(value || fallback); return requested === 'harbor-crescent' || requested === 'forest-rings' || requested === 'terraced-bastion' || requested === 'marsh-wards' || requested === 'caldera-radials' ? requested : 'royal-grid'; }
 function normalizeUrbanBounds(raw: unknown, width: number, height: number, townCenter: Position, settlementClass: SettlementClass): UrbanBounds {
   const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Partial<UrbanBounds> : {};
   const radius = settlementClass === 'capital' ? Math.min(36, Math.floor(Math.min(width, height) / 3)) : Math.min(14, Math.floor(Math.min(width, height) / 4));
@@ -448,12 +448,39 @@ function marshWardsTile(map: GameMap, x: number, y: number): Tile | null {
   return {type:'grass',walkable:true,blocksSight:false};
 }
 
+
+function calderaRadialsTile(map: GameMap,x:number,y:number): Tile | null {
+  const bounds=map.urbanBounds;if(!bounds)return null;
+  const minX=bounds.x,minY=bounds.y,maxX=minX+bounds.width-1,maxY=minY+bounds.height-1;
+  if(x<minX||x>maxX||y<minY||y>maxY)return null;
+  const cx=map.townCenter.x,cy=map.townCenter.y;
+  const portalGate=map.portals.some(portal=>((portal.pos.x===minX||portal.pos.x===maxX)&&x===portal.pos.x&&Math.abs(y-portal.pos.y)<=2)||((portal.pos.y===minY||portal.pos.y===maxY)&&y===portal.pos.y&&Math.abs(x-portal.pos.x)<=2));
+  const cardinalGate=((x===minX||x===maxX)&&Math.abs(y-cy)<=2)||((y===minY||y===maxY)&&Math.abs(x-cx)<=2);
+  if(portalGate||cardinalGate)return {type:'path',walkable:true,blocksSight:false};
+  if(x===minX||x===maxX||y===minY||y===maxY)return {type:'wall',walkable:false,blocksSight:true};
+  const dx=x-cx,dy=y-cy,distance=Math.sqrt(dx*dx+dy*dy);
+  const radial=Math.abs(dx)<=1||Math.abs(dy)<=1;
+  const forgeRing=Math.abs(distance-28)<=1.35||Math.abs(distance-46)<=1.2;
+  const serviceRoad=Math.abs(x-(cx-38))<=1||Math.abs(x-(cx+38))<=1||Math.abs(y-(cy-38))<=1||Math.abs(y-(cy+38))<=1;
+  const forgeCourts=(x>=30&&x<=52&&y>=48&&y<=70)||(x>=108&&x<=130&&y>=48&&y<=70)||(x>=30&&x<=52&&y>=90&&y<=112)||(x>=108&&x<=130&&y>=90&&y<=112);
+  const core=distance<=11;
+  const fissureA=Math.abs(dy-Math.round(dx*.45))<=2&&Math.abs(dx)>12;
+  const fissureB=Math.abs(dy+Math.round(dx*.52))<=2&&Math.abs(dx)>12;
+  const molten=core||fissureA||fissureB;
+  const road=radial||forgeRing||serviceRoad||forgeCourts;
+  if(molten&&road)return {type:'bridge',walkable:true,blocksSight:false};
+  if(molten)return {type:'lava',walkable:false,blocksSight:false};
+  if(road)return {type:'path',walkable:true,blocksSight:false};
+  return {type:'floor',walkable:true,blocksSight:false};
+}
+
 function capitalUrbanTile(map: GameMap, x: number, y: number): Tile | null {
   if (map.settlementClass !== 'capital' || !map.urbanBounds) return null;
   if (map.urbanPlan === 'harbor-crescent') return harborCapitalTile(map, x, y);
   if (map.urbanPlan === 'forest-rings') return forestCapitalTile(map, x, y);
   if (map.urbanPlan === 'terraced-bastion') return terracedBastionTile(map, x, y);
   if (map.urbanPlan === 'marsh-wards') return marshWardsTile(map, x, y);
+  if (map.urbanPlan === 'caldera-radials') return calderaRadialsTile(map, x, y);
   const minX = map.urbanBounds.x, minY = map.urbanBounds.y;
   const maxX = minX + map.urbanBounds.width - 1, maxY = minY + map.urbanBounds.height - 1;
   if (x < minX || x > maxX || y < minY || y > maxY) return null;

@@ -36,9 +36,9 @@ function legacyData() {
 test('9.36A Grand Eldoria stays a 160x160 authored capital while unpromoted built-ins remain legacy-sized', () => {
   const world = new WorldManager();
   const eldoria = world.getMap('eldoria');
-  const emberhold = world.getMap('emberhold');
+  const voidlands = world.getMap('voidlands');
   assert.equal(eldoria.width,160); assert.equal(eldoria.height,160); assert.equal(eldoria.settlementClass,'capital');
-  assert.equal(emberhold.width,80); assert.equal(emberhold.height,80);
+  assert.equal(voidlands.width,80); assert.equal(voidlands.height,80);
   assert.ok(eldoria.districts.length >= 10); assert.ok(eldoria.landmarks.length >= 16); assert.ok(eldoria.props.length >= 60);
 });
 

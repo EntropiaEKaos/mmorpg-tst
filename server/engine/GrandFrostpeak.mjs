@@ -96,7 +96,7 @@ export const GRAND_FROSTPEAK_MAP=Object.freeze({
   districts,landmarks:Object.freeze([...landmarks,...GRAND_FROSTPEAK_MINOR_ARCHITECTURE]),props:Object.freeze(buildProps()),access:'public',
   portals:Object.freeze([
     {x:26,y:82,targetMap:'eldoria',targetX:30,targetY:80,label:'🏰 Passagem de Eldoria'},
-    {x:133,y:112,targetMap:'emberhold',targetX:70,targetY:10,label:'🌋 Passagem de Emberhold'},
+    {x:133,y:112,targetMap:'emberhold',targetX:80,targetY:22,label:'🌋 Passagem de Emberhold'},
     {x:80,y:18,targetMap:'crystal_deep',targetX:40,targetY:70,label:'💎 Descida do Cristal'},
     {x:80,y:139,targetMap:'ironwood',targetX:80,targetY:24,label:'🌲 Estrada de Ironwood'},
   ]),

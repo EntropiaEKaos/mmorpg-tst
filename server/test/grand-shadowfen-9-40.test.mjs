@@ -62,7 +62,7 @@ test('9.40A migrated Shadowfen houses remain valid against authoritative archite
 });
 
 test('9.40A fresh ContentDB converges Shadowfen and advances Grand Capital schema to 6',()=>{
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'moria-940-')),file=path.join(dir,'content.json');try{const db=new ContentDB(file),data=db.getAllContent();assert.equal(data.version,3);assert.equal(data.grandCapitalVersion,6);const map=data.maps.find(entry=>entry.id==='shadowfen');assert.deepEqual([map.width,map.height,map.urbanPlan,map.levelRequired],[160,160,'marsh-wards',20]);const npc=data.npcs.find(entry=>entry.id==='quest_shadowfen');const node=data.nodes.find(entry=>entry.id==='node_shadowfen');assert.deepEqual([npc.posX,npc.posY],[78,100]);assert.deepEqual([node.x,node.y],[80,82]);}finally{fs.rmSync(dir,{recursive:true,force:true});}
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'moria-940-')),file=path.join(dir,'content.json');try{const db=new ContentDB(file),data=db.getAllContent();assert.equal(data.version,3);assert.ok(data.grandCapitalVersion>=6);const map=data.maps.find(entry=>entry.id==='shadowfen');assert.deepEqual([map.width,map.height,map.urbanPlan,map.levelRequired],[160,160,'marsh-wards',20]);const npc=data.npcs.find(entry=>entry.id==='quest_shadowfen');const node=data.nodes.find(entry=>entry.id==='node_shadowfen');assert.deepEqual([npc.posX,npc.posY],[78,100]);assert.deepEqual([node.x,node.y],[80,82]);}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 
 test('9.40A client server and Studio share marsh-wards vocabulary',()=>{

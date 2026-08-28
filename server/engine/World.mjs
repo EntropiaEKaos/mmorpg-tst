@@ -8,6 +8,7 @@ import { GRAND_SUNREACH_BUILTIN_WORLD_CONFIG } from './GrandSunreach.mjs';
 import { GRAND_IRONWOOD_BUILTIN_WORLD_CONFIG } from './GrandIronwood.mjs';
 import { GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG } from './GrandFrostpeak.mjs';
 import { GRAND_SHADOWFEN_BUILTIN_WORLD_CONFIG } from './GrandShadowfen.mjs';
+import { GRAND_EMBERHOLD_BUILTIN_WORLD_CONFIG } from './GrandEmberhold.mjs';
 
 class Monster {
   constructor(data) {
@@ -21,7 +22,7 @@ const MIN_MAP_DIMENSION = 40;
 const MAX_MAP_DIMENSION = 192;
 const SETTLEMENT_CLASSES = Object.freeze(['wilderness','town','city','capital']);
 const SETTLEMENT_CLASS_SET = new Set(SETTLEMENT_CLASSES);
-const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings','terraced-bastion','marsh-wards']);
+const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings','terraced-bastion','marsh-wards','caldera-radials']);
 const BIOMES = new Set(['plains', 'snow', 'swamp', 'desert', 'shadow']);
 const BIOME_SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
 const CITY_STYLES = new Set(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
@@ -48,13 +49,7 @@ const MAP_CONFIG = Object.freeze({
   ironwood: GRAND_IRONWOOD_BUILTIN_WORLD_CONFIG,
   frostpeak: GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG,
   shadowfen: GRAND_SHADOWFEN_BUILTIN_WORLD_CONFIG,
-  emberhold: {
-    id: 'emberhold', name: 'Emberhold', description: 'Volcanic desert. Scorched earth and lava.', biome: 'desert',
-    spawnPoint: { x: 70, y: 10 }, townCenter: { x: 65, y: 15 }, townRange: 8, seed: 999,
-    portals: [
-      { pos: { x: 75, y: 10 }, targetMap: 'frostpeak', targetSpawn: { x: 130, y: 112 }, label: '❄ To Frostpeak' },
-    ],
-  },
+  emberhold: GRAND_EMBERHOLD_BUILTIN_WORLD_CONFIG,
   voidlands: {
     id: 'voidlands', name: 'Voidlands', description: 'The end of the world. Pure darkness and ancient evil.', biome: 'shadow',
     spawnPoint: { x: 70, y: 70 }, townCenter: { x: 40, y: 40 }, townRange: 6, levelRequired: 25, seed: 666,
@@ -328,12 +323,39 @@ function marshWardsTile(config, x, y) {
   return {type:'grass',walkable:true,blocksSight:false};
 }
 
+
+function calderaRadialsTile(config,x,y){
+  const bounds=config.urbanBounds;if(!bounds)return null;
+  const minX=Number(bounds.x),minY=Number(bounds.y),maxX=minX+Number(bounds.width)-1,maxY=minY+Number(bounds.height)-1;
+  if(x<minX||x>maxX||y<minY||y>maxY)return null;
+  const cx=config.townCenter.x,cy=config.townCenter.y;
+  const portalGate=config.portals.some(portal=>((portal.pos.x===minX||portal.pos.x===maxX)&&x===portal.pos.x&&Math.abs(y-portal.pos.y)<=2)||((portal.pos.y===minY||portal.pos.y===maxY)&&y===portal.pos.y&&Math.abs(x-portal.pos.x)<=2));
+  const cardinalGate=((x===minX||x===maxX)&&Math.abs(y-cy)<=2)||((y===minY||y===maxY)&&Math.abs(x-cx)<=2);
+  if(portalGate||cardinalGate)return {type:'path',walkable:true,blocksSight:false};
+  if(x===minX||x===maxX||y===minY||y===maxY)return {type:'wall',walkable:false,blocksSight:true};
+  const dx=x-cx,dy=y-cy,distance=Math.sqrt(dx*dx+dy*dy);
+  const radial=Math.abs(dx)<=1||Math.abs(dy)<=1;
+  const forgeRing=Math.abs(distance-28)<=1.35||Math.abs(distance-46)<=1.2;
+  const serviceRoad=Math.abs(x-(cx-38))<=1||Math.abs(x-(cx+38))<=1||Math.abs(y-(cy-38))<=1||Math.abs(y-(cy+38))<=1;
+  const forgeCourts=(x>=30&&x<=52&&y>=48&&y<=70)||(x>=108&&x<=130&&y>=48&&y<=70)||(x>=30&&x<=52&&y>=90&&y<=112)||(x>=108&&x<=130&&y>=90&&y<=112);
+  const core=distance<=11;
+  const fissureA=Math.abs(dy-Math.round(dx*.45))<=2&&Math.abs(dx)>12;
+  const fissureB=Math.abs(dy+Math.round(dx*.52))<=2&&Math.abs(dx)>12;
+  const molten=core||fissureA||fissureB;
+  const road=radial||forgeRing||serviceRoad||forgeCourts;
+  if(molten&&road)return {type:'bridge',walkable:true,blocksSight:false};
+  if(molten)return {type:'lava',walkable:false,blocksSight:false};
+  if(road)return {type:'path',walkable:true,blocksSight:false};
+  return {type:'floor',walkable:true,blocksSight:false};
+}
+
 function capitalUrbanTile(config, x, y) {
   if (config?.settlementClass !== 'capital') return null;
   if (config.urbanPlan === 'harbor-crescent') return harborCapitalTile(config, x, y);
   if (config.urbanPlan === 'forest-rings') return forestCapitalTile(config, x, y);
   if (config.urbanPlan === 'terraced-bastion') return terracedBastionTile(config, x, y);
   if (config.urbanPlan === 'marsh-wards') return marshWardsTile(config, x, y);
+  if (config.urbanPlan === 'caldera-radials') return calderaRadialsTile(config, x, y);
   const bounds = config.urbanBounds;
   if (!bounds) return null;
   const minX = Number(bounds.x), minY = Number(bounds.y);

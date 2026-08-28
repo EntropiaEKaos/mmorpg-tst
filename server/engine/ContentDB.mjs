@@ -16,7 +16,8 @@ import { migrateGrandEldoriaData } from './GrandEldoria.mjs';
 import { migrateGrandSunreachData } from './GrandSunreach.mjs';
 import { migrateGrandIronwoodData } from './GrandIronwood.mjs';
 import { migrateGrandFrostpeakData } from './GrandFrostpeak.mjs';
-import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandShadowfenData } from './GrandShadowfen.mjs';
+import { migrateGrandShadowfenData } from './GrandShadowfen.mjs';
+import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandEmberholdData } from './GrandEmberhold.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -202,12 +203,13 @@ export class ContentDB {
 
   migrateGrandCapitalV1() {
     if (Number(this.data.grandCapitalVersion) >= GRAND_CAPITAL_SCHEMA_VERSION) return false;
-    // Every capital migration is idempotent and exact-default-only. Schema 6 adds Shadowfen.
+    // Every capital migration is idempotent and exact-default-only. Schema 7 adds Emberhold.
     migrateGrandEldoriaData(this.data);
     migrateGrandSunreachData(this.data);
     migrateGrandIronwoodData(this.data);
     migrateGrandFrostpeakData(this.data);
     migrateGrandShadowfenData(this.data);
+    migrateGrandEmberholdData(this.data);
     this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
     this.save();
     return true;
@@ -341,6 +343,7 @@ export class ContentDB {
     migrateGrandIronwoodData(this.data);
     migrateGrandFrostpeakData(this.data);
     migrateGrandShadowfenData(this.data);
+    migrateGrandEmberholdData(this.data);
     this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
 
     this.save();
