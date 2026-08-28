@@ -1,0 +1,50 @@
+name: Apply Mor'ia 9.7 Nameplates Occlusion Studio
+
+on:
+  push:
+    branches:
+      - moria-9.7-reference-visual-convergence
+    paths:
+      - tools/apply-moria-9-7-nameplates-occlusion-studio.py
+      - .github/workflows/apply-moria-9-7-nameplates-occlusion-studio.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - name: Apply polish
+        run: python3 tools/apply-moria-9-7-nameplates-occlusion-studio.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+      - name: Validate server
+        run: |
+          npm ci --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated polish and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f tools/apply-moria-9-7-nameplates-occlusion-studio.py
+          rm -f .github/workflows/apply-moria-9-7-nameplates-occlusion-studio.yml
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(9.7): refine editable nameplates and architecture depth"
+          git push origin HEAD:moria-9.7-reference-visual-convergence
