@@ -42,3 +42,26 @@ test('9.28 localizes canvas-facing monster and npc presentation without changing
   assert.match(src, /translateGameText\(npc\.role\)/);
   assert.doesNotMatch(src, /monster\.id\s*=\s*translateGameText/);
 });
+
+
+test('9.28 normal avatar path receives the explicit vocation id', () => {
+  const src = read('src/game/playerAvatar.ts');
+  assert.match(src, /drawPixelHuman\(ctx, cx, feetY, size \* 1\.08, direction, style, colors, addonMask, time, vocationId\)/);
+});
+
+test('9.28 character creation previews use the real pixel renderer', () => {
+  const preview = read('src/components/VocationPortrait.tsx');
+  const login = read('src/components/LoginScreen.tsx');
+  assert.match(preview, /drawPixelHuman/);
+  assert.match(preview, /data-vocation-preview/);
+  assert.match(login, /VocationPortrait/);
+  assert.match(login, /tr\(v\.name\)/);
+});
+
+test('9.28 pt-BR catalog includes legacy fragment migration coverage', () => {
+  const src = read('src/i18n/index.ts');
+  assert.match(src, /PT_BR_FRAGMENTS/);
+  assert.match(src, /Recompensa Diária/);
+  assert.match(src, /Chance de Crítico/);
+  assert.match(src, /Manchetes/);
+});

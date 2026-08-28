@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Account } from '../game/types';
 import { VOCATIONS } from '../game/classes';
 import { audio } from '../game/audio';
+import VocationPortrait from './VocationPortrait';
+import { translateGameText as tr } from '../i18n';
 import {
   createCharacter,
   loginAccount,
@@ -230,7 +232,7 @@ export default function LoginScreen({ onLogin }: Props) {
               <Field label="CHARACTER NAME" value={charName} onChange={setCharName} type="text" onEnter={submit} autoComplete="off" />
               <div className="mt-4">
                 <label className="mb-2 block text-[10px] font-bold tracking-[0.18em] text-slate-400">VOCATION</label>
-                <div className="moria-scrollbar grid max-h-56 grid-cols-2 gap-2 overflow-y-auto pr-1">
+                <div className="moria-scrollbar grid max-h-[390px] grid-cols-2 gap-2 overflow-y-auto pr-1">
                   {VOCATION_LIST.map(v => {
                     const active = vocation === v.id;
                     return (
@@ -238,13 +240,13 @@ export default function LoginScreen({ onLogin }: Props) {
                         key={v.id}
                         type="button"
                         onClick={() => setVocation(v.id)}
-                        className={`relative rounded-xl border p-3 text-left transition-all ${active ? 'border-amber-200/55 bg-amber-200/10 shadow-[0_0_22px_rgba(229,196,119,0.08)]' : 'border-slate-500/15 bg-white/[0.025] hover:border-slate-400/30 hover:bg-white/[0.045]'}`}
+                        className={`relative min-h-[104px] rounded-xl border p-2.5 text-left transition-all ${active ? 'border-amber-200/55 bg-amber-200/10 shadow-[0_0_22px_rgba(229,196,119,0.08)]' : 'border-slate-500/15 bg-white/[0.025] hover:border-slate-400/30 hover:bg-white/[0.045]'}`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-black/25 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${v.color})` }}>{v.icon}</span>
+                          <VocationPortrait id={v.id} color={v.color} active={active} />
                           <div className="min-w-0">
-                            <div className={`truncate text-xs font-bold ${active ? 'text-amber-100' : 'text-slate-200'}`}>{v.name}</div>
-                            <div className="mt-1 text-[9px] tracking-wider text-slate-500">{active ? 'SELECTED' : 'CHOOSE'}</div>
+                            <div className={`truncate text-xs font-bold ${active ? 'text-amber-100' : 'text-slate-200'}`}>{tr(v.name)}</div>
+                            <div className="mt-1 text-[9px] tracking-wider text-slate-500">{active ? tr('SELECTED') : tr('CHOOSE')}</div>
                           </div>
                         </div>
                       </button>
