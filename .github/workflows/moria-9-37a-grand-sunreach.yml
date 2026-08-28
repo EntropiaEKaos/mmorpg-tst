@@ -4,6 +4,7 @@ on:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
       - 'tools/upgrade-moria-9-37a-grand-sunreach.py'
+      - 'tools/fix-moria-9-37a-current-capital-anchor.py'
       - '.github/workflows/moria-9-37a-grand-sunreach.yml'
 permissions:
   contents: write
@@ -20,8 +21,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Apply Mor'ia 9.37A Grand Sunreach
-        run: python tools/upgrade-moria-9-37a-grand-sunreach.py
+      - name: Align and apply Mor'ia 9.37A Grand Sunreach
+        run: |
+          python tools/fix-moria-9-37a-current-capital-anchor.py
+          python tools/upgrade-moria-9-37a-grand-sunreach.py
       - name: Verify Grand Sunreach source contract
         run: |
           test -s server/engine/GrandSunreach.mjs
@@ -32,6 +35,8 @@ jobs:
           grep -q 'harborCapitalTile' server/engine/World.mjs
           grep -q 'harborCapitalTile' src/game/maps.ts
           grep -q 'migrateGrandSunreachData' server/engine/ContentDB.mjs
+          grep -q 'royalAxes' server/engine/World.mjs
+          grep -q 'civicPlaza' server/engine/World.mjs
           test -s server/test/grand-sunreach-9-37.test.mjs
           test -s docs/MORIA_9_37_GRAND_SUNREACH.md
       - name: Verify PT-BR source coverage
