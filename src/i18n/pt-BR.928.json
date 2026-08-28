@@ -102,6 +102,7 @@
   "Clue / Lore (shown to player)": "Pista / Lore (exibida ao jogador)",
   "Coins are earned in gameplay. No client-side grant and no real-money claim is trusted by the game server.": "As moedas são conquistadas durante o jogo. O servidor não confia em concessões do cliente nem em reivindicações envolvendo dinheiro real.",
   "Connect to Mor": "Conectar a Mor",
+  "Connect to Mor'ia server for real online play": "Conectar ao servidor de Mor'ia para jogar online de verdade",
   "Connect to the authoritative MMO server to manage faction allegiance, Nodes, Chronicle, grand crafting and tamed beasts.": "Conecte-se ao servidor MMO autoritativo para gerenciar lealdade de facção, Nodes, Crônica, grande artesanato e feras domadas.",
   "Connect to the authoritative server to see economy, politics, dynamic-world and progression integration.": "Conecte-se ao servidor autoritativo para ver a integração de economia, política, mundo dinâmico e progressão.",
   "Contextual skill": "Habilidade contextual",
@@ -182,6 +183,7 @@
   "List item": "Anunciar item",
   "Live world content": "Conteúdo vivo do mundo",
   "Living World Operating Layer": "Camada Operacional do Mundo Vivo",
+  "Logout": "Sair",
   "MOR'IA WORLD HUB": "CENTRAL DO MUNDO DE MOR'IA",
   "Master Craft": "Artesanato Mestre",
   "Master of Arcane: all above +10% crit": "Mestre do Arcano: todos os bônus acima +10% de crítico",
@@ -275,6 +277,7 @@
   "Required Level:": "Nível Necessário:",
   "Requires a matching live creature within 2 tiles.": "Requer uma criatura viva compatível em até 2 tiles.",
   "Requires owned housing · server-persisted functional upgrade": "Requer moradia própria · melhoria funcional persistida pelo servidor",
+  "Reset default order": "Restaurar ordem padrão",
   "Return 5 damage to attackers.": "Causa 5 de dano de retorno aos atacantes.",
   "Returns 5 damage to attackers.": "Causa 5 de dano de retorno aos atacantes.",
   "Returns 8 damage to attackers.": "Causa 8 de dano de retorno aos atacantes.",
@@ -394,6 +397,7 @@
   "← Back to library": "← Voltar à biblioteca",
   "← Back to list": "← Voltar à lista",
   "← Click an item to deposit": "← Clique em um item para depositar",
+  "↺ Reset default order": "↺ Restaurar ordem padrão",
   "⏱ On Cooldown": "⏱ Em Recarga",
   "▶ OFFLINE QUICK PLAY": "▶ JOGO RÁPIDO OFFLINE",
   "★ YOUR CLASS": "★ SUA CLASSE",
@@ -455,5 +459,6 @@
   "🔗 ONE WORLD STATE": "🔗 UM ÚNICO ESTADO DE MUNDO",
   "🗄 Talk to the Banker or use the Depot button to safely store items (never lost on death)!": "🗄 Fale com o Banqueiro ou use o botão Depósito para guardar itens com segurança (eles nunca são perdidos ao morrer)!",
   "🗑 Drop here to throw on ground": "🗑 Solte aqui para jogar no chão",
+  "🚪 Logout": "🚪 Sair",
   "🧟 Killed monsters leave corpses! Walk over or click them to collect loot (Tibia-style).": "🧟 Monstros derrotados deixam corpos! Passe por cima ou clique neles para coletar o saque (estilo Tibia)."
 }

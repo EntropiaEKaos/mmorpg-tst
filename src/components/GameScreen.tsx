@@ -57,6 +57,7 @@ import Weather from './Weather';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawWorldCinematicPass } from '../game/worldVisualRevamp927';
+import { translateGameText as tr } from '../i18n';
 import { drawProjectile927, drawParticle927 } from '../game/combatVfx927';
 import { drawHousing } from '../game/housingPresentation';
 import { createWorldLabelQueue } from '../game/worldNameplates';
@@ -2540,7 +2541,7 @@ export default function GameScreen({ account, onLogout }: Props) {
             onClick={onLogout}
             className="moria-button shrink-0 rounded-lg px-2 py-1 text-[10px] text-rose-200"
           >
-            🚪 Logout
+            {tr('🚪 Logout')}
           </button>
         </div>
       </div>
@@ -3054,7 +3055,7 @@ function UILayoutEditor({ player, layout, onLayoutChange, onClose }: { player: P
         <button onClick={() => {
           const reset = saveUILayout(player.name, { ...layout, panelOrder: [...DEFAULT_UI_PANEL_ORDER] });
           onLayoutChange(reset);
-        }} className="moria-button mb-3 w-full rounded-lg py-2 text-xs text-sky-200">↺ Reset default order</button>
+        }} className="moria-button mb-3 w-full rounded-lg py-2 text-xs text-sky-200">{tr('↺ Reset default order')}</button>
         <div className="text-[10px] text-blue-200/40 text-center">Operational controls such as UI, Mount, Admin, Audio, Network and Logout stay fixed for safety.</div>
       </div>
     </div>
