@@ -27,9 +27,14 @@ const captureText = async (key) => {
   texts[key] = (await page.locator('body').innerText()).replace(/\s+$/gm,'');
 };
 const screenshot = name => page.screenshot({ path:`docs/screenshots/${name}`, fullPage:false });
+const escapeRegex = term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const containsStandalone = (text, term) => {
+  const escaped = escapeRegex(term.toUpperCase());
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'u').test(text);
+};
 const assertNoLegacyEnglish = async (surface, forbidden) => {
   const text = (await page.locator('body').innerText()).toUpperCase();
-  const hits = forbidden.filter(term => text.includes(term.toUpperCase()));
+  const hits = forbidden.filter(term => containsStandalone(text, term));
   if (hits.length) throw new Error(`${surface}: untranslated visible labels: ${hits.join(', ')}`);
 };
 const assertPortuguese = async (surface, required) => {
@@ -64,8 +69,11 @@ await previews.first().waitFor({ state:'visible', timeout:10000 });
 await page.waitForTimeout(350);
 if (await previews.count() !== 14) throw new Error(`expected 14 vocation previews, got ${await previews.count()}`);
 await captureText('characters-top');
-await assertPortuguese('character creation', ['CRIE SEU PERSONAGEM','NOME DO PERSONAGEM','VOCAÇÃO','CAVALEIRO','PALADINO','FEITICEIRO']);
-await assertNoLegacyEnglish('character creation', ['CHARACTER NAME','VOCATION','SELECTED','CHOOSE','CREATE HERO','KNIGHT','SORCERER','DRUID','ROGUE','PRIEST','RANGER','NECROMANCER','SHAMAN','TEMPLAR']);
+await assertPortuguese('character creation', [
+  'CRIE SEU PERSONAGEM','NOME DO PERSONAGEM','VOCAÇÃO','CAVALEIRO','PALADINO','FEITICEIRO','DRUIDA','BRUXO','LADINO','SACERDOTE',
+  'CAVALEIRO DA MORTE','MONGE','PATRULHEIRO','NECROMANTE','XAMÃ','TEMPLÁRIO'
+]);
+await assertNoLegacyEnglish('character creation', ['CHARACTER NAME','VOCATION','SELECTED','CHOOSE','CREATE HERO','KNIGHT','SORCERER','DRUID','WARLOCK','ROGUE','PRIEST','DEATH KNIGHT','MONK','RANGER','NECROMANCER','SHAMAN','TEMPLAR']);
 await screenshot('moria-9-28-character-creation-a.png');
 const scrollBox = previews.first().locator('xpath=ancestor::div[contains(@class,"moria-scrollbar")]').first();
 if (await scrollBox.count()) await scrollBox.evaluate(el => { el.scrollTop = el.scrollHeight; });
