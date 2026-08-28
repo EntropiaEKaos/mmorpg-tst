@@ -1,0 +1,82 @@
+name: Mor'ia 9.32 Library Mail Social PT-BR
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-32-library-mail-social-ptbr.py'
+      - '.github/workflows/moria-9-32-library-mail-social-ptbr.yml'
+permissions:
+  contents: write
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.32 library mail social pass
+        run: python tools/upgrade-moria-9-32-library-mail-social-ptbr.py
+      - name: Verify upgrade anchors and documentation
+        run: |
+          grep -q "tr(book.title)" src/components/BookLibrary.tsx
+          grep -q "toLocaleDateString('pt-BR')" src/components/MailBox.tsx
+          grep -q "tr(guild.selfRole)" src/components/SocialHub.tsx
+          grep -q "Visual QA" docs/MORIA_9_32_LIBRARY_MAIL_SOCIAL_PTBR.md
+          test -f visual-qa.html
+          test -f src/visualQa.tsx
+          test -f tools/capture-moria-9-32.mjs
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Install visual QA browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Capture real component screenshots
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-vite.log 2>&1 &
+          echo $! > /tmp/moria-vite.pid
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null
+          node tools/capture-moria-9-32.mjs
+          test -s artifacts/moria-9.32-screenshots/library.png
+          test -s artifacts/moria-9.32-screenshots/mail.png
+          test -s artifacts/moria-9.32-screenshots/social.png
+      - name: Upload Mor'ia 9.32 screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9.32-screenshots
+          path: artifacts/moria-9.32-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit validated Mor'ia 9.32 pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/i18n/pt-BR.928.json src/components/BookLibrary.tsx src/components/MailBox.tsx src/components/SocialHub.tsx visual-qa.html src/visualQa.tsx tools/capture-moria-9-32.mjs docs/MORIA_9_32_LIBRARY_MAIL_SOCIAL_PTBR.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.32): localize library mail social and add visual QA'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr
