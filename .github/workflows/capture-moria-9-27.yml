@@ -31,7 +31,7 @@ jobs:
         run: |
           python3 -m http.server 4173 -d dist >/tmp/moria933-http.log 2>&1 &
           sleep 2
-      - name: Capture final visual states
+      - name: Capture final visual states via real player shortcuts
         run: node tools/capture-moria-9-27.mjs
       - name: Validate captures
         run: |
