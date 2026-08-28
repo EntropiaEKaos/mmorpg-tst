@@ -37,9 +37,12 @@ new_action = """  if (panel === 'actionbar') {
     const hudText = await hud.innerText();
     const normalizedHudText = hudText.toLocaleUpperCase('pt-BR');
     if (!normalizedHudText.includes('BARRA DE AÇÕES')) throw new Error(`Mor'ia 9.34 Action Bar title missing: ${hudText}`);
-    const tooltipTrigger = page.locator('[data-qa-actionbar] .inline-flex').first();
+    const spellSlot = page.locator('[data-qa-actionbar] .moria-hotbar-slot').first();
+    const tooltipTrigger = spellSlot.locator('..');
+    const triggerClass = await tooltipTrigger.getAttribute('class');
+    if (!triggerClass?.includes('inline-flex')) throw new Error(`Mor'ia 9.34 tooltip trigger wrapper not found: ${triggerClass}`);
     await tooltipTrigger.hover();
-    await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 2500 });
+    await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForTimeout(180);
     const tooltipText = await page.locator('#__global_tooltip_root__').innerText();
     for (const required of ['Fúria', 'Atalho:', 'Custo de Mana:', 'Recarga:', 'Combos reativos']) {
@@ -68,7 +71,7 @@ A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate
 - fixa uma posição determinística da Action Bar apenas no `visual-qa.html`;
 - o capturador exige que a janela `action-bar` tenha dimensões reais e esteja completamente dentro da viewport 1440x1000;
 - o capturador valida o título `Barra de Ações` sem depender da capitalização visual aplicada pelo CSS;
-- o QA paira sobre o wrapper real do Tooltip, aguarda o portal visível e exige: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
+- o QA ancora o hover no pai exato do primeiro slot de magia, confirma que esse pai é o wrapper `inline-flex` do Tooltip, aguarda o portal visível e exige: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
 - adiciona `You have` à lista de vazamentos proibidos do print de Talentos.
 
 ## Escopo
