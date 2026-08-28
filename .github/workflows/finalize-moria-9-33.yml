@@ -1,0 +1,60 @@
+name: Mor'ia 9.33 Visual Release Finalizer
+on:
+  push:
+    branches: [moria-9.27-visual-rebirth]
+    paths:
+      - '.github/workflows/finalize-moria-9-33.yml'
+permissions:
+  contents: write
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.27-visual-rebirth
+          fetch-depth: 0
+      - name: Update README and release version
+        run: |
+          python tools/update-moria-9-33-readme.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for rel in ['package.json','package-lock.json','server/package.json','server/package-lock.json']:
+              p=Path(rel); d=json.loads(p.read_text())
+              if 'version' in d: d['version']='9.33.0'
+              if rel.endswith('package-lock.json') and d.get('packages',{}).get('') is not None: d['packages']['']['version']='9.33.0'
+              p.write_text(json.dumps(d,indent=2)+'\n')
+          PY
+      - name: Validate durable evidence
+        run: |
+          grep -q "Mor'ia 9.33 — Visual Rebirth Candidate" README.md
+          grep -q 'moria-9-33-visual-rebirth-day.png' README.md
+          grep -q 'moria-9-33-visual-rebirth-night.png' README.md
+          grep -q 'moria-9-33-visual-rebirth-character-ui.png' README.md
+          test -s docs/screenshots/moria-9-33-visual-rebirth-day.png
+          test -s docs/screenshots/moria-9-33-visual-rebirth-night.png
+          test -s docs/screenshots/moria-9-33-visual-rebirth-character-ui.png
+      - name: Commit release docs and version
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md package.json package-lock.json server/package.json server/package-lock.json
+          git commit -m 'docs(9.33): publish Visual Rebirth release gallery'
+      - name: Remove one-shot visual release tooling
+        run: |
+          git rm -f --ignore-unmatch \
+            .github/workflows/run-moria-9-27-visual-rebirth.yml \
+            .github/workflows/capture-moria-9-27.yml \
+            .github/workflows/run-moria-9-28-29-world-characters.yml \
+            .github/workflows/run-moria-9-30-32-visual-polish.yml \
+            .github/workflows/finalize-moria-9-33.yml \
+            tools/apply-moria-9-27-visual-rebirth.py \
+            tools/capture-moria-9-27.mjs \
+            tools/moria-9-27.trigger \
+            tools/apply-moria-9-28-29-world-characters.py \
+            tools/fix-moria-9-29-visual-contract.py \
+            tools/apply-moria-9-31-city-emissives.py \
+            tools/update-moria-9-33-readme.py
+          git commit -m 'chore(9.33): remove temporary Visual Rebirth tooling'
+          git push origin HEAD:moria-9.27-visual-rebirth
