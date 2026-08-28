@@ -46,6 +46,20 @@ missing = {
     'I SAVED IT — CONTINUE':'SALVEI O CÓDIGO — CONTINUAR',
     'Passwords are hashed server-side and never stored in browser account lists.':'As senhas são protegidas no servidor e nunca são armazenadas em listas de contas do navegador.',
     'Signed in as ':'Conectado como ',
+    'Knight':'Cavaleiro',
+    'Paladin':'Paladino',
+    'Sorcerer':'Feiticeiro',
+    'Druid':'Druida',
+    'Warlock':'Bruxo',
+    'Rogue':'Ladino',
+    'Priest':'Sacerdote',
+    'Death Knight':'Cavaleiro da Morte',
+    'Monk':'Monge',
+    'Ranger':'Patrulheiro',
+    'Necromancer':'Necromante',
+    'Berserker':'Berserker',
+    'Shaman':'Xamã',
+    'Templar':'Templário',
 }
 
 catalog=json.loads(BRANCH_CATALOG.read_text(encoding='utf-8'))
