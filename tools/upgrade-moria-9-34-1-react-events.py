@@ -3,6 +3,38 @@ from pathlib import Path
 TOOLTIP = Path('src/components/Tooltip.tsx')
 text = TOOLTIP.read_text(encoding='utf-8')
 
+# The 9.34.1 base applicator has already converted the real Tooltip trigger to
+# local state. Keep that architecture, but remove the legacy dedicated root:
+# portalling directly to document.body is simpler and avoids mutating the DOM
+# while React is rendering TooltipPortal under StrictMode.
+root_block = """const TOOLTIP_ID = '__global_tooltip_root__';
+
+function ensureRoot(): HTMLElement {
+  let root = document.getElementById(TOOLTIP_ID);
+  if (!root) {
+    root = document.createElement('div');
+    root.id = TOOLTIP_ID;
+    root.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999;';
+    document.body.appendChild(root);
+  }
+  return root;
+}
+
+"""
+if root_block not in text:
+    raise SystemExit('Tooltip dedicated root anchor not found')
+text = text.replace(root_block, '', 1)
+
+portal_target = """    ensureRoot(),
+  );
+}"""
+body_target = """    document.body,
+  );
+}"""
+if portal_target not in text:
+    raise SystemExit('Tooltip portal target anchor not found')
+text = text.replace(portal_target, body_target, 1)
+
 old_effect = """  useEffect(() => {
     const node = triggerRef.current;
     if (!node) return;
@@ -34,6 +66,7 @@ old_wrapper = """      <div ref={triggerRef} data-tooltip-trigger=\"true\" class
 new_wrapper = """      <div
         ref={triggerRef}
         data-tooltip-trigger=\"true\"
+        data-tooltip-open={localData ? 'true' : 'false'}
         className=\"inline-flex\"
         onPointerEnter={handleEnter}
         onPointerLeave={handleLeave}
@@ -57,8 +90,13 @@ old_focus = """    await spellSlot.focus();
     await portal.waitFor({ state: 'visible', timeout: 3000 });
 """
 new_hover = """    await tooltipTrigger.hover();
-    await page.waitForTimeout(240);
-    const portal = page.locator('#__global_tooltip_root__ [data-tooltip-portal=\"true\"]');
+    await page.waitForTimeout(260);
+    const openState = await tooltipTrigger.getAttribute('data-tooltip-open');
+    if (openState !== 'true') {
+      const triggerBox = await tooltipTrigger.boundingBox();
+      throw new Error(`Mor'ia 9.34 Tooltip local state did not open after real hover: ${JSON.stringify({ openState, triggerBox })}`);
+    }
+    const portal = page.locator('body > [data-tooltip-portal=\"true\"]');
     await portal.waitFor({ state: 'visible', timeout: 3000 });
 """
 if old_focus not in capture:
@@ -73,11 +111,15 @@ doc = doc.replace(
     '- o trigger usa `onPointerEnter/onPointerLeave` e `onFocusCapture/onBlurCapture` diretamente no wrapper React, incluindo foco de controles filhos e eliminando a corrida entre render e `useEffect`;\n',
 )
 doc = doc.replace(
-    '- a captura prova slot habilitado, foco real, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
-    '- a captura prova slot habilitado, `hover` real sobre o wrapper de produção, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
+    '- `data-tooltip-trigger` e `data-tooltip-portal` fornecem contratos estruturais de QA sem alterar gameplay;\n',
+    '- `data-tooltip-trigger`, `data-tooltip-open` e `data-tooltip-portal` fornecem contratos estruturais de QA sem alterar gameplay;\n',
 )
-if 'corrida entre render e `useEffect`' not in doc or '`hover` real' not in doc:
-    raise SystemExit('9.34.1 documentation anchor not found')
+doc = doc.replace(
+    '- a captura prova slot habilitado, foco real, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
+    '- a captura prova slot habilitado, `hover` real, estado local aberto, portal real no `document.body` e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
+)
+if 'data-tooltip-open' not in doc or '`document.body`' not in doc:
+    raise SystemExit('9.34.1 documentation instrumentation anchor not found')
 DOC.write_text(doc, encoding='utf-8')
 
-print("Mor'ia 9.34.1 React tooltip event hardening prepared")
+print("Mor'ia 9.34.1 local tooltip state/body portal hardening prepared")
