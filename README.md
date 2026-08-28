@@ -50,7 +50,7 @@ O minimapa deixou de representar uma Eldoria fixa: agora usa o `mapId` atual, te
 
 ![Mor'ia 9.6 City Designer Frostpeak](docs/screenshots/moria-9-6-city-designer-frostpeak.png)
 
-### 🛠️ Ferramenta de idição urbana
+### 🛠️ Ferramenta de edição urbana
 
 No **Quick Play**, abra `Ctrl + Shift + A` → **Game Editor** → **City Designer · Live**. A ferramenta permite selecionar qualquer mapa, aplicar presets de identidade urbana, editar cores de paredes/telhados/vias/accent, ajustar centro e raio urbano, clicar no preview para escolher coordenadas e criar/remover **landmarks**, **distritos** e **props**. No modo offline a alteração pode ser aplicada imediatamente ao mundo e o draft é persistido localmente.
 
