@@ -1,0 +1,67 @@
+name: Apply Mor'ia 9.7 Final Visual Polish
+
+on:
+  push:
+    branches:
+      - moria-9.7-reference-visual-convergence
+    paths:
+      - tools/apply-moria-9-7-final-visual-polish.py
+      - .github/workflows/apply-moria-9-7-final-visual-polish.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Apply final 9.7 visual polish
+        run: python3 tools/apply-moria-9-7-final-visual-polish.py
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Audit client dependencies
+        run: npm audit
+
+      - name: Typecheck client
+        run: npm run typecheck
+
+      - name: Build client
+        run: npm run build
+
+      - name: Install server dependencies
+        run: npm ci --prefix server --no-fund
+
+      - name: Audit server dependencies
+        run: npm audit --prefix server
+
+      - name: Check server syntax
+        run: npm run check --prefix server
+
+      - name: Run server tests
+        run: npm test --prefix server
+
+      - name: Commit validated final polish and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f tools/apply-moria-9-7-final-visual-polish.py
+          rm -f .github/workflows/apply-moria-9-7-final-visual-polish.yml
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(9.7): deepen town composition and sprite readability"
+          git push origin HEAD:moria-9.7-reference-visual-convergence
