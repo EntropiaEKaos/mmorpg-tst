@@ -20,6 +20,7 @@ export interface Tile {
   type: TileType;
   walkable: boolean;
   blocksSight?: boolean;
+  variant?: 'swamp';
 }
 
 export interface Position {

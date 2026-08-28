@@ -40,3 +40,10 @@ O gate captura e valida três superfícies de produção:
 - panorâmica da área urbana completa com contagens de água, pontes, caminhos e vegetação de brejo.
 
 A aprovação humana exige que os três canais sejam legíveis, que pontes/passarelas criem circulação coerente, que a Corte do Pântano e os bairros em palafitas tenham escala de capital e que Shadowfen não pareça uma Eldoria apenas recolorida.
+
+
+### 9.40B.1 — Polish de brejo após inspeção humana
+
+A primeira captura 9.40B comprovou escala e topologia, porém a inspeção humana rejeitou a paleta por usar água azul genérica e gramado limpo demais. O polish adiciona uma `variant: 'swamp'` **somente visual** aos tiles `water`, `grass` e `bridge` quando o bioma é `swamp`.
+
+O tipo lógico do tile, colisão, caminhabilidade, pathfinding e contratos do servidor não mudam. O renderer passa a usar água turva verde-azulada, limo, musgo, solo mais escuro e pontes envelhecidas. A captura automatizada também deixa de aceitar azul genérico e exige massa suficiente de pixels de água turva e vegetação escura.

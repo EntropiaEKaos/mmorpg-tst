@@ -519,7 +519,8 @@ export function generateMap(mapId: string): Tile[][] {
         }
         }
       }
-      row.push({ type, walkable, blocksSight });
+      const variant: Tile['variant'] = biome === 'swamp' && (type === 'water' || type === 'grass' || type === 'bridge') ? 'swamp' : undefined;
+      row.push({ type, walkable, blocksSight, ...(variant ? { variant } : {}) });
     }
     map.push(row);
   }

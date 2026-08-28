@@ -43,6 +43,48 @@ function buildTileCache(size: number) {
     }
   }, size));
 
+
+  tileCache.set(`grass_swamp_${size}`, createTileCanvas((ctx, s) => {
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#2d432c'; ctx.fillRect(0,0,s,s);
+    const px=Math.max(1,Math.round(s/32));
+    for(let i=0;i<40;i++){
+      const x=Math.floor(hash(i,121)*s/px)*px,y=Math.floor(hash(i,127)*s/px)*px;
+      const tones=['#233827','#365037','#405a3b','#4b4a32','#596044'];
+      ctx.fillStyle=tones[Math.floor(hash(i,131)*tones.length)];
+      ctx.fillRect(x,y,px*(hash(i,137)>.72?2:1),px);
+    }
+    for(let i=0;i<7;i++){
+      const x=Math.floor(hash(i+70,139)*s),y=Math.floor(hash(i+70,149)*s);
+      ctx.fillStyle='rgba(91,80,50,.34)';ctx.fillRect(x,y,Math.max(px,s*.14),Math.max(px,s*.04));
+    }
+    ctx.fillStyle='rgba(116,139,73,.18)';ctx.fillRect(0,0,s,px);
+  }, size));
+
+  tileCache.set(`water_swamp_${size}`, createTileCanvas((ctx, s) => {
+    const grad=ctx.createLinearGradient(0,0,0,s);
+    grad.addColorStop(0,'#355c50');grad.addColorStop(.5,'#294b43');grad.addColorStop(1,'#17352f');
+    ctx.fillStyle=grad;ctx.fillRect(0,0,s,s);
+    const px=Math.max(1,Math.round(s/32));
+    for(let i=0;i<7;i++){
+      const x=hash(i,151)*s,y=hash(i,157)*s;
+      ctx.fillStyle=i%2?'rgba(126,143,76,.22)':'rgba(72,105,73,.28)';
+      ctx.fillRect(x,y,Math.max(px,s*(.08+hash(i,163)*.12)),px);
+    }
+    ctx.strokeStyle='rgba(151,177,118,.18)';ctx.lineWidth=Math.max(1,px);
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(s*(.25+i*.23),s*(.30+i*.17),Math.max(1,s*(.08+i*.02)),0,Math.PI);ctx.stroke();}
+    ctx.fillStyle='rgba(186,201,135,.24)';ctx.fillRect(s*.62,s*.18,px,px);ctx.fillRect(s*.28,s*.72,px,px);
+    ctx.fillStyle='rgba(7,28,24,.20)';ctx.fillRect(0,s-px,s,px);
+  }, size));
+
+  tileCache.set(`bridge_swamp_${size}`, createTileCanvas((ctx, s) => {
+    ctx.fillStyle='#294b43';ctx.fillRect(0,0,s,s);
+    ctx.fillStyle='#63543b';ctx.fillRect(2,0,s-4,s);
+    const plank=Math.max(3,Math.round(s/6));
+    for(let y=0;y<s;y+=plank){ctx.fillStyle=y%(plank*2)===0?'#756248':'#594a36';ctx.fillRect(3,y,s-6,Math.max(1,plank-1));ctx.fillStyle='rgba(146,159,86,.20)';ctx.fillRect(3,y,Math.max(1,s*.22),1);}
+    ctx.fillStyle='#39432d';ctx.fillRect(0,0,2,s);ctx.fillRect(s-2,0,2,s);
+  }, size));
+
   tileCache.set(`water_${size}`, createTileCanvas((ctx, s) => {
     // Deep water gradient with depth
     const grad = ctx.createLinearGradient(0, 0, 0, s);
@@ -352,7 +394,7 @@ function buildTileCache(size: number) {
   }, size));
 }
 
-function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: number, y: number, size: number, worldX = 0, worldY = 0, time = 0) {
+function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: number, y: number, size: number, worldX = 0, worldY = 0, time = 0, variant?: Tile['variant']) {
   const px = Math.max(1, Math.round(size / 32));
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -366,10 +408,10 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
   ctx.fillRect(x + size - px, y, px, size);
 
   if (type === 'water') {
-    ctx.fillStyle = 'rgba(217,241,255,.20)';
+    ctx.fillStyle = variant === 'swamp' ? 'rgba(172,193,124,.12)' : 'rgba(217,241,255,.20)';
     ctx.fillRect(x + size*.12, y + size*.24, size*.28, px);
     ctx.fillRect(x + size*.56, y + size*.66, size*.22, px);
-    ctx.fillStyle = 'rgba(5,26,58,.18)';
+    ctx.fillStyle = variant === 'swamp' ? 'rgba(10,39,31,.24)' : 'rgba(5,26,58,.18)';
     ctx.fillRect(x + size*.18, y + size*.83, size*.56, px);
   } else if (type === 'lava') {
     ctx.shadowColor = 'rgba(255,83,24,.45)';
@@ -379,7 +421,7 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
     ctx.fillRect(x + size*.59, y + size*.63, size*.18, px);
     ctx.shadowBlur = 0;
   } else if (type === 'grass' || type === 'sand' || type === 'snow') {
-    ctx.fillStyle = type === 'grass' ? 'rgba(210,228,144,.08)' : type === 'snow' ? 'rgba(255,255,255,.16)' : 'rgba(255,235,174,.11)';
+    ctx.fillStyle = type === 'grass' ? (variant === 'swamp' ? 'rgba(141,158,87,.065)' : 'rgba(210,228,144,.08)') : type === 'snow' ? 'rgba(255,255,255,.16)' : 'rgba(255,235,174,.11)';
     ctx.fillRect(x + size*.22, y + size*.19, px, px);
     ctx.fillRect(x + size*.67, y + size*.72, px, px);
   } else if (type === 'path' || type === 'floor' || type === 'wood_floor' || type === 'bridge') {
@@ -407,7 +449,7 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
     }
   } else if (type === 'sand' && variation > .62) { ctx.fillStyle = 'rgba(116,88,50,.09)'; ctx.fillRect(x + size*.18, y + size*(.28 + variation*.25), size*.48, px); }
   if (type === 'water') {
-    const wave = (Math.sin(time / 430 + worldX * .7 + worldY * .31) + 1) * .5; ctx.fillStyle = `rgba(220,245,255,${.05 + wave*.11})`; ctx.fillRect(x + size*.12, y + size * (.28 + wave * .20), size*(.22 + wave*.22), px);
+    const wave = (Math.sin(time / 430 + worldX * .7 + worldY * .31) + 1) * .5; ctx.fillStyle = variant === 'swamp' ? `rgba(171,192,120,${.025 + wave*.065})` : `rgba(220,245,255,${.05 + wave*.11})`; ctx.fillRect(x + size*.12, y + size * (.28 + wave * .20), size*(.22 + wave*.22), px);
   } else if (type === 'lava') {
     const pulse = (Math.sin(time / 260 + worldX + worldY * .6) + 1) * .5; ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = `rgba(255,118,35,${.08 + pulse*.18})`; ctx.fillRect(x + size*.20, y + size*.32, size*.58, size*.34); ctx.globalCompositeOperation = 'source-over';
   }
@@ -415,8 +457,8 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
 }
 
 export function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, size: number, worldX = 0, worldY = 0, time = 0) {
-  ctx.imageSmoothingEnabled = false; buildTileCache(size); const cached = tileCache.get(`${tile.type}_${size}`);
-  if (cached) { ctx.drawImage(cached, x, y, size, size); drawMaterialFinish(ctx, tile.type, x, y, size, worldX, worldY, time); }
+  ctx.imageSmoothingEnabled = false; buildTileCache(size); const cacheKey = tile.variant ? `${tile.type}_${tile.variant}_${size}` : `${tile.type}_${size}`; const cached = tileCache.get(cacheKey) || tileCache.get(`${tile.type}_${size}`);
+  if (cached) { ctx.drawImage(cached, x, y, size, size); drawMaterialFinish(ctx, tile.type, x, y, size, worldX, worldY, time, tile.variant); }
 }
 
 export function drawPlayer(
