@@ -1,4 +1,5 @@
 import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { t as tr } from '../i18n';
 
 interface Props {
   id: string;
@@ -121,16 +122,16 @@ export default function MovableHudWindow({
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
         onDoubleClick={reset}
-        title="Drag to move · double-click to reset"
+        title={tr('Drag to move · double-click to reset')}
       >
         <span className="text-[10px] text-amber-200/55">⠿</span>
-        <span className="min-w-0 flex-1 truncate text-[9px] font-black uppercase tracking-[0.16em] text-amber-100/85">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-[9px] font-black uppercase tracking-[0.16em] text-amber-100/85">{tr(title)}</span>
         <button
           type="button"
           data-no-drag
           onClick={reset}
           className="rounded px-1 text-[8px] font-bold text-slate-600 hover:bg-white/5 hover:text-slate-300"
-          title="Reset panel position"
+          title={tr('Reset panel position')}
         >
           ↺
         </button>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { t as tr } from '../i18n';
 
 interface RaidWarningData {
   text: string;
@@ -48,9 +49,9 @@ export default function RaidWarning() {
         <div className="relative mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-black/35 text-5xl shadow-2xl backdrop-blur-sm" style={{ boxShadow: `0 0 42px ${warning.color}22, inset 0 1px rgba(255,255,255,.06)` }}>
           <span style={{ filter: `drop-shadow(0 0 12px ${warning.color})` }}>{warning.icon}</span>
         </div>
-        <div className="moria-eyebrow relative mb-2" style={{ color: warning.color }}>WORLD EVENT</div>
+        <div className="moria-eyebrow relative mb-2" style={{ color: warning.color }}>{tr('WORLD EVENT')}</div>
         <div className="moria-title relative text-3xl font-black tracking-[0.08em] sm:text-4xl lg:text-5xl" style={{ color: warning.color, textShadow: `0 0 28px ${warning.color}66, 0 3px 18px rgba(0,0,0,.95)` }}>
-          {warning.text}
+          {tr(warning.text)}
         </div>
       </div>
     </div>

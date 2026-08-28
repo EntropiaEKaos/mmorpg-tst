@@ -227,7 +227,7 @@ export default function LoginScreen({ onLogin }: Props) {
               <div className="mb-5">
                 <div className="moria-eyebrow">{tr('New adventurer')}</div>
                 <h2 className="moria-title mt-1 text-2xl font-bold">{tr('Create your character')}</h2>
-                <p className="mt-1 text-xs text-slate-400">{tr('Signed in as ')}{serverAccount?.username}</p>
+                <p className="mt-1 text-xs text-slate-400">{tr('Signed in as')} {serverAccount?.username}</p>
               </div>
               <Field label="CHARACTER NAME" value={charName} onChange={setCharName} type="text" onEnter={submit} autoComplete="off" />
               <div className="mt-4">
@@ -245,7 +245,7 @@ export default function LoginScreen({ onLogin }: Props) {
                         <div className="flex items-center gap-3">
                           <VocationPortrait id={v.id} color={v.color} active={active} />
                           <div className="min-w-0">
-                            <div className={`truncate text-xs font-bold ${active ? 'text-amber-100' : 'text-slate-200'}`}>{tr(v.name)}</div>
+                            <div className={`text-[11px] font-bold leading-tight ${active ? 'text-amber-100' : 'text-slate-200'}`}>{tr(v.name)}</div>
                             <div className="mt-1 text-[9px] tracking-wider text-slate-500">{active ? tr('SELECTED') : tr('CHOOSE')}</div>
                           </div>
                         </div>

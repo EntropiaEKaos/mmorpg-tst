@@ -2503,7 +2503,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       <div className="moria-panel moria-topbar-95 relative z-40 flex min-h-12 shrink-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-1.5 text-xs">
         <div className="flex shrink-0 items-center gap-3 pr-2">
           <span className="moria-title text-base font-black tracking-[0.16em] text-amber-100">MOR'IA</span>
-          <span className="hidden text-slate-500 md:inline">{VOCATIONS[player.vocation]?.name} · Lv {player.level}</span>
+          <span className="hidden text-slate-500 md:inline">{tr(VOCATIONS[player.vocation]?.name || player.vocation)} · {tr(`Lv ${player.level}`)}</span>
           <span className="moria-chip rounded-lg px-2 py-1 text-[9px] font-bold tracking-wider" style={{ color: MAPS[currentMapId]?.biome === 'snow' ? '#9bd4ff' : MAPS[currentMapId]?.biome === 'shadow' ? '#b398ff' : '#71d8ac', borderColor: 'currentColor' }}>◆ {MAPS[currentMapId]?.name}</span>
         </div>
         <div className="moria-scrollbar flex min-w-0 flex-1 items-center justify-end gap-1 overflow-x-auto pb-0.5">
@@ -2518,9 +2518,9 @@ export default function GameScreen({ account, onLogout }: Props) {
             <button
               onClick={() => setShowAdmin((s) => !s)}
               className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-violet-200"
-              title="Offline Debug Admin (Ctrl+Shift+A)"
+              title={tr('Offline Debug Admin (Ctrl+Shift+A)')}
             >
-              <span>⚡</span><span className="hidden lg:inline">Debug</span>
+              <span>⚡</span><span className="hidden lg:inline">{tr('Debug')}</span>
             </button>
           )}
           <button
@@ -2770,7 +2770,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           {inDungeon && (
             <div className="moria-panel pointer-events-none absolute left-1/2 top-14 z-10 -translate-x-1/2 animate-pulse rounded-full border border-violet-300/40 px-4 py-1.5"
                  style={{ boxShadow: '0 0 28px rgba(168,85,247,.18)' }}>
-              <span className="text-purple-200 font-bold text-sm tracking-wider">🌀 DUNGEON · WAVE {dungeonWave}/{dungeonTotalWavesRef.current}</span>
+              <span className="text-purple-200 font-bold text-sm tracking-wider">🌀 {tr('DUNGEON')} · {tr('WAVE')} {dungeonWave}/{dungeonTotalWavesRef.current}</span>
             </div>
           )}
 
@@ -3067,10 +3067,10 @@ function TopButton({ icon, label, hotkey, onClick }: { icon: string; label: stri
     <button
       onClick={onClick}
       className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-slate-300"
-      title={`${label} (${hotkey})`}
+      title={`${tr(label)} (${hotkey})`}
     >
       <span>{icon}</span>
-      <span className="hidden lg:inline">{label}</span>
+      <span className="hidden lg:inline">{tr(label)}</span>
       {hotkey && <span className="text-[8px] text-amber-200/45">{hotkey}</span>}
     </button>
   );

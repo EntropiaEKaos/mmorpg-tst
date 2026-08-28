@@ -7,6 +7,7 @@ import WorldMiniMap from './WorldMiniMap';
 import { T as Tooltip, SpellTooltip, StatTooltip } from './Tooltip';
 import { getCoins } from '../game/economy';
 import MovableHudWindow from './MovableHudWindow';
+import { t as tr } from '../i18n';
 
 interface Props {
   player: Player;
@@ -44,7 +45,7 @@ export default function HUD({ player, spells, onCastSpell, monsters, official, m
     <>
       <MovableHudWindow
         id="minimap"
-        title={`Minimap · ${MAPS[mapId]?.name || mapId} · ${player.pos.x}, ${player.pos.y}`}
+        title={`${tr('Minimap')} · ${tr(MAPS[mapId]?.name || mapId)} · ${player.pos.x}, ${player.pos.y}`}
         className="w-[252px]"
         contentClassName="p-2"
         defaultStyle={{ left: 8, top: 8 }}
@@ -54,7 +55,7 @@ export default function HUD({ player, spells, onCastSpell, monsters, official, m
 
       <MovableHudWindow
         id="combat-profile"
-        title={`${vocation?.name || player.vocation} · Lv ${player.level}`}
+        title={`${tr(vocation?.name || player.vocation)} · ${tr(`Lv ${player.level}`)}`}
         className="w-[278px]"
         contentClassName="p-2"
         defaultStyle={{ right: 8, top: 8 }}
@@ -89,7 +90,7 @@ export default function HUD({ player, spells, onCastSpell, monsters, official, m
 
       <MovableHudWindow
         id="skills"
-        title="Skills"
+        title={tr('Skills')}
         className="w-[278px]"
         contentClassName="p-2"
         defaultStyle={{ right: 8, top: 218 }}
@@ -118,7 +119,7 @@ export default function HUD({ player, spells, onCastSpell, monsters, official, m
 
       <MovableHudWindow
         id="spellbook"
-        title={`Spellbook · ${vocation?.name || player.vocation}`}
+        title={`${tr('Spellbook')} · ${tr(vocation?.name || player.vocation)}`}
         className="w-[278px]"
         contentClassName="p-2"
         defaultStyle={{ right: 8, top: 350 }}
@@ -138,8 +139,8 @@ export default function HUD({ player, spells, onCastSpell, monsters, official, m
                 >
                   <span className="flex h-8 w-8 items-center justify-center border border-white/10 bg-black/35 text-lg" style={{ filter: `drop-shadow(0 0 5px ${spell.color}66)` }}>{locked ? '🔒' : spell.icon}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[10px] font-bold text-slate-100">{spell.name}</div>
-                    <div className="font-mono text-[8px] text-blue-300/80">{locked ? `LV ${spell.levelRequired}` : `${spell.mana} MP`}</div>
+                    <div className="truncate text-[10px] font-bold text-slate-100">{tr(spell.name)}</div>
+                    <div className="font-mono text-[8px] text-blue-300/80">{locked ? tr(`Lv ${spell.levelRequired}`) : `${spell.mana} MP`}</div>
                   </div>
                   <div className="border border-amber-200/20 bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-black text-amber-100">{i + 1}</div>
                   {onCd && !locked && <span className="absolute inset-0 flex items-center justify-center bg-black/65 font-mono text-xs font-black text-white">{((spell.cooldown - (now - spell.lastCast)) / 1000).toFixed(1)}</span>}
@@ -153,7 +154,7 @@ export default function HUD({ player, spells, onCastSpell, monsters, official, m
       {nearby.length > 0 && (
         <MovableHudWindow
           id="nearby-threats"
-          title={`Nearby Threats · ${nearby.length}`}
+          title={`${tr('Nearby Threats')} · ${nearby.length}`}
           className="w-[278px]"
           contentClassName="p-2"
           defaultStyle={{ right: 8, bottom: 8 }}
@@ -166,8 +167,8 @@ export default function HUD({ player, spells, onCastSpell, monsters, official, m
                 <div key={m.id} className="moria-hud-cell px-2 py-1.5">
                   <div className="flex items-center gap-1.5 text-[9px]">
                     <span>{m.emoji}</span>
-                    <span className={`min-w-0 flex-1 truncate font-bold ${m.type === 'boss' ? 'text-amber-200' : m.type === 'elite' ? 'text-violet-300' : 'text-slate-200'}`}>{m.name}</span>
-                    <span className="font-mono text-slate-500">Lv{m.level}</span>
+                    <span className={`min-w-0 flex-1 truncate font-bold ${m.type === 'boss' ? 'text-amber-200' : m.type === 'elite' ? 'text-violet-300' : 'text-slate-200'}`}>{tr(m.name)}</span>
+                    <span className="font-mono text-slate-500">{tr(`Lv ${m.level}`)}</span>
                     <span className="font-mono text-slate-500">{dist}m</span>
                   </div>
                   <div className="mt-1 h-1.5 overflow-hidden border border-black/40 bg-black/65">
@@ -183,7 +184,7 @@ export default function HUD({ player, spells, onCastSpell, monsters, official, m
       {(player.buffs || []).length > 0 && (
         <MovableHudWindow
           id="active-effects"
-          title="Active Effects"
+          title={tr('Active Effects')}
           className="max-w-[330px]"
           contentClassName="flex flex-wrap gap-1 p-1.5"
           defaultStyle={{ left: 8, top: 286 }}
@@ -205,7 +206,7 @@ function Stat({ label, icon, value, color }: { label: string; icon: string; valu
     <div className="moria-hud-cell flex items-center gap-2 px-2 py-2">
       <span className="text-base">{icon}</span>
       <div className="min-w-0 flex-1">
-        <div className="text-[7px] font-bold tracking-widest text-slate-500">{label}</div>
+        <div className="text-[7px] font-bold tracking-widest text-slate-500">{tr(label)}</div>
         <div className="font-mono text-sm font-black" style={{ color }}>{value}</div>
       </div>
     </div>
@@ -213,7 +214,7 @@ function Stat({ label, icon, value, color }: { label: string; icon: string; valu
 }
 
 function MiniValue({ label, value, color }: { label: string; value: string; color: string }) {
-  return <div className="moria-hud-cell flex items-center justify-between gap-2 px-2 py-1.5 text-[8px]"><span className="font-bold tracking-wider text-slate-500">{label}</span><span className="font-mono font-black" style={{ color }}>{value}</span></div>;
+  return <div className="moria-hud-cell flex items-center justify-between gap-2 px-2 py-1.5 text-[8px]"><span className="font-bold tracking-wider text-slate-500">{tr(label)}</span><span className="font-mono font-black" style={{ color }}>{value}</span></div>;
 }
 
 function clampPct(value: number, max: number) {

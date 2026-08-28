@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Player } from '../game/types';
 import { getWorldEvents, contributeToWorldEvent, type WorldEvent } from '../game/worldEvents';
+import { t as tr } from '../i18n';
 
 interface Props {
   player: Player;
@@ -38,19 +39,19 @@ export default function WorldEvents({ player, onClose, onContribute }: Props) {
            style={{ boxShadow: '0 30px 90px rgba(0,0,0,.58), 0 0 55px rgba(249,115,22,.10)' }}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
-              style={{ backgroundImage: 'linear-gradient(180deg, #ff6a00 0%, #8b3000 100%)' }}>🌍 WORLD EVENTS</h2>
+              style={{ backgroundImage: 'linear-gradient(180deg, #ff6a00 0%, #8b3000 100%)' }}>🌍 {tr('WORLD EVENTS')}</h2>
           <div className="flex items-center gap-2">
             <button onClick={refresh} className="px-2 py-1 text-xs rounded bg-black/40 text-orange-200 border border-orange-900/50">🔄</button>
             <button onClick={onClose} className="text-orange-200/60 hover:text-orange-100 text-2xl">✕</button>
           </div>
         </div>
-        <div className="text-xs text-orange-200/60 mb-3">Global missions shared by all adventurers. Contribute to earn rewards!</div>
+        <div className="text-xs text-orange-200/60 mb-3">{tr('Global missions shared by all adventurers. Contribute to earn rewards!')}</div>
 
         <div className="moria-scrollbar flex-1 overflow-y-auto space-y-2 pr-1">
           {activeEvents.length === 0 && (
             <div className="text-center text-orange-200/40 py-8">
               <div className="text-5xl mb-3">🌍</div>
-              <div>No active world events. Check back later or ask an admin to create one!</div>
+              <div>{tr('No active world events. Check back later or ask an admin to create one!')}</div>
             </div>
           )}
           {activeEvents.map((event) => {
@@ -62,8 +63,8 @@ export default function WorldEvents({ player, onClose, onContribute }: Props) {
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-3xl">{event.icon}</span>
                   <div className="flex-1">
-                    <div className="font-bold text-base text-orange-200">{event.name}</div>
-                    <div className="text-[10px] text-orange-200/60 italic">{event.description}</div>
+                    <div className="font-bold text-base text-orange-200">{tr(event.name)}</div>
+                    <div className="text-[10px] text-orange-200/60 italic">{tr(event.description)}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-[10px] text-orange-300">⏱ {fmtTime(timeLeft)} left</div>
@@ -72,7 +73,7 @@ export default function WorldEvents({ player, onClose, onContribute }: Props) {
                 </div>
                 <div className="mb-2">
                   <div className="flex justify-between text-[10px] text-orange-200/70 mb-0.5">
-                    <span>Progress: {event.progress.current}/{event.progress.required}</span>
+                    <span>{tr('Progress:')} {event.progress.current}/{event.progress.required}</span>
                     <span>{Math.round(pct)}%</span>
                   </div>
                   <div className="h-2 bg-black/60 rounded-full overflow-hidden">
@@ -82,13 +83,13 @@ export default function WorldEvents({ player, onClose, onContribute }: Props) {
                 <div className="flex items-center justify-between">
                   <div className="text-[10px] text-orange-200/50">
                     📍 {event.targetMap} · {event.type}
-                    {myContribution > 0 && <span className="text-green-400 ml-2">Your contribution: {myContribution}</span>}
+                    {myContribution > 0 && <span className="text-green-400 ml-2">{tr('Your contribution:')} {myContribution}</span>}
                   </div>
                   <div className="flex gap-1">
                     {event.type === 'invasion' || event.type === 'bounty' || event.type === 'worldboss' ? (
-                      <span className="text-[10px] text-orange-300/70">Kill target monsters to contribute!</span>
+                      <span className="text-[10px] text-orange-300/70">{tr('Kill target monsters to contribute!')}</span>
                     ) : (
-                      <button onClick={() => handleContribute(event, 1)} className="px-2 py-0.5 text-[10px] rounded bg-orange-700/50 text-orange-100 border border-orange-600">Contribute</button>
+                      <button onClick={() => handleContribute(event, 1)} className="px-2 py-0.5 text-[10px] rounded bg-orange-700/50 text-orange-100 border border-orange-600">{tr('Contribute')}</button>
                     )}
                   </div>
                 </div>
@@ -98,12 +99,12 @@ export default function WorldEvents({ player, onClose, onContribute }: Props) {
 
           {completedEvents.length > 0 && (
             <div className="mt-4">
-              <div className="text-[10px] text-green-300 tracking-widest mb-1.5">✅ RECENTLY COMPLETED</div>
+              <div className="text-[10px] text-green-300 tracking-widest mb-1.5">✅ {tr('RECENTLY COMPLETED')}</div>
               {completedEvents.map((event) => (
                 <div key={event.id} className="flex items-center gap-2 p-1.5 rounded border border-green-700/40 bg-green-900/10 text-xs">
                   <span className="text-lg opacity-60">{event.icon}</span>
-                  <span className="flex-1 text-green-200/70">{event.name}</span>
-                  <span className="text-[10px] text-green-400">Completed</span>
+                  <span className="flex-1 text-green-200/70">{tr(event.name)}</span>
+                  <span className="text-[10px] text-green-400">{tr('Completed')}</span>
                 </div>
               ))}
             </div>

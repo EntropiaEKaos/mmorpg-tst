@@ -197,6 +197,7 @@ const PT_BR_FRAGMENTS: Array<[string,string]> = [
 
 const PT_BR_PATTERNS: Array<[RegExp, string]> = [
   [/^Signed in as (.+)$/i, 'Conectado como $1'],
+  [/^Welcome to Mor'ia, (.+)!$/i, "Bem-vindo a Mor'ia, $1!"],
   [/^Level\s+(\d+)$/i, 'Nível $1'],
   [/^Lv\.?\s*(\d+)$/i, 'Nv. $1'],
   [/^(\d+)\s+gold$/i, '$1 de ouro'],
