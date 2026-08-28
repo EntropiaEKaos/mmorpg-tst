@@ -1,6 +1,7 @@
 import type { ActiveQuest, Quest } from '../game/types';
 import { QUESTS } from '../game/quests';
 import { ACHIEVEMENTS } from '../game/achievements';
+import { t as tr } from '../i18n';
 
 interface Props {
   activeQuests: ActiveQuest[];
@@ -30,16 +31,16 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/65 p-4 backdrop-blur-md" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="moria-panel moria-fade-up flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-amber-200/20 p-4 sm:p-5">
         <div className="flex items-center justify-between mb-3">
-          <div><div className="moria-eyebrow">Adventure journal</div><h2 className="moria-title mt-1 text-2xl font-black">📜 Quest Log</h2></div>
-          <button onClick={onClose} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400" aria-label="Close quest log">✕</button>
+          <div><div className="moria-eyebrow">{tr('Adventure journal')}</div><h2 className="moria-title mt-1 text-2xl font-black">📜 {tr('Quest Log')}</h2></div>
+          <button onClick={onClose} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400" aria-label={tr('Close quest log')}>✕</button>
         </div>
 
         <div className="moria-scrollbar flex-1 space-y-5 overflow-y-auto pr-2">
           {/* Active Quests */}
           <section>
-            <h3 className="text-amber-300 font-bold text-sm mb-2 tracking-wider">🔥 ACTIVE ({activeQuests.length})</h3>
+            <h3 className="text-amber-300 font-bold text-sm mb-2 tracking-wider">🔥 {tr('ACTIVE')} ({activeQuests.length})</h3>
             {activeQuests.length === 0 ? (
-              <div className="text-amber-200/40 text-xs italic p-2">No active quests. Talk to NPCs!</div>
+              <div className="text-amber-200/40 text-xs italic p-2">{tr('No active quests. Talk to NPCs!')}</div>
             ) : (
               <div className="space-y-2">
                 {activeQuests.map((aq) => {
@@ -52,8 +53,8 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
                     <div key={aq.questId} className="p-3 rounded border border-amber-700/50 bg-amber-900/20">
                       <div className="flex justify-between items-start">
                         <div>
-                          <div className="text-amber-100 font-bold">{quest?.name || aq.questId}</div>
-                          <div className="text-amber-200/70 text-xs italic mt-0.5">{quest?.description || 'Authoritative server quest'}</div>
+                          <div className="text-amber-100 font-bold">{tr(quest?.name || aq.questId)}</div>
+                          <div className="text-amber-200/70 text-xs italic mt-0.5">{tr(quest?.description || 'Authoritative server quest')}</div>
                         </div>
                         <div className="text-right text-[10px] text-amber-300">
                           <div>+{quest?.rewards.xp ?? 0} XP</div>
@@ -64,7 +65,7 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
                         {aq.objectives.map((o, i) => (
                           <div key={i} className="text-xs flex justify-between">
                             <span className={o.current >= o.count ? 'text-green-400' : 'text-amber-200/80'}>
-                              {o.current >= o.count ? '✅' : '○'} {o.targetName}
+                              {o.current >= o.count ? '✅' : '○'} {tr(o.targetName)}
                             </span>
                             <span className="text-amber-300 font-mono">{o.current}/{o.count}</span>
                           </div>
@@ -89,15 +90,15 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
 
           {/* Available */}
           <section>
-            <h3 className="text-blue-300 font-bold text-sm mb-2 tracking-wider">📋 AVAILABLE ({availableQuests.length})</h3>
+            <h3 className="text-blue-300 font-bold text-sm mb-2 tracking-wider">📋 {tr('AVAILABLE')} ({availableQuests.length})</h3>
             {availableQuests.length === 0 ? (
-              <div className="text-amber-200/40 text-xs italic p-2">No quests available right now.</div>
+              <div className="text-amber-200/40 text-xs italic p-2">{tr('No quests available right now.')}</div>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {availableQuests.map((q) => (
                   <div key={q.id} className="p-2 rounded border border-blue-700/40 bg-blue-900/10 text-xs">
                     <div className="flex items-center justify-between">
-                      <div className="text-amber-100 font-bold">{q.name}</div>
+                      <div className="text-amber-100 font-bold">{tr(q.name)}</div>
                       {onAcceptQuest && (
                         <button onClick={() => onAcceptQuest(q.id)}
                                 className="px-2 py-0.5 text-[9px] rounded bg-blue-700/50 text-blue-200 border border-blue-600">
@@ -105,8 +106,8 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
                         </button>
                       )}
                     </div>
-                    <div className="text-amber-200/60 text-[10px] mt-0.5">Lv {q.levelRequired}+</div>
-                    <div className="text-amber-200/80 text-[10px] mt-1">{q.description}</div>
+                    <div className="text-amber-200/60 text-[10px] mt-0.5">{tr('Lv')} {q.levelRequired}+</div>
+                    <div className="text-amber-200/80 text-[10px] mt-1">{tr(q.description)}</div>
                   </div>
                 ))}
               </div>
@@ -115,23 +116,23 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
 
           {/* Completed */}
           <section>
-            <h3 className="text-green-300 font-bold text-sm mb-2 tracking-wider">✅ COMPLETED ({completedQuests.length})</h3>
+            <h3 className="text-green-300 font-bold text-sm mb-2 tracking-wider">✅ {tr('COMPLETED')} ({completedQuests.length})</h3>
             <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
               {completedQuests.map((qid) => {
                 const q = questCatalog.find((qq) => qq.id === qid);
                 return (
                   <div key={qid} className="p-1.5 rounded border border-green-700/40 bg-green-900/10 text-xs text-green-300">
-                    ✅ {q?.name || qid}
+                    ✅ {tr(q?.name || qid)}
                   </div>
                 );
               })}
-              {completedQuests.length === 0 && <div className="text-amber-200/40 text-xs italic">None yet</div>}
+              {completedQuests.length === 0 && <div className="text-amber-200/40 text-xs italic">{tr('None yet')}</div>}
             </div>
           </section>
 
           {/* Achievements */}
           <section>
-            <h3 className="text-orange-300 font-bold text-sm mb-2 tracking-wider">🏆 ACHIEVEMENTS ({achievements.length}/{ACHIEVEMENTS.length})</h3>
+            <h3 className="text-orange-300 font-bold text-sm mb-2 tracking-wider">🏆 {tr('ACHIEVEMENTS')} ({achievements.length}/{ACHIEVEMENTS.length})</h3>
             <div className="grid grid-cols-3 gap-1.5">
               {ACHIEVEMENTS.map((a) => {
                 const unlocked = achievements.includes(a.id);
@@ -144,9 +145,9 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
                       <span className="text-base">{a.icon}</span>
                       <div className="flex-1 min-w-0">
                         <div className={unlocked ? 'text-orange-200 font-bold' : 'text-gray-400 font-bold truncate'}>
-                          {a.name}
+                          {tr(a.name)}
                         </div>
-                        <div className="text-amber-200/60 text-[10px] truncate">{a.description}</div>
+                        <div className="text-amber-200/60 text-[10px] truncate">{tr(a.description)}</div>
                       </div>
                     </div>
                   </div>
@@ -157,7 +158,7 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
 
           {/* Stats */}
           <section>
-            <h3 className="text-purple-300 font-bold text-sm mb-2 tracking-wider">📊 STATISTICS</h3>
+            <h3 className="text-purple-300 font-bold text-sm mb-2 tracking-wider">📊 {tr('STATISTICS')}</h3>
             <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
               {[
                 { label: 'Monsters Killed', value: stats.monstersKilled, icon: '🗡' },
@@ -172,7 +173,7 @@ export default function QuestLog({ activeQuests, completedQuests, availableQuest
                 { label: 'Level Ups', value: stats.levelUps, icon: '⭐' },
               ].map((s) => (
                 <div key={s.label} className="p-1.5 rounded border border-purple-700/40 bg-purple-900/10 text-xs">
-                  <div className="text-amber-200/60 text-[10px]">{s.icon} {s.label}</div>
+                  <div className="text-amber-200/60 text-[10px]">{s.icon} {tr(s.label)}</div>
                   <div className="text-purple-200 font-bold">{s.value.toLocaleString()}</div>
                 </div>
               ))}
