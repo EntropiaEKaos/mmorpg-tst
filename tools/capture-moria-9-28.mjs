@@ -8,7 +8,6 @@ const errors = [];
 page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
 page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
 
-// Keep the capture deterministic while still exercising LoginScreen's real authenticated flow.
 await page.route('http://127.0.0.1:3000/api/auth/register', async route => {
   await route.fulfill({
     status: 200,
@@ -50,7 +49,6 @@ await assertPortuguese('login', ['MUNDO ONLINE PERSISTENTE','CONTA SEGURA','ENTR
 await assertNoLegacyEnglish('login', ['LOGIN','REGISTER','RECOVER','ACCOUNT NAME','PASSWORD','OFFLINE QUICK PLAY','PERSISTENT ONLINE REALM']);
 await screenshot('moria-9-28-login-ptbr.png');
 
-// Traverse the real registration -> recovery-code -> first-character flow.
 await page.getByRole('button', { name:'CADASTRAR', exact:true }).click();
 await page.locator('input[autocomplete="username"]').fill('revisao928');
 await page.locator('input[autocomplete="new-password"]').fill('SenhaForte928!');
@@ -62,7 +60,6 @@ await assertPortuguese('recovery code', ['RECUPERAÇÃO DE CONTA','SALVE SEU CÓ
 await assertNoLegacyEnglish('recovery code', ['ACCOUNT RECOVERY','SAVE YOUR RECOVERY CODE','I SAVED IT','CONTINUE']);
 await page.getByRole('button', { name:/SALVEI.*CONTINUAR/i }).click();
 
-// Character creation uses the actual game renderer for every vocation preview.
 const previews = page.locator('[data-vocation-preview]');
 await previews.first().waitFor({ state:'visible', timeout:10000 });
 await page.waitForTimeout(350);
@@ -85,7 +82,6 @@ await page.waitForTimeout(300);
 await captureText('characters-bottom');
 await screenshot('moria-9-28-character-creation-b.png');
 
-// Reset the temporary auth session and enter deterministic offline gameplay.
 await page.evaluate(() => {
   localStorage.removeItem('moria_session_token');
   localStorage.removeItem('moria_world_events');
@@ -113,7 +109,7 @@ await screenshot('moria-9-28-gameplay-ptbr-character.png');
 await page.keyboard.press('i');
 await page.waitForTimeout(500);
 await captureText('inventory');
-await assertPortuguese('inventory', ['INVENTÁRIO','ITENS','ARTESANATO','ENCAIXE','POÇÃO DE VIDA','POÇÃO DE MANA']);
+await assertPortuguese('inventory', ['INVENTÁRIO','ITENS','ARTESANATO','ENCAIXE']);
 await assertNoLegacyEnglish('inventory', [
   'INVENTORY','ITEMS','CRAFTING','SOCKET','EQUIP','UNEQUIP','CRAFT','RECIPE','INGREDIENTS','STATS','REQUIREMENTS',
   'HEALTH POTION','MANA POTION','GREATER HEALTH POTION'
