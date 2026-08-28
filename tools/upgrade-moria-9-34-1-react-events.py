@@ -83,10 +83,17 @@ TOOLTIP.write_text(text, encoding='utf-8')
 
 CAPTURE = Path('tools/capture-moria-9-34.mjs')
 capture = CAPTURE.read_text(encoding='utf-8')
-parent_locator = "const tooltipTrigger = spellSlot.locator('..');"
-if parent_locator not in capture:
-    raise SystemExit('Action Bar tooltip parent locator anchor not found')
-capture = capture.replace(parent_locator, "const tooltipTrigger = spellSlot.locator('xpath=..');", 1)
+old_locator = """    const spellSlot = page.locator('[data-qa-actionbar] .moria-hotbar-slot').first();
+    const tooltipTrigger = spellSlot.locator('..');
+"""
+new_locator = """    const tooltipTrigger = hud.locator('[data-tooltip-trigger=\"true\"]').first();
+    await tooltipTrigger.waitFor({ state: 'visible', timeout: 3000 });
+    const spellSlot = tooltipTrigger.locator('.moria-hotbar-slot').first();
+    await spellSlot.waitFor({ state: 'visible', timeout: 3000 });
+"""
+if old_locator not in capture:
+    raise SystemExit('Action Bar tooltip locator block not found')
+capture = capture.replace(old_locator, new_locator, 1)
 
 old_focus = """    await spellSlot.focus();
     const focused = await spellSlot.evaluate((node) => node === document.activeElement);
@@ -123,8 +130,8 @@ doc = doc.replace(
     '- a captura prova slot habilitado, foco real, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
     '- a captura prova slot habilitado, `hover` real, estado local aberto, portal real no `document.body` e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
 )
-doc += '\n- O harness usa `xpath=..` explicitamente para resolver o wrapper pai do slot, evitando ambiguidade de seletor no Playwright.\n'
-if 'data-tooltip-open' not in doc or '`document.body`' not in doc or '`xpath=..`' not in doc:
+doc += '\n- O harness ancora a prova no wrapper real `[data-tooltip-trigger]` dentro da ActionBar e só então resolve o slot filho, removendo dependência de seletores de pai.\n'
+if 'data-tooltip-open' not in doc or '`document.body`' not in doc or 'wrapper real `[data-tooltip-trigger]`' not in doc:
     raise SystemExit('9.34.1 documentation instrumentation anchor not found')
 DOC.write_text(doc, encoding='utf-8')
 
