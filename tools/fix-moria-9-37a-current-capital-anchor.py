@@ -52,18 +52,16 @@ client_pattern = re.compile(r"    old = r'''function capitalUrbanTile\(map: Game
 
 server_repl = "    old = r'''" + server_current + "\n'''\n    new = r'''function harborShoreY(config, x) {"
 client_repl = "    old = r'''" + client_current + "\n'''\n    new = r'''function harborShoreY(map: GameMap, x: number): number {"
-
 text, server_count = server_pattern.subn(lambda _: server_repl, text, count=1)
 text, client_count = client_pattern.subn(lambda _: client_repl, text, count=1)
 if server_count != 1 or client_count != 1:
     raise SystemExit(f'9.37A applicator anchor rewrite failed: server={server_count} client={client_count}')
 
-# The generated fallback must also preserve the current 9.36D royal-grid plan.
-server_old_fallback = r'''  const major = Math.abs(x - cx) <= 1 || Math.abs(y - cy) <= 1;
+old_fallback = r'''  const major = Math.abs(x - cx) <= 1 || Math.abs(y - cy) <= 1;
   const secondary = Math.abs(x - (cx - 28)) <= 1 || Math.abs(x - (cx + 28)) <= 1 || Math.abs(y - (cy - 28)) <= 1 || Math.abs(y - (cy + 28)) <= 1;
   const innerRing = Math.abs(x - (minX + 14)) <= 1 || Math.abs(x - (maxX - 14)) <= 1 || Math.abs(y - (minY + 14)) <= 1 || Math.abs(y - (maxY - 14)) <= 1;
   return { type:(major || secondary || innerRing) ? 'path' : 'floor', walkable:true, blocksSight:false };'''
-server_new_fallback = r'''  const royalAxes = Math.abs(x - cx) <= 2 || Math.abs(y - cy) <= 2;
+new_fallback = r'''  const royalAxes = Math.abs(x - cx) <= 2 || Math.abs(y - cy) <= 2;
   const secondaryBoulevards = Math.abs(x - (cx - 28)) <= 1 || Math.abs(x - (cx + 28)) <= 1 || Math.abs(y - (cy - 28)) <= 1 || Math.abs(y - (cy + 28)) <= 1;
   const innerRing = Math.abs(x - (minX + 14)) <= 1 || Math.abs(x - (maxX - 14)) <= 1 || Math.abs(y - (minY + 14)) <= 1 || Math.abs(y - (maxY - 14)) <= 1;
   const civicPlaza = Math.abs(x - cx) <= 7 && Math.abs(y - cy) <= 7;
@@ -73,12 +71,26 @@ server_new_fallback = r'''  const royalAxes = Math.abs(x - cx) <= 2 || Math.abs(
   const gardenPromenade = x >= cx - 16 && x <= cx + 22 && y >= cy + 28 && y <= cy + 32;
   const ceremonial = royalAxes || secondaryBoulevards || innerRing || civicPlaza || crownForecourt || marketSquare || dawnSquare || gardenPromenade;
   return { type:ceremonial ? 'path' : 'floor', walkable:true, blocksSight:false };'''
+if text.count(old_fallback) != 2:
+    raise SystemExit(f'9.37A generated royal-grid fallback count unexpected: {text.count(old_fallback)}')
+text = text.replace(old_fallback, new_fallback, 2)
 
-# There are two generated fallback strings (server and client) with identical statements.
-fallback_count = text.count(server_old_fallback)
-if fallback_count != 2:
-    raise SystemExit(f'9.37A generated royal-grid fallback count unexpected: {fallback_count}')
-text = text.replace(server_old_fallback, server_new_fallback, 2)
+# Explicit gates are part of the harbor plan itself, not an accidental side effect
+# of portal normalization. Keep the north road and east gate walkable in both engines.
+old_wall = "  const landWall = y === minY || ((x === minX || x === maxX) && y < shoreY - 3);\n  if (landWall) return { type:'wall', walkable:false, blocksSight:true };"
+new_wall = "  const gate = (y === minY && Math.abs(x - cx) <= 2) || (x === maxX && Math.abs(y - cy) <= 2);\n  if (gate) return { type:'path', walkable:true, blocksSight:false };\n  const landWall = y === minY || ((x === minX || x === maxX) && y < shoreY - 3);\n  if (landWall) return { type:'wall', walkable:false, blocksSight:true };"
+if text.count(old_wall) != 2:
+    raise SystemExit(f'9.37A harbor wall/gate count unexpected: {text.count(old_wall)}')
+text = text.replace(old_wall, new_wall, 2)
+
+# Record migrations are allowed only when the Sunreach map is legacy and gets
+# upgraded now, or when it is already the exact Grand Sunreach topology. A custom
+# administrator map must not trigger coordinate moves in related collections.
+old_migration = "  let changed = patchMap(sunreach);\n\n  const eldoria = maps.find(map => map?.id === 'eldoria');"
+new_migration = "  let changed = patchMap(sunreach);\n  const grandTopology = Number(sunreach.width) === 160 && Number(sunreach.height) === 160 && sunreach.settlementClass === 'capital' && sunreach.urbanPlan === 'harbor-crescent';\n  if (!changed && !grandTopology) return false;\n\n  const eldoria = maps.find(map => map?.id === 'eldoria');"
+if old_migration not in text:
+    raise SystemExit('9.37A migration guard anchor missing')
+text = text.replace(old_migration, new_migration, 1)
 
 path.write_text(text, encoding='utf-8')
-print("Mor'ia 9.37A applicator aligned with 9.36D anchors and royal-grid fallback")
+print("Mor'ia 9.37A applicator aligned with 9.36D, explicit harbor gates, and admin-safe migration")
