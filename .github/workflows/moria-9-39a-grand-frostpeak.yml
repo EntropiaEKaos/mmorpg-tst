@@ -5,6 +5,7 @@ on:
     paths:
       - 'tools/upgrade-moria-9-39a-grand-frostpeak.py'
       - 'tools/fix-moria-9-39a-terraced-snow.py'
+      - 'tools/fix-moria-9-39a-client-unused.py'
       - '.github/workflows/moria-9-39a-grand-frostpeak.yml'
 permissions:
   contents: write
@@ -23,9 +24,10 @@ jobs:
           cache: npm
       - name: Apply Mor'ia 9.39A Grand Frostpeak
         run: |
-          python -m py_compile tools/upgrade-moria-9-39a-grand-frostpeak.py tools/fix-moria-9-39a-terraced-snow.py
+          python -m py_compile tools/upgrade-moria-9-39a-grand-frostpeak.py tools/fix-moria-9-39a-terraced-snow.py tools/fix-moria-9-39a-client-unused.py
           python tools/upgrade-moria-9-39a-grand-frostpeak.py
           python tools/fix-moria-9-39a-terraced-snow.py
+          python tools/fix-moria-9-39a-client-unused.py
       - name: Verify Grand Frostpeak source contract
         run: |
           set -euxo pipefail
@@ -42,6 +44,7 @@ jobs:
           grep -Fq "frostpeak_yeti_warmaster:{from:[50,69]" server/engine/GrandFrostpeak.mjs
           grep -Fq "targetMap:'ironwood'" server/engine/GrandFrostpeak.mjs
           grep -Fq "migrateGrandFrostpeakData" server/engine/ContentDB.mjs
+          grep -Fq "const cx=map.townCenter.x;" src/game/maps.ts
           node --check server/engine/GrandFrostpeak.mjs
           node --check server/engine/World.mjs
           node --check server/engine/ContentDB.mjs
