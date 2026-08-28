@@ -81,6 +81,18 @@ if old_wrapper not in text:
 text = text.replace(old_wrapper, new_wrapper, 1)
 TOOLTIP.write_text(text, encoding='utf-8')
 
+# Real production hardening uncovered by the visual proof: legacy/incomplete
+# player snapshots may not carry a skills object. Opening a spell tooltip must
+# not crash the whole React tree in that case.
+SCALING = Path('src/game/elementalScaling.ts')
+scaling = SCALING.read_text(encoding='utf-8')
+old_skill = "function skillLevel(player:Player,id:string){ const raw=(player.skills as unknown as Record<string,{level:number}|number|undefined>)[id]; return Math.max(1,num(typeof raw==='object'&&raw?raw.level:raw,10)); }"
+new_skill = "function skillLevel(player:Player,id:string){ const raw=((player.skills || {}) as unknown as Record<string,{level:number}|number|undefined>)[id]; return Math.max(1,num(typeof raw==='object'&&raw?raw.level:raw,10)); }"
+if old_skill not in scaling:
+    raise SystemExit('elemental scaling skill fallback anchor not found')
+scaling = scaling.replace(old_skill, new_skill, 1)
+SCALING.write_text(scaling, encoding='utf-8')
+
 CAPTURE = Path('tools/capture-moria-9-34.mjs')
 capture = CAPTURE.read_text(encoding='utf-8')
 old_locator = """    const spellSlot = page.locator('[data-qa-actionbar] .moria-hotbar-slot').first();
@@ -141,8 +153,9 @@ doc = doc.replace(
     '- a captura prova slot habilitado, `hover` real, estado local aberto, portal real no `document.body` e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
 )
 doc += '\n- O harness ancora a prova no wrapper real `[data-tooltip-trigger]` dentro da ActionBar e usa uma leitura DOM instantânea após o hover para evitar que o auto-wait do Playwright confunda reconciliação React com ausência do trigger.\n'
-if 'data-tooltip-open' not in doc or '`document.body`' not in doc or 'leitura DOM instantânea' not in doc:
+doc += '- O QA revelou um bug real de compatibilidade: `buildSpellScalingBreakdown` podia desmontar a interface ao abrir um tooltip se um snapshot legado não tivesse `player.skills`. `skillLevel` agora trata `skills` ausente como catálogo vazio e mantém o fallback de nível 10.\n'
+if 'data-tooltip-open' not in doc or '`document.body`' not in doc or 'leitura DOM instantânea' not in doc or 'snapshot legado' not in doc:
     raise SystemExit('9.34.1 documentation instrumentation anchor not found')
 DOC.write_text(doc, encoding='utf-8')
 
-print("Mor'ia 9.34.1 race-free tooltip state/body portal hardening prepared")
+print("Mor'ia 9.34.1 race-free tooltip and legacy scaling hardening prepared")
