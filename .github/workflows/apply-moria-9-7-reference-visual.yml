@@ -6,6 +6,7 @@ on:
       - moria-9.7-reference-visual-convergence
     paths:
       - tools/apply-moria-9-7-reference-visual.py
+      - tools/fix-moria-9-7-reference-contracts.py
       - .github/workflows/apply-moria-9-7-reference-visual.yml
 
 permissions:
@@ -29,6 +30,9 @@ jobs:
 
       - name: Materialize 9.7 visual convergence
         run: python tools/apply-moria-9-7-reference-visual.py
+
+      - name: Preserve established visual contracts
+        run: python tools/fix-moria-9-7-reference-contracts.py
 
       - name: Install client dependencies
         run: npm ci
@@ -59,6 +63,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -f tools/apply-moria-9-7-reference-visual.py
+          rm -f tools/fix-moria-9-7-reference-contracts.py
           rm -f .github/workflows/apply-moria-9-7-reference-visual.yml
           git add -A
           git diff --cached --quiet && exit 0
