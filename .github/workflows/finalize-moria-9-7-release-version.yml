@@ -1,0 +1,58 @@
+name: Finalize Mor'ia 9.7 Release Version
+
+on:
+  push:
+    branches:
+      - moria-9.7-reference-visual-convergence
+    paths:
+      - .github/workflows/finalize-moria-9-7-release-version.yml
+
+permissions:
+  contents: write
+
+jobs:
+  version-and-validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Set client and server release version
+        run: |
+          npm version 9.7.0 --no-git-tag-version
+          cd server
+          npm version 9.7.0 --no-git-tag-version
+
+      - name: Validate release manifests and client
+        run: |
+          node -e "const p=require('./package.json'); const l=require('./package-lock.json'); const s=require('./server/package.json'); const sl=require('./server/package-lock.json'); if([p.version,l.version,l.packages[''].version,s.version,sl.version,sl.packages[''].version].some(v=>v!=='9.7.0')) process.exit(1)"
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+
+      - name: Validate authoritative server
+        run: |
+          npm ci --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+
+      - name: Commit validated 9.7 release identity and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/finalize-moria-9-7-release-version.yml
+          git add package.json package-lock.json server/package.json server/package-lock.json .github/workflows/finalize-moria-9-7-release-version.yml
+          git commit -m "chore(9.7): finalize release version"
+          git push origin HEAD:moria-9.7-reference-visual-convergence
