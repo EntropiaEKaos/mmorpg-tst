@@ -29,6 +29,7 @@ import { beginTelegraph, resolveTelegraph, addStagger, publicCombatState, hasSta
 import { interiorSystem } from './InteriorSystem.mjs';
 import { worldEventDirector } from './WorldEventDirector.mjs';
 import { resolveSpellScaling, resolveSchoolDefense, skillForSchool, normalizeDamageSchool } from './ElementalScaling.mjs';
+import { resolveElementalReaction } from './ElementalReactions.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -757,11 +758,15 @@ class GameEngine {
       if (target.kind === 'monster' && (effect === 'damage' || effect === 'drain')) {
         const monster = target.entity;
         const schoolDefense = resolveSchoolDefense(monster, scalingProfile.school, scalingProfile.pierce);
-        const rawDamage = Math.floor(basePower * multiplier * schoolDefense.multiplier);
-        const damage = Math.max(1, rawDamage - Math.max(0, Number(monster.defense) || 0));
+        const reaction = resolveElementalReaction(monster, scalingProfile.school, { now });
+        const rawDamage = Math.floor(basePower * multiplier * schoolDefense.multiplier * reaction.damageMultiplier);
+        const effectiveDefense = Math.max(0, Number(monster.defense) || 0) * reaction.defenseMultiplier;
+        const damage = Math.max(1, Math.floor(rawDamage - effectiveDefense));
         monster.hp -= damage;
         player.stats.damageDealt += damage;
-        this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: damage, text: `${spell.name} x${multiplier.toFixed(2)}`, pos: { x: monster.x, y: monster.y }, color: spell.color, vocation: player.vocation });
+        const reactionText = reaction.labels.length ? ` · ${reaction.labels.join(' + ')}` : '';
+        this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: damage, text: `${spell.name} x${multiplier.toFixed(2)}${reactionText}`, pos: { x: monster.x, y: monster.y }, color: spell.color, vocation: player.vocation, reaction: reaction.labels, school: scalingProfile.school });
+        if (reaction.labels.length) this.emitEvent(player.mapId, { kind:'elemental_reaction', targetId:monster.id, text:`${reaction.labels.join(' + ')} · ×${reaction.damageMultiplier.toFixed(2)}`, color:spell.color, pos:{x:monster.x,y:monster.y}, school:scalingProfile.school });
         if (effect === 'drain' && spell.drainPercent > 0) {
           const derivedNow = this.computeDerivedStats(player);
           const drained = Math.max(1, Math.floor(damage * spell.drainPercent / 100));

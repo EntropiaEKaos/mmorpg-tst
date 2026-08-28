@@ -1,9 +1,10 @@
 // MOR'IA 9.8 — telegraphs, stagger, interrupts and bounded status effects.
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
-export const STATUS_TYPES=Object.freeze(['stun','slow','burn','poison','silence','vulnerable']);
+export const STATUS_TYPES=Object.freeze(['stun','slow','burn','poison','silence','vulnerable','wet','chilled','frozen','shocked','cursed','unstable','fractured','rooted']);
 function ensure(entity){if(!entity.combat98||typeof entity.combat98!=='object')entity.combat98={stagger:0,status:[],telegraph:null,phase:0};if(!Array.isArray(entity.combat98.status))entity.combat98.status=[];return entity.combat98}
 export function activeStatuses(entity,now=Date.now()){const c=ensure(entity);c.status=c.status.filter(s=>Number(s.expiresAt)>now);return c.status}
 export function hasStatus(entity,type,now=Date.now()){return activeStatuses(entity,now).some(s=>s.type===type)}
+export function removeStatus(entity,type,now=Date.now()){const c=ensure(entity);activeStatuses(entity,now);const before=c.status.length;c.status=c.status.filter(s=>s.type!==type);return c.status.length!==before}
 export function applyStatus(entity,type,durationMs,value=0,now=Date.now()){if(!STATUS_TYPES.includes(type))return false;const c=ensure(entity),duration=clamp(durationMs,100,30000);c.status=c.status.filter(s=>s.type!==type);c.status.push({type,value:clamp(value,-100,100),expiresAt:now+duration});return true}
 export function addStagger(entity,amount,threshold=100,now=Date.now()){const c=ensure(entity);c.stagger=clamp(c.stagger+clamp(amount,0,100),0,200);if(c.stagger>=threshold){c.stagger=0;c.telegraph=null;applyStatus(entity,'stun',900,0,now);return {staggered:true,interrupted:true}}return {staggered:false,interrupted:false,stagger:c.stagger}}
 export function beginTelegraph(monster,target,now=Date.now()){const c=ensure(monster);if(c.telegraph)return c.telegraph;const boss=monster.type==='boss',elite=monster.type==='elite';const windup=clamp(monster.telegraphMs??(boss?850:elite?650:420),200,2500);c.telegraph={kind:monster.telegraphKind||'strike',targetId:target.id,startedAt:now,resolveAt:now+windup,radius:clamp(monster.telegraphRadius??1,1,8),color:monster.telegraphColor||'#ff6b4a'};return c.telegraph}

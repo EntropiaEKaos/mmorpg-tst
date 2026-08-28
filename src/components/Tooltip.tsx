@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Player, Spell, SchoolValues } from '../game/types';
 import { buildSpellScalingBreakdown, normalizeSchool, SCHOOL_META } from '../game/elementalScaling';
+import { reactionHintsForSchool } from '../game/elementalReactions';
 
 interface TooltipData {
   content: React.ReactNode;
@@ -301,6 +302,7 @@ export function SpellTooltip({
   const school = normalizeSchool(spell.damageType);
   const meta = SCHOOL_META[school];
   const scaling = player ? buildSpellScalingBreakdown(player, spell as Spell) : null;
+  const reactionHints = reactionHintsForSchool(school);
   return (
     <div className="space-y-1 min-w-[190px]">
       <div className="flex items-center gap-2">
@@ -357,6 +359,15 @@ export function SpellTooltip({
             <div className="flex justify-between border-t border-white/10 pt-1 font-black"><span className="text-amber-100">Estimated power</span><span className="text-white">{scaling.estimated}</span></div>
           </div>
         )}
+        <div className="mt-1 space-y-1 border-t border-cyan-300/20 pt-1">
+          <div className="font-black uppercase tracking-wider text-cyan-200">Reactive combos</div>
+          {reactionHints.slice(0,3).map((hint) => (
+            <div key={`${hint.when}-${hint.name}`} className="rounded border border-white/5 bg-black/20 px-1.5 py-1">
+              <div className="flex justify-between gap-2"><span className="text-slate-400">{hint.when}</span><span className="font-bold" style={{color:meta.color}}>{hint.name}{hint.multiplier ? ` ×${hint.multiplier.toFixed(2)}` : ''}</span></div>
+              <div className="text-[9px] text-cyan-100/65">{hint.result}</div>
+            </div>
+          ))}
+        </div>
         {(spell.critChance ?? 0) > 0 && (
           <div className="flex justify-between"><span className="text-amber-200/70">Crit:</span><span className="text-red-300">{spell.critChance}% (×{spell.critMult})</span></div>
         )}
