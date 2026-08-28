@@ -18,6 +18,8 @@ const NPC_ROLES = Object.freeze(['merchant', 'banker', 'innkeeper', 'trainer', '
 const SPELL_TYPES = Object.freeze(['attack', 'heal', 'aoe', 'buff']);
 const BUFF_TYPES = Object.freeze(['shield', 'haste', 'invisible', 'frenzy']);
 const SPELL_TARGET_MODES = Object.freeze(['smart', 'self', 'target', 'area']);
+const DAMAGE_SCHOOLS = Object.freeze(['physical','magic','arcane','fire','water','earth','lightning','ice','death','holy','nature','poison','shadow']);
+const SCALING_STATS = Object.freeze(['attack','magic','hybrid']);
 const ALLY_EFFECTS = Object.freeze(['none', 'heal', 'buff']);
 const ENEMY_EFFECTS = Object.freeze(['none', 'damage', 'drain']);
 const CITY_STYLES = Object.freeze(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
@@ -34,7 +36,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('hp', 'HP', 'number'), field('mana', 'Mana', 'number'), field('magic', 'Magic', 'number'),
     field('critChance', 'Crit %', 'number'), field('lifesteal', 'Lifesteal %', 'number'), field('thorns', 'Thorns', 'number'),
     field('moveSpeed', 'Move speed %', 'number'), field('xpBonus', 'XP bonus %', 'number'), field('goldBonus', 'Gold bonus %', 'number'),
-    field('damageReduction', 'Damage reduction %', 'number'), field('rarity', 'Rarity', 'select', { optionKey: 'rarities' }),
+    field('damageReduction', 'Damage reduction %', 'number'), field('damageBonuses','School power %','json'), field('resistances','School resistances %','json'), field('weaknesses','School vulnerabilities %','json'), field('skillBonuses','Skill bonuses','json'), field('resistancePierce','Resistance pierce %','json'), field('spellPower','Generic spell power %','number'), field('physicalPower','Generic physical power %','number'), field('rarity', 'Rarity', 'select', { optionKey: 'rarities' }),
     field('level', 'Required level', 'number'), field('value', 'Value', 'number'), field('description', 'Description', 'textarea'),
   ]),
   monsters: Object.freeze([
@@ -46,6 +48,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('posX', 'Spawn X', 'number'), field('posY', 'Spawn Y', 'number'), field('speed', 'Move delay', 'number'),
     field('lootTableId', 'Loot table', 'select', { optionKey: 'lootTables', allowEmpty: true }),
     field('aiArchetype','AI archetype'), field('aggroRadius','Aggro radius','number'), field('leashRadius','Leash radius','number'), field('patrolRadius','Patrol radius','number'), field('fleeAtHp','Flee HP ratio','number'), field('packId','Pack ID'),
+    field('damageType','Attack school','select',{optionKey:'damageSchools'}), field('damageBonuses','School power %','json'), field('resistances','School resistances %','json'), field('weaknesses','School vulnerabilities %','json'),
     field('telegraphMs','Telegraph ms','number'), field('telegraphKind','Telegraph kind'), field('telegraphRadius','Telegraph radius','number'), field('staggerThreshold','Stagger threshold','number'), field('phases','Boss phases','json'),
   ]),
   npcs: Object.freeze([
@@ -60,7 +63,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('color', 'Color'), field('type', 'Type', 'select', { optionKey: 'spellTypes' }),
     field('vocation', 'Vocation', 'select', { optionKey: 'vocations' }), field('levelRequired', 'Required level', 'number'),
     field('buffType', 'Buff type', 'select', { optionKey: 'buffTypes', allowEmpty: true }),
-    field('buffDuration', 'Buff duration ms', 'number'), field('buffValue', 'Buff value', 'number'), field('scalingCoeff', 'Scaling', 'number'),
+    field('buffDuration', 'Buff duration ms', 'number'), field('buffValue', 'Buff value', 'number'), field('damageType','Damage school','select',{optionKey:'damageSchools'}), field('scalingStat','Scaling stat','select',{optionKey:'scalingStats'}), field('skillId','Scaling skill'), field('weaponSkill','Weapon skill'), field('skillScaling','Skill multiplier / level','number'), field('scalingCoeff', 'Stat coefficient', 'number'),
     field('targetMode', 'Target mode', 'select', { optionKey: 'spellTargetModes' }),
     field('allyEffect', 'Ally effect', 'select', { optionKey: 'allyEffects' }), field('enemyEffect', 'Enemy effect', 'select', { optionKey: 'enemyEffects' }),
     field('allyMultiplier', 'Ally multiplier', 'number'), field('enemyMultiplier', 'Enemy multiplier', 'number'), field('selfMultiplier', 'Self multiplier', 'number'),
@@ -142,6 +145,14 @@ function numberIn(record, key, min, max, { required = false, integer = false } =
   return null;
 }
 
+function schoolMap(record,key,{min=-100,max=400}={}) {
+  const raw=record?.[key]; if(raw===undefined||raw===null||raw==='') return null;
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)) return `${key} must be an object`;
+  for(const [school,value] of Object.entries(raw)){ if(!DAMAGE_SCHOOLS.includes(school)) return `${key}.${school} uses an unknown damage school`; const n=Number(value); if(!Number.isFinite(n)||n<min||n>max) return `${key}.${school} must be from ${min} to ${max}`; }
+  return null;
+}
+function skillMap(record,key){ const raw=record?.[key]; if(raw===undefined||raw===null||raw==='') return null; if(!raw||typeof raw!=='object'||Array.isArray(raw)) return `${key} must be an object`; for(const [skill,value] of Object.entries(raw)){ if(!/^[a-z0-9_-]{2,40}$/i.test(skill)) return `${key} has invalid skill ${skill}`; const n=Number(value); if(!Number.isFinite(n)||n<-50||n>100) return `${key}.${skill} must be from -50 to 100`; } return null; }
+
 function requiredText(record, key, max = 100) {
   const value = typeof record?.[key] === 'string' ? record[key].trim() : '';
   if (!value) return `${key} is required`;
@@ -159,6 +170,8 @@ function playableCoord(record, key) {
 }
 
 export function validateStudioRecord(type, record) {
+  for (const key of ['damageBonuses','resistances','weaknesses','resistancePierce']) { const error=schoolMap(record,key,{min:key==='resistances'?0:-100,max:key==='resistancePierce'?80:400}); if(error) return error; }
+  { const error=skillMap(record,'skillBonuses'); if(error) return error; }
   if (!CONTENT_STUDIO_SCHEMAS[type]) return `Unsupported content type: ${type}`;
   if (!record || typeof record !== 'object' || Array.isArray(record)) return 'Content record must be an object';
   const id = typeof record.id === 'string' ? record.id.trim() : '';
@@ -189,6 +202,12 @@ export function validateStudioRecord(type, record) {
     }
     for (const key of ['enabled','autoStart']) if (record[key] !== undefined && typeof record[key] !== 'boolean') return `${key} must be boolean`;
     if (record.route !== undefined && !Array.isArray(record.route)) return 'route must be an array';
+  }
+
+  if (type === 'spells') {
+    if(record.damageType!==undefined && !DAMAGE_SCHOOLS.includes(record.damageType)) return 'damageType is invalid';
+    if(record.scalingStat!==undefined && !SCALING_STATS.includes(record.scalingStat)) return 'scalingStat is invalid';
+    const skillScaling=numberIn(record,'skillScaling',0,0.05); if(skillScaling) return skillScaling;
   }
 
   if (type === 'items') {

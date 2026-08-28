@@ -44,7 +44,7 @@ function ActionBarInner({ player, spells, potions, onCastSpell, onUsePotion }: P
           const ready = !onCd && !noMana && !locked;
 
           return (
-            <Tooltip key={spell.id} position="top" content={<SpellTooltip spell={spell} idx={i} noMana={noMana} onCd={onCd} locked={locked} />}>
+            <Tooltip key={spell.id} position="top" content={<SpellTooltip spell={spell} player={player} idx={i} noMana={noMana} onCd={onCd} locked={locked} />}>
               <button
                 onClick={() => onCastSpell(i)}
                 disabled={onCd || noMana || locked}

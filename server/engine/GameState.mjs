@@ -28,6 +28,8 @@ import { livingWorldAI } from './LivingWorldAI.mjs';
 import { beginTelegraph, resolveTelegraph, addStagger, publicCombatState, hasStatus } from './CombatDepth.mjs';
 import { interiorSystem } from './InteriorSystem.mjs';
 import { worldEventDirector } from './WorldEventDirector.mjs';
+import { resolveSpellScaling, resolveSchoolDefense, skillForSchool, normalizeDamageSchool } from './ElementalScaling.mjs';
+import { resolveElementalReaction } from './ElementalReactions.mjs';
 
 
 const TALENT_RULES = Object.freeze({
@@ -69,7 +71,7 @@ function freshSkills() {
     fist: { level: 10, progress: 0 }, sword: { level: 10, progress: 0 },
     axe: { level: 10, progress: 0 }, club: { level: 10, progress: 0 },
     distance: { level: 10, progress: 0 }, shielding: { level: 10, progress: 0 },
-    magic: { level: 10, progress: 0 }, fishing: { level: 10, progress: 0 },
+    magic: { level: 10, progress: 0 }, arcane:{level:10,progress:0}, fire:{level:10,progress:0}, water:{level:10,progress:0}, earth:{level:10,progress:0}, lightning:{level:10,progress:0}, ice:{level:10,progress:0}, death:{level:10,progress:0}, holy:{level:10,progress:0}, nature:{level:10,progress:0}, poison:{level:10,progress:0}, shadow:{level:10,progress:0}, fishing: { level: 10, progress: 0 },
   };
 }
 
@@ -256,6 +258,11 @@ class GameEngine {
         color: /^#[0-9a-fA-F]{3,8}$/.test(rawColor) ? rawColor : (previous?.color || '#9bd4ff'),
         type,
         levelRequired: Math.floor(boundedNumber(raw.levelRequired, 1, 100_000, previous?.levelRequired ?? 1)),
+        damageType: normalizeDamageSchool(raw.damageType ?? previous?.damageType),
+        scalingStat: ['attack','magic','hybrid'].includes(raw.scalingStat) ? raw.scalingStat : (previous?.scalingStat || undefined),
+        skillId: typeof raw.skillId === 'string' && raw.skillId.trim() ? raw.skillId.trim().toLowerCase().slice(0,40) : previous?.skillId,
+        weaponSkill: typeof raw.weaponSkill === 'string' && ['fist','sword','axe','club','distance'].includes(raw.weaponSkill) ? raw.weaponSkill : previous?.weaponSkill,
+        skillScaling: boundedNumber(raw.skillScaling,0,.05,previous?.skillScaling ?? .0125),
       };
       if (Number.isFinite(Number(raw.scalingCoeff))) next.scalingCoeff = boundedNumber(raw.scalingCoeff, 0, 20, 1);
       if (type === 'buff') {
@@ -705,12 +712,16 @@ class GameEngine {
     player.mana -= spell.mana;
     player.cooldowns[spell.name] = now;
     player.stats.spellsCast++;
-    this.progressSkill(player, 'magic', 1);
+    const school = normalizeDamageSchool(spell.damageType);
+    const scalingSkill = skillForSchool(school, spell);
+    this.progressSkill(player, scalingSkill, 1);
+    if (scalingSkill !== 'magic' && school !== 'physical') this.progressSkill(player, 'magic', 1);
     if (requestedTargetId) player.targetId = requestedTargetId;
 
     const casterDerived = this.computeDerivedStats(player);
     const clock = createWorldClockSnapshot(now);
-    const basePower = Math.max(0, Number(spell.damage) || 0) + Math.floor(casterDerived.totalMagic * (Number(spell.scalingCoeff) || 1) * 0.5);
+    const scalingProfile = resolveSpellScaling(player, spell, casterDerived);
+    const basePower = scalingProfile.power;
     this.emitEvent(player.mapId, { kind: 'spell', targetId: player.id, text: spell.name, color: spell.color, pos: { x: player.x, y: player.y }, vocation: player.vocation });
 
     for (const target of actionableTargets) {
@@ -746,11 +757,16 @@ class GameEngine {
 
       if (target.kind === 'monster' && (effect === 'damage' || effect === 'drain')) {
         const monster = target.entity;
-        const rawDamage = Math.floor(basePower * multiplier);
-        const damage = Math.max(1, rawDamage - Math.max(0, Number(monster.defense) || 0));
+        const schoolDefense = resolveSchoolDefense(monster, scalingProfile.school, scalingProfile.pierce);
+        const reaction = resolveElementalReaction(monster, scalingProfile.school, { now });
+        const rawDamage = Math.floor(basePower * multiplier * schoolDefense.multiplier * reaction.damageMultiplier);
+        const effectiveDefense = Math.max(0, Number(monster.defense) || 0) * reaction.defenseMultiplier;
+        const damage = Math.max(1, Math.floor(rawDamage - effectiveDefense));
         monster.hp -= damage;
         player.stats.damageDealt += damage;
-        this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: damage, text: `${spell.name} x${multiplier.toFixed(2)}`, pos: { x: monster.x, y: monster.y }, color: spell.color, vocation: player.vocation });
+        const reactionText = reaction.labels.length ? ` · ${reaction.labels.join(' + ')}` : '';
+        this.emitEvent(player.mapId, { kind: 'damage', targetId: monster.id, amount: damage, text: `${spell.name} x${multiplier.toFixed(2)}${reactionText}`, pos: { x: monster.x, y: monster.y }, color: spell.color, vocation: player.vocation, reaction: reaction.labels, school: scalingProfile.school });
+        if (reaction.labels.length) this.emitEvent(player.mapId, { kind:'elemental_reaction', targetId:monster.id, text:`${reaction.labels.join(' + ')} · ×${reaction.damageMultiplier.toFixed(2)}`, color:spell.color, pos:{x:monster.x,y:monster.y}, school:scalingProfile.school });
         if (effect === 'drain' && spell.drainPercent > 0) {
           const derivedNow = this.computeDerivedStats(player);
           const drained = Math.max(1, Math.floor(damage * spell.drainPercent / 100));
