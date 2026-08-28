@@ -18,6 +18,7 @@ import GrandEldoriaPanorama from './components/GrandEldoriaPanorama';
 import GrandSunreachPanorama from './components/GrandSunreachPanorama';
 import GrandIronwoodPanorama from './components/GrandIronwoodPanorama';
 import GrandFrostpeakPanorama from './components/GrandFrostpeakPanorama';
+import GrandShadowfenPanorama from './components/GrandShadowfenPanorama';
 import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge from './components/LocaleBridge';
 import { saveBook, sendSystemMail } from './game/content';
@@ -247,6 +248,29 @@ function AuthoritativeGrandFrostpeakQa({ mode }: { mode: FrostpeakQaMode }) {
   return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-frostpeak-server-ready="panorama"><GrandFrostpeakPanorama /></div>;
 }
 
+
+const SHADOWFEN_QA_PLAYER = { ...QA_PLAYER, mapId: 'shadowfen', pos: { x: 116, y: 122 } } as unknown as Player;
+type ShadowfenQaMode = 'shadowfen-minimap' | 'shadowfen-city-designer' | 'shadowfen-panorama';
+
+function AuthoritativeGrandShadowfenQa({ mode }: { mode: ShadowfenQaMode }) {
+  const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading');
+  const [error,setError]=useState('');
+  useEffect(()=>{
+    let active=true; const params=new URLSearchParams(window.location.search); const base=params.get('qaServer')||'http://127.0.0.1:3000'; const token=params.get('qaToken')||'';
+    fetch(`${base}/admin/api/maps?token=${encodeURIComponent(token)}`,{cache:'no-store'}).then(async response=>{if(!response.ok) throw new Error(`Servidor de conteúdo respondeu ${response.status}`); return response.json();}).then(payload=>{
+      if(!active)return; const records=Array.isArray(payload?.items)?payload.items:[]; const shadowfen=records.find((record:any)=>record?.id==='shadowfen');
+      if(!shadowfen||Number(shadowfen.width)!==160||Number(shadowfen.height)!==160||shadowfen.settlementClass!=='capital'||shadowfen.urbanPlan!=='marsh-wards'||!Array.isArray(shadowfen.landmarks)||shadowfen.landmarks.length!==42) throw new Error('Grand Shadowfen autoritativa 160×160 não foi recebida do servidor');
+      syncServerMaps(records);setStatus('ready');
+    }).catch(reason=>{if(!active)return;setError(reason instanceof Error?reason.message:String(reason));setStatus('error');});return()=>{active=false;};
+  },[]);
+  if(status==='loading') return <div className="relative z-10 p-8 text-lime-100" data-grand-shadowfen-server-loading="true">Sincronizando Grand Shadowfen com o servidor autoritativo…</div>;
+  if(status==='error') return <div className="relative z-10 p-8 text-red-200" data-grand-shadowfen-server-error="true">{error}</div>;
+  const map=MAPS.shadowfen;
+  if(mode==='shadowfen-minimap') return <div className="relative z-10 flex min-h-screen items-center justify-center p-6"><div data-grand-shadowfen-server-ready="minimap" className="rounded-xl border border-lime-200/25 bg-black/75 p-4 shadow-2xl"><div className="mb-3"><div className="text-sm font-black tracking-wider text-lime-50">GRAND SHADOWFEN · CAPITAL DO BREJO 160×160</div><div className="mt-1 text-[10px] text-lime-50/55">Servidor autoritativo · {map.districts.length} distritos · {map.landmarks.length} marcos · 4 acessos físicos · jogador 116,122</div></div><WorldMiniMap player={SHADOWFEN_QA_PLAYER} monsters={[]} mapId="shadowfen" /></div></div>;
+  if(mode==='shadowfen-city-designer') return <div className="relative z-10 p-4" data-grand-shadowfen-server-ready="designer"><CityDesigner /></div>;
+  return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-shadowfen-server-ready="panorama"><GrandShadowfenPanorama /></div>;
+}
+
 function VisualQa() {
   const panel = new URLSearchParams(window.location.search).get('panel') || 'library';
   const [inventory, setInventory] = useState<Item[]>([
@@ -285,6 +309,9 @@ function VisualQa() {
       {panel === 'frostpeak-minimap' && <AuthoritativeGrandFrostpeakQa mode="frostpeak-minimap" />}
       {panel === 'frostpeak-city-designer' && <AuthoritativeGrandFrostpeakQa mode="frostpeak-city-designer" />}
       {panel === 'frostpeak-panorama' && <AuthoritativeGrandFrostpeakQa mode="frostpeak-panorama" />}
+      {panel === 'shadowfen-minimap' && <AuthoritativeGrandShadowfenQa mode="shadowfen-minimap" />}
+      {panel === 'shadowfen-city-designer' && <AuthoritativeGrandShadowfenQa mode="shadowfen-city-designer" />}
+      {panel === 'shadowfen-panorama' && <AuthoritativeGrandShadowfenQa mode="shadowfen-panorama" />}
     </div>
   );
 }

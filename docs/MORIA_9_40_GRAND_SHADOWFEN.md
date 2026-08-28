@@ -27,3 +27,16 @@ A migração é **exact-default-only**. Apenas a Shadowfen legado 80×80 com coo
 ### Integração
 
 O plano `marsh-wards` é compartilhado por servidor, cliente e Content Studio. O `grandCapitalVersion` avança para **6**. Seeds novas já nascem com Grand Shadowfen e bancos existentes convergem pela mesma migração idempotente.
+
+
+## 9.40B — Prova visual autoritativa
+
+A prova visual usa o servidor real em `/admin/api/maps`, sincroniza `MAPS.shadowfen` e renderiza a mesma topologia do gameplay por `generateMap`, `drawTile` e `drawBuilding`.
+
+O gate captura e valida três superfícies de produção:
+
+- minimapa 160×160 com 12 distritos, 42 marcos e os quatro acessos físicos;
+- City Designer selecionado em Shadowfen, mostrando o orçamento real `42/64 construções`;
+- panorâmica da área urbana completa com contagens de água, pontes, caminhos e vegetação de brejo.
+
+A aprovação humana exige que os três canais sejam legíveis, que pontes/passarelas criem circulação coerente, que a Corte do Pântano e os bairros em palafitas tenham escala de capital e que Shadowfen não pareça uma Eldoria apenas recolorida.

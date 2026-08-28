@@ -144,4 +144,3 @@ O gate captura e valida três superfícies de produção:
 A aprovação humana exige que os três canais sejam legíveis, que pontes/passarelas criem circulação coerente, que a Corte do Pântano e os bairros em palafitas tenham escala de capital e que Shadowfen não pareça uma Eldoria apenas recolorida.
 '''
 if '## 9.40B — Prova visual autoritativa' not in docs:p.write_text(docs+section,encoding='utf-8')
-'''
