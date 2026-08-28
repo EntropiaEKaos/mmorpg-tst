@@ -28,15 +28,14 @@ await screenshot('moria-9-28-login-ptbr.png');
 
 // Character creation uses the actual game renderer for every vocation preview.
 await page.getByRole('button', { name:'CADASTRAR', exact:true }).click();
-await page.getByText('Crie seu personagem', { exact:false }).waitFor({ state:'visible' });
-await page.waitForTimeout(350);
 const previews = page.locator('[data-vocation-preview]');
+await previews.first().waitFor({ state:'visible', timeout:10000 });
+await page.waitForTimeout(350);
 if (await previews.count() !== 14) throw new Error(`expected 14 vocation previews, got ${await previews.count()}`);
 await captureText('characters-top');
 await assertNoLegacyEnglish('character creation', ['CHARACTER NAME','VOCATION','SELECTED','CHOOSE','CREATE HERO','KNIGHT','SORCERER','DRUID','ROGUE','PRIEST','RANGER','NECROMANCER','SHAMAN','TEMPLAR']);
 await screenshot('moria-9-28-character-creation-a.png');
-const grid = previews.first().locator('xpath=ancestor::button/..').first();
-const scrollBox = page.locator('.moria-scrollbar').filter({ has: previews.first() }).first();
+const scrollBox = previews.first().locator('xpath=ancestor::div[contains(@class,"moria-scrollbar")]').first();
 if (await scrollBox.count()) await scrollBox.evaluate(el => { el.scrollTop = el.scrollHeight; });
 else await previews.last().scrollIntoViewIfNeeded();
 await page.waitForTimeout(300);
