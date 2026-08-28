@@ -2315,14 +2315,14 @@ export default function GameScreen({ account, onLogout }: Props) {
           const sx = (op.x - cam.x) * TILE_SIZE;
           const sy = (op.y - cam.y) * TILE_SIZE;
           if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
-          drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction, `${op.name} [${op.level}]`, op.hp, op.maxHp, now, op.color, op.mounted, op.mountIcon);
+          drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction, `${op.name} [${op.level}]`, op.hp, op.maxHp, now, op.color, op.mounted, op.mountIcon, undefined, undefined, 0, 0, MAPS[currentMapIdRef.current] || MAPS.eldoria);
         }
       } else {
         for (const sim of simPlayersRef.current) {
           const sx = (sim.pos.x - cam.x) * TILE_SIZE;
           const sy = (sim.pos.y - cam.y) * TILE_SIZE;
           if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
-          drawPlayer(ctx, sx, sy, TILE_SIZE, 'down', `${sim.name} [${sim.level}]`, 100, 100, now, sim.color, false, undefined);
+          drawPlayer(ctx, sx, sy, TILE_SIZE, 'down', `${sim.name} [${sim.level}]`, 100, 100, now, sim.color, false, undefined, undefined, undefined, 0, 0, MAPS[currentMapIdRef.current] || MAPS.eldoria);
         }
       }
     }

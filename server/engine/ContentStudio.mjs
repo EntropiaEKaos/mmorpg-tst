@@ -21,7 +21,7 @@ const SPELL_TARGET_MODES = Object.freeze(['smart', 'self', 'target', 'area']);
 const ALLY_EFFECTS = Object.freeze(['none', 'heal', 'buff']);
 const ENEMY_EFFECTS = Object.freeze(['none', 'damage', 'drain']);
 const CITY_STYLES = Object.freeze(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
-const CITY_LANDMARK_KINDS = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower']);
+const CITY_LANDMARK_KINDS = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower','house']);
 const CITY_PROP_KINDS = new Set(['banner','lamp','statue','brazier','crystal','grave','tent','sign','barrel','cart','pine','mushroom','anchor','rune']);
 
 const field = (id, label = id, kind = 'text', extra = {}) => Object.freeze({ id, label, kind, ...extra });

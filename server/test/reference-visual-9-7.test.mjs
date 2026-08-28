@@ -65,3 +65,15 @@ test('9.7 editable compact nameplates and architecture occlusion stay presentati
   assert.match(studio, /Nameplate Y offset/);
   assert.match(studio, /Decorative residential ring/);
 });
+
+
+test('9.7 city authoring exposes real houses and shared authoritative geometry', () => {
+  const identity = read('src/game/cityIdentity.ts');
+  const clientMaps = read('src/game/maps.ts');
+  const world = read('server/engine/World.mjs');
+  const studio = read('server/engine/ContentStudio.mjs');
+  assert.match(identity, /'house'/);
+  assert.match(clientMaps, /blocksByLandmark/);
+  assert.match(world, /movement collision now share/);
+  assert.match(studio, /house/);
+});

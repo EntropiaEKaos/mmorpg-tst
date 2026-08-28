@@ -85,6 +85,11 @@ function integer(value, min, max, fallback) {
   return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.floor(n))) : fallback;
 }
 
+function boundedNumber(value, min, max, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+}
+
 function seedFor(id, biome) {
   let hash = 0;
   for (const char of String(id || 'map')) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
@@ -155,6 +160,14 @@ function normalizeConfig(record, base = null) {
     townCenter,
     ...cityIdentity,
     townRange: integer(record?.townRange, 0, 20, base?.townRange ?? 8),
+    nameplateOffsetY: boundedNumber(record?.nameplateOffsetY, -32, 12, base?.nameplateOffsetY ?? -9),
+    nameplateScale: boundedNumber(record?.nameplateScale, .55, 1.5, base?.nameplateScale ?? .82),
+    nameplateBarWidth: boundedNumber(record?.nameplateBarWidth, 18, 64, base?.nameplateBarWidth ?? 30),
+    nameplateBarHeight: boundedNumber(record?.nameplateBarHeight, 2, 8, base?.nameplateBarHeight ?? 3),
+    nameplateFontSize: boundedNumber(record?.nameplateFontSize, 7, 14, base?.nameplateFontSize ?? 8),
+    nameplateShowValues: typeof record?.nameplateShowValues === 'boolean' ? record.nameplateShowValues : (base?.nameplateShowValues ?? false),
+    residentialRingEnabled: typeof record?.residentialRingEnabled === 'boolean' ? record.residentialRingEnabled : (base?.residentialRingEnabled ?? false),
+    residentialRingDensity: integer(record?.residentialRingDensity, 0, 10, base?.residentialRingDensity ?? 0),
     levelRequired: integer(record?.levelRequired, 1, 100_000, base?.levelRequired ?? 1),
     access: record?.access === 'gm' ? 'gm' : (base?.access === 'gm' ? 'gm' : 'public'),
     portals,
@@ -231,6 +244,9 @@ class WorldManager {
       spawnX: config.spawnPoint.x, spawnY: config.spawnPoint.y,
       townX: config.townCenter.x, townY: config.townCenter.y, townRange: config.townRange,
       cityStyle: config.cityStyle, cityAccent: config.cityAccent, roofColor: config.roofColor, wallColor: config.wallColor, roadColor: config.roadColor,
+      nameplateOffsetY: config.nameplateOffsetY, nameplateScale: config.nameplateScale, nameplateBarWidth: config.nameplateBarWidth,
+      nameplateBarHeight: config.nameplateBarHeight, nameplateFontSize: config.nameplateFontSize, nameplateShowValues: config.nameplateShowValues,
+      residentialRingEnabled: config.residentialRingEnabled, residentialRingDensity: config.residentialRingDensity,
       districts: config.districts.map(entry => ({ ...entry })), landmarks: config.landmarks.map(entry => ({ ...entry })), props: config.props.map(entry => ({ ...entry })),
       portals: config.portals.map(portal => ({
         x: portal.pos.x, y: portal.pos.y, targetMap: portal.targetMap,
@@ -253,10 +269,14 @@ class WorldManager {
         let type = 'grass'; let walkable = true; let blocksSight = false;
         if (x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1) {
           type = 'wall'; walkable = false; blocksSight = true;
-        } else if (Math.abs(x - config.townCenter.x) <= config.townRange && Math.abs(y - config.townCenter.y) <= config.townRange) {
-          type = 'floor';
         } else if ((config.spawnPoint.x === x && config.spawnPoint.y === y) || config.portals.some(portal => portal.pos.x === x && portal.pos.y === y)) {
           type = 'path';
+        } else if (config.landmarks.some(landmark => x >= landmark.x && x < landmark.x + landmark.w && y >= landmark.y && y < landmark.y + landmark.h)) {
+          // Content Studio landmark geometry is authoritative: visual buildings and
+          // movement collision now share the exact same authored rectangle.
+          type = 'wall'; walkable = false; blocksSight = true;
+        } else if (Math.abs(x - config.townCenter.x) <= config.townRange && Math.abs(y - config.townCenter.y) <= config.townRange) {
+          type = 'floor';
         } else {
           const r = rand();
           if (config.biome === 'snow') {

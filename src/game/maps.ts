@@ -62,7 +62,7 @@ function normalizeDistricts(raw: unknown): CityDistrict[] {
   }));
 }
 function normalizeLandmarks(raw: unknown): CityLandmark[] {
-  const kinds = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower']);
+  const kinds = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower','house']);
   if (!Array.isArray(raw)) return [];
   return raw.filter((entry: any) => entry && typeof entry === 'object').slice(0, 12).map((entry: any, index) => ({
     id: String(entry.id || `landmark_${index + 1}`).slice(0, 60), name: String(entry.name || `Landmark ${index + 1}`).slice(0, 60),
@@ -235,6 +235,13 @@ function seededRandom(seed: number) {
   return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
 }
 
+function blocksByLandmark(map: GameMap, x: number, y: number): boolean {
+  return map.landmarks.some((landmark) =>
+    x >= landmark.x && x < landmark.x + landmark.w &&
+    y >= landmark.y && y < landmark.y + landmark.h
+  );
+}
+
 function isInboundTarget(mapId: string, x: number, y: number): boolean {
   return Object.values(MAPS).some(map => map.portals.some(portal => portal.targetMap === mapId && portal.targetSpawn.x === x && portal.targetSpawn.y === y));
 }
@@ -252,10 +259,13 @@ export function generateMap(mapId: string): Tile[][] {
       let type: Tile['type'] = 'grass'; let walkable = true; let blocksSight = false;
       if (x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1) {
         type = 'wall'; walkable = false; blocksSight = true;
-      } else if (Math.abs(x - tc.x) <= mapData.townRange && Math.abs(y - tc.y) <= mapData.townRange) {
-        type = 'floor';
       } else if ((mapData.spawnPoint.x === x && mapData.spawnPoint.y === y) || mapData.portals.some(portal => portal.pos.x === x && portal.pos.y === y) || isInboundTarget(mapId, x, y)) {
         type = 'path';
+      } else if (blocksByLandmark(mapData, x, y)) {
+        // Client prediction mirrors authoritative landmark footprints exactly.
+        type = 'wall'; walkable = false; blocksSight = true;
+      } else if (Math.abs(x - tc.x) <= mapData.townRange && Math.abs(y - tc.y) <= mapData.townRange) {
+        type = 'floor';
       } else {
         const r = rand();
         if (biome === 'snow') {

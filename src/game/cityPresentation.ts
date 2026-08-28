@@ -27,6 +27,7 @@ function buildingTypeFor(kind: CityLandmark['kind']): Building['type'] {
     case 'graveyard': return 'graveyard';
     case 'lodge': return 'inn';
     case 'tower': return 'tower';
+    case 'house': return 'house';
     default: return 'house';
   }
 }
