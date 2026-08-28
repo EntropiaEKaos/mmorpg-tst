@@ -136,6 +136,12 @@ new_hover = """    await tooltipTrigger.hover();
 if old_focus not in capture:
     raise SystemExit('Action Bar focus proof anchor not found')
 capture = capture.replace(old_focus, new_hover, 1)
+
+old_markers = "for (const required of ['Fúria', 'Atalho:', 'Custo de Mana:', 'Recarga:', 'Combos reativos'])"
+new_markers = "for (const required of ['Fúria', 'ATALHO:', 'Custo de Mana:', 'Recarga:', 'COMBOS REATIVOS'])"
+if old_markers not in capture:
+    raise SystemExit('Action Bar tooltip marker anchor not found')
+capture = capture.replace(old_markers, new_markers, 1)
 CAPTURE.write_text(capture, encoding='utf-8')
 
 DOC = Path('docs/MORIA_9_34_1_VISUAL_PROOF.md')
@@ -150,12 +156,13 @@ doc = doc.replace(
 )
 doc = doc.replace(
     '- a captura prova slot habilitado, foco real, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
-    '- a captura prova slot habilitado, `hover` real, estado local aberto, portal real no `document.body` e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
+    '- a captura prova slot habilitado, `hover` real, estado local aberto, portal real no `document.body` e conteúdo real: `Fúria`, `ATALHO:`, `Custo de Mana:`, `Recarga:` e `COMBOS REATIVOS`;\n',
 )
 doc += '\n- O harness ancora a prova no wrapper real `[data-tooltip-trigger]` dentro da ActionBar e usa uma leitura DOM instantânea após o hover para evitar que o auto-wait do Playwright confunda reconciliação React com ausência do trigger.\n'
 doc += '- O QA revelou um bug real de compatibilidade: `buildSpellScalingBreakdown` podia desmontar a interface ao abrir um tooltip se um snapshot legado não tivesse `player.skills`. `skillLevel` agora trata `skills` ausente como catálogo vazio e mantém o fallback de nível 10.\n'
-if 'data-tooltip-open' not in doc or '`document.body`' not in doc or 'leitura DOM instantânea' not in doc or 'snapshot legado' not in doc:
+doc += '- As asserções textuais respeitam a capitalização realmente renderizada pelos cabeçalhos técnicos (`ATALHO:` e `COMBOS REATIVOS`) sem reduzir a cobertura semântica do tooltip.\n'
+if 'data-tooltip-open' not in doc or '`document.body`' not in doc or 'leitura DOM instantânea' not in doc or 'snapshot legado' not in doc or 'capitalização realmente renderizada' not in doc:
     raise SystemExit('9.34.1 documentation instrumentation anchor not found')
 DOC.write_text(doc, encoding='utf-8')
 
-print("Mor'ia 9.34.1 race-free tooltip and legacy scaling hardening prepared")
+print("Mor'ia 9.34.1 race-free tooltip, legacy scaling and rendered-label proof prepared")
