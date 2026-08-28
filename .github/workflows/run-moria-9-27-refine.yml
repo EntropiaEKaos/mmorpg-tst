@@ -1,0 +1,51 @@
+name: Mor'ia 9.27 Visual Refinement
+on:
+  push:
+    branches: [moria-9.27-deep-visual-revamp]
+    paths:
+      - 'tools/moria-9-27-refine.trigger'
+      - '.github/workflows/run-moria-9-27-refine.yml'
+permissions:
+  contents: write
+jobs:
+  refine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.27-deep-visual-revamp
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - name: Apply aggressive visual refinement
+        run: python tools/refine-moria-9-27-visual.py
+      - run: npm ci
+      - run: npm audit
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Architecture budget
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/components/GameScreen.tsx')
+          print(f'GameScreen bytes={p.stat().st_size}')
+          assert p.stat().st_size <= 158500
+          PY
+      - run: npm ci --prefix server --no-fund
+      - run: npm audit --prefix server
+      - run: npm run check --prefix server
+      - run: npm test --prefix server
+      - name: Commit validated second pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/game/render.ts src/game/playerAvatar.ts src/components/GameScreen.tsx server/test/visual-revamp-9-27.test.mjs
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.27): deepen world materials scale and combat vfx'
+          git push origin HEAD:moria-9.27-deep-visual-revamp
