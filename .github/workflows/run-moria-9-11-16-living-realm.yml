@@ -1,0 +1,54 @@
+name: Mor'ia 9.11-9.16 Living Realm
+on:
+  push:
+    branches: [moria-9.11-9.16-living-realm]
+    paths: [tools/moria-9-16.trigger]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.11-9.16-living-realm
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - name: Apply Living Realm 9.11-9.16
+        run: |
+          python tools/apply-moria-9-11-16-living-realm.py
+          python tools/harden-moria-9-11-16-living-realm.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes=$bytes"
+          test "$bytes" -le 155000
+      - name: Validate server
+        run: |
+          npm ci --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated product
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json server/package.json server/package-lock.json \
+            server/engine/ContentDB.mjs server/engine/ContentStudio.mjs server/engine/ContentIntegrity.mjs \
+            server/engine/OfficialStateSchema.mjs server/engine/OfficialSystems.mjs server/engine/OfficialActionRegistry.mjs \
+            server/engine/OfficialSnapshotReadModel.mjs server/engine/GameState.mjs server/engine/Itemization.mjs server/engine/Items.mjs \
+            server/test/living-realm-9-11-16.test.mjs \
+            src/components/GameEditor.tsx src/components/LivingRealmDirector916.tsx src/components/CharacterPanel.tsx
+          if git diff --cached --quiet; then echo "No product changes"; exit 0; fi
+          git commit -m "feat(9.16): living realm nodes factions chronicle crafting taming"
+          git push origin HEAD:moria-9.11-9.16-living-realm
