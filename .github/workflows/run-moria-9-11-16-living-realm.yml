@@ -25,6 +25,7 @@ jobs:
           python tools/apply-moria-9-11-16-living-realm.py
           python tools/harden-moria-9-11-16-living-realm.py
           python tools/fix-moria-9-16-client-map.py
+          python tools/fix-moria-9-16-compat.py
       - name: Validate client
         run: |
           npm ci
@@ -49,6 +50,7 @@ jobs:
             server/engine/OfficialStateSchema.mjs server/engine/OfficialSystems.mjs server/engine/OfficialActionRegistry.mjs \
             server/engine/OfficialSnapshotReadModel.mjs server/engine/GameState.mjs server/engine/Itemization.mjs server/engine/Items.mjs \
             server/engine/LivingRealmDomain.mjs server/test/living-realm-9-11-16.test.mjs \
+            server/test/official-action-registry.test.mjs server/test/official-state-schema.test.mjs \
             src/components/GameEditor.tsx src/components/LivingRealmDirector916.tsx src/components/LivingRealmPlayerPanel916.tsx src/components/CharacterPanel.tsx
           if git diff --cached --quiet; then echo "No product changes"; exit 0; fi
           git commit -m "feat(9.16): living realm nodes factions chronicle crafting taming"
