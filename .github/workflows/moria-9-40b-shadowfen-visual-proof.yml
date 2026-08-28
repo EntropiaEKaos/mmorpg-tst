@@ -4,6 +4,7 @@ on:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
       - 'tools/upgrade-moria-9-40b-shadowfen-visual-proof.py'
+      - 'tools/fix-moria-9-40b-applicator-terminator.py'
       - '.github/workflows/moria-9-40b-shadowfen-visual-proof.yml'
 permissions:
   contents: write
@@ -22,6 +23,8 @@ jobs:
           cache: npm
       - name: Validate and apply Mor'ia 9.40B visual proof
         run: |
+          python -m py_compile tools/fix-moria-9-40b-applicator-terminator.py
+          python tools/fix-moria-9-40b-applicator-terminator.py
           python -m py_compile tools/upgrade-moria-9-40b-shadowfen-visual-proof.py
           python tools/upgrade-moria-9-40b-shadowfen-visual-proof.py
       - name: Verify visual proof source contract
@@ -100,7 +103,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/components/GrandShadowfenPanorama.tsx src/visualQa.tsx tools/capture-moria-9-40b.mjs docs/MORIA_9_40_GRAND_SHADOWFEN.md
+          git add tools/upgrade-moria-9-40b-shadowfen-visual-proof.py src/components/GrandShadowfenPanorama.tsx src/visualQa.tsx tools/capture-moria-9-40b.mjs docs/MORIA_9_40_GRAND_SHADOWFEN.md
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'feat(9.40b): add authoritative Grand Shadowfen visual proof'
           git push origin HEAD:moria-9.28-character-i18n-ptbr
