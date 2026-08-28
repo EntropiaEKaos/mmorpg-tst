@@ -102,7 +102,7 @@ export const GRAND_SUNREACH_BUILTIN_WORLD_CONFIG = Object.freeze({
   spawnPoint:{ x:GRAND_SUNREACH_MAP.spawnX, y:GRAND_SUNREACH_MAP.spawnY },
   townCenter:{ x:GRAND_SUNREACH_MAP.townX, y:GRAND_SUNREACH_MAP.townY },
   portals:GRAND_SUNREACH_MAP.portals
-    .filter(portal => portal.targetMap === 'eldoria')
+    .filter(portal => portal.targetMap === 'eldoria' || portal.targetMap === 'ironwood')
     .map(portal => ({ pos:{x:portal.x,y:portal.y}, targetMap:portal.targetMap, targetSpawn:{x:portal.targetX,y:portal.targetY}, label:portal.label })),
 });
 

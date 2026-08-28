@@ -94,7 +94,7 @@ test('9.36A client and server keep the same capital road algorithm', () => {
 
 test('9.36A ContentDB exposes a separate Grand Capital migration marker without changing legacy schema version', () => {
   const source=fs.readFileSync(path.join(root,'server/engine/ContentDB.mjs'),'utf8');
-  assert.match(source,/grandCapitalVersion/); assert.match(source,/migrateGrandCapitalV1/); assert.match(source,/GRAND_ELDORIA_VERSION/);
+  assert.match(source,/grandCapitalVersion/); assert.match(source,/migrateGrandCapitalV1/); assert.match(source,/GRAND_CAPITAL_SCHEMA_VERSION/); assert.match(source,/migrateGrandEldoriaData/);
   assert.match(source,/this\.data\.version = 3/);
   assert.equal(GRAND_ELDORIA_VERSION,2);
 });

@@ -1,5 +1,5 @@
 import { VOCATIONS } from './Vocations.mjs';
-import { MAP_CONFIG, MAP_WIDTH, MAP_HEIGHT, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, SETTLEMENT_CLASSES, BIOMES } from './World.mjs';
+import { MAP_CONFIG, MAP_WIDTH, MAP_HEIGHT, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, SETTLEMENT_CLASSES, URBAN_PLANS, BIOMES } from './World.mjs';
 
 export function objectiveKey(value) {
   return String(value ?? '').trim().toLowerCase()
@@ -105,6 +105,7 @@ export function validateContentReferences(contentDB, type, record) {
     if (!Number.isInteger(height) || height < MIN_MAP_DIMENSION || height > MAX_MAP_DIMENSION) return `Map height must be an integer from ${MIN_MAP_DIMENSION} to ${MAX_MAP_DIMENSION}`;
     const settlementClass = String(record.settlementClass || (id === 'eldoria' ? 'capital' : 'city'));
     if (!SETTLEMENT_CLASSES.includes(settlementClass)) return `Map settlementClass is not supported: ${settlementClass}`;
+    if (record.urbanPlan !== undefined && record.urbanPlan !== '' && !URBAN_PLANS.has(String(record.urbanPlan))) return `Map urbanPlan is not supported: ${record.urbanPlan}`;
     for (const [field, dimension] of [['spawnX', width], ['spawnY', height], ['townX', width], ['townY', height]]) {
       if (record[field] !== undefined && record[field] !== '' && !validCoordinate(Number(record[field]), dimension)) return `Map ${field} must be an integer from 1 to ${dimension - 2}`;
     }

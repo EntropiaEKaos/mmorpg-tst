@@ -103,7 +103,7 @@ export const GRAND_ELDORIA_BUILTIN_WORLD_CONFIG = Object.freeze({
   spawnPoint:{ x:GRAND_ELDORIA_MAP.spawnX, y:GRAND_ELDORIA_MAP.spawnY },
   townCenter:{ x:GRAND_ELDORIA_MAP.townX, y:GRAND_ELDORIA_MAP.townY },
   portals:GRAND_ELDORIA_MAP.portals
-    .filter(portal => portal.targetMap === 'frostpeak' || portal.targetMap === 'shadowfen')
+    .filter(portal => portal.targetMap === 'frostpeak' || portal.targetMap === 'shadowfen' || portal.targetMap === 'ironwood')
     .map(portal => ({ pos:{x:portal.x,y:portal.y}, targetMap:portal.targetMap, targetSpawn:{x:portal.targetX,y:portal.targetY}, label:portal.label })),
 });
 

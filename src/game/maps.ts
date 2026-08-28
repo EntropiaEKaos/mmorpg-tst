@@ -8,7 +8,7 @@ export const MAX_MAP_DIMENSION = 192;
 export const TILE_SIZE = 32;
 
 export type SettlementClass = 'wilderness' | 'town' | 'city' | 'capital';
-export type UrbanPlan = 'royal-grid' | 'harbor-crescent';
+export type UrbanPlan = 'royal-grid' | 'harbor-crescent' | 'forest-rings';
 export interface UrbanBounds { x: number; y: number; width: number; height: number; }
 
 export type BiomeType = 'plains' | 'snow' | 'swamp' | 'desert' | 'shadow';
@@ -86,7 +86,7 @@ function settlementClassOf(value: unknown, mapId = ''): SettlementClass {
   return (['wilderness','town','city','capital'] as const).includes(requested as SettlementClass) ? requested as SettlementClass : 'city';
 }
 function mapDimension(value: unknown, fallback = MAP_WIDTH): number { return integer(value, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, fallback); }
-function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const requested = String(value || (mapId === 'sunreach_coast' ? 'harbor-crescent' : 'royal-grid')); return requested === 'harbor-crescent' ? 'harbor-crescent' : 'royal-grid'; }
+function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const fallback: UrbanPlan = mapId === 'sunreach_coast' ? 'harbor-crescent' : mapId === 'ironwood' ? 'forest-rings' : 'royal-grid'; const requested = String(value || fallback); return requested === 'harbor-crescent' || requested === 'forest-rings' ? requested : 'royal-grid'; }
 function normalizeUrbanBounds(raw: unknown, width: number, height: number, townCenter: Position, settlementClass: SettlementClass): UrbanBounds {
   const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Partial<UrbanBounds> : {};
   const radius = settlementClass === 'capital' ? Math.min(36, Math.floor(Math.min(width, height) / 3)) : Math.min(14, Math.floor(Math.min(width, height) / 4));
@@ -362,9 +362,44 @@ function harborCapitalTile(map: GameMap, x: number, y: number): Tile | null {
   return { type:(quay || major || merchant || secondary) ? 'path' : 'floor', walkable:true, blocksSight:false };
 }
 
+
+function forestCapitalTile(map: GameMap, x: number, y: number): Tile | null {
+  const bounds = map.urbanBounds;
+  if (!bounds) return null;
+  const minX = bounds.x, minY = bounds.y;
+  const maxX = minX + bounds.width - 1, maxY = minY + bounds.height - 1;
+  if (x < minX || x > maxX || y < minY || y > maxY) return null;
+  const cx = map.townCenter.x, cy = map.townCenter.y;
+  const gate = (x === minX && Math.abs(y - cy) <= 2)
+    || (x === maxX && Math.abs(y - cy) <= 2)
+    || (y === minY && Math.abs(x - cx) <= 2)
+    || (y === maxY && Math.abs(x - cx) <= 2);
+  if (gate) return { type:'path', walkable:true, blocksSight:false };
+  if (x === minX || x === maxX || y === minY || y === maxY) return { type:'tree', walkable:false, blocksSight:true };
+
+  const dx = x - cx, dy = y - cy;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const cardinal = Math.abs(dx) <= 1 || Math.abs(dy) <= 1;
+  const trailRings = Math.abs(distance - 20) <= 1.2 || Math.abs(distance - 38) <= 1.2;
+  const lumberRoads = Math.abs(x - (cx - 26)) <= 1 || Math.abs(x - (cx + 26)) <= 1;
+  const hunterRoads = Math.abs(y - (cy - 24)) <= 1 || Math.abs(y - (cy + 24)) <= 1;
+  const centralClearing = Math.abs(dx) <= 7 && Math.abs(dy) <= 7;
+  const roads = cardinal || trailRings || lumberRoads || hunterRoads || centralClearing;
+  if (roads) return { type:'path', walkable:true, blocksSight:false };
+
+  const groves = [[cx-31,cy-28],[cx+31,cy-30],[cx-32,cy+31],[cx+32,cy+30]];
+  const groveTree = groves.some(([gx,gy]) => {
+    const gxDelta = x - gx, gyDelta = y - gy;
+    return gxDelta * gxDelta + gyDelta * gyDelta <= 34 && ((x * 17 + y * 31) % 5 !== 0);
+  });
+  if (groveTree) return { type:'tree', walkable:false, blocksSight:true };
+  return { type:'grass', walkable:true, blocksSight:false };
+}
+
 function capitalUrbanTile(map: GameMap, x: number, y: number): Tile | null {
   if (map.settlementClass !== 'capital' || !map.urbanBounds) return null;
   if (map.urbanPlan === 'harbor-crescent') return harborCapitalTile(map, x, y);
+  if (map.urbanPlan === 'forest-rings') return forestCapitalTile(map, x, y);
   const minX = map.urbanBounds.x, minY = map.urbanBounds.y;
   const maxX = minX + map.urbanBounds.width - 1, maxY = minY + map.urbanBounds.height - 1;
   if (x < minX || x > maxX || y < minY || y > maxY) return null;

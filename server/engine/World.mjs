@@ -5,6 +5,7 @@
 
 import { GRAND_ELDORIA_BUILTIN_WORLD_CONFIG } from './GrandEldoria.mjs';
 import { GRAND_SUNREACH_BUILTIN_WORLD_CONFIG } from './GrandSunreach.mjs';
+import { GRAND_IRONWOOD_BUILTIN_WORLD_CONFIG } from './GrandIronwood.mjs';
 
 class Monster {
   constructor(data) {
@@ -18,7 +19,7 @@ const MIN_MAP_DIMENSION = 40;
 const MAX_MAP_DIMENSION = 192;
 const SETTLEMENT_CLASSES = Object.freeze(['wilderness','town','city','capital']);
 const SETTLEMENT_CLASS_SET = new Set(SETTLEMENT_CLASSES);
-const URBAN_PLANS = new Set(['royal-grid','harbor-crescent']);
+const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings']);
 const BIOMES = new Set(['plains', 'snow', 'swamp', 'desert', 'shadow']);
 const BIOME_SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
 const CITY_STYLES = new Set(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
@@ -42,6 +43,7 @@ const CITY_KINDS = ['keep','market','temple','depot','gate'];
 const MAP_CONFIG = Object.freeze({
   eldoria: GRAND_ELDORIA_BUILTIN_WORLD_CONFIG,
   sunreach_coast: GRAND_SUNREACH_BUILTIN_WORLD_CONFIG,
+  ironwood: GRAND_IRONWOOD_BUILTIN_WORLD_CONFIG,
   frostpeak: {
     id: 'frostpeak', name: 'Frostpeak', description: 'Frozen mountain city. Frigid and deadly.', biome: 'snow',
     spawnPoint: { x: 70, y: 40 }, townCenter: { x: 65, y: 40 }, townRange: 8, seed: 1337,
@@ -168,7 +170,8 @@ function normalizeConfig(record, base = null) {
   const height = integer(record?.height, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, base?.height || MAP_HEIGHT);
   const requestedSettlement = String(record?.settlementClass || base?.settlementClass || (id === 'eldoria' ? 'capital' : 'city'));
   const settlementClass = SETTLEMENT_CLASS_SET.has(requestedSettlement) ? requestedSettlement : 'city';
-  const requestedUrbanPlan = String(record?.urbanPlan || base?.urbanPlan || (id === 'sunreach_coast' ? 'harbor-crescent' : 'royal-grid'));
+  const defaultUrbanPlan = id === 'sunreach_coast' ? 'harbor-crescent' : id === 'ironwood' ? 'forest-rings' : 'royal-grid';
+  const requestedUrbanPlan = String(record?.urbanPlan || base?.urbanPlan || defaultUrbanPlan);
   const urbanPlan = settlementClass === 'capital' && URBAN_PLANS.has(requestedUrbanPlan) ? requestedUrbanPlan : 'royal-grid';
   const baseSpawn = base?.spawnPoint || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
   const baseTown = base?.townCenter || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
@@ -251,9 +254,44 @@ function harborCapitalTile(config, x, y) {
   return { type:(quay || major || merchant || secondary) ? 'path' : 'floor', walkable:true, blocksSight:false };
 }
 
+
+function forestCapitalTile(config, x, y) {
+  const bounds = config.urbanBounds;
+  if (!bounds) return null;
+  const minX = Number(bounds.x), minY = Number(bounds.y);
+  const maxX = minX + Number(bounds.width) - 1, maxY = minY + Number(bounds.height) - 1;
+  if (x < minX || x > maxX || y < minY || y > maxY) return null;
+  const cx = config.townCenter.x, cy = config.townCenter.y;
+  const gate = (x === minX && Math.abs(y - cy) <= 2)
+    || (x === maxX && Math.abs(y - cy) <= 2)
+    || (y === minY && Math.abs(x - cx) <= 2)
+    || (y === maxY && Math.abs(x - cx) <= 2);
+  if (gate) return { type:'path', walkable:true, blocksSight:false };
+  if (x === minX || x === maxX || y === minY || y === maxY) return { type:'tree', walkable:false, blocksSight:true };
+
+  const dx = x - cx, dy = y - cy;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const cardinal = Math.abs(dx) <= 1 || Math.abs(dy) <= 1;
+  const trailRings = Math.abs(distance - 20) <= 1.2 || Math.abs(distance - 38) <= 1.2;
+  const lumberRoads = Math.abs(x - (cx - 26)) <= 1 || Math.abs(x - (cx + 26)) <= 1;
+  const hunterRoads = Math.abs(y - (cy - 24)) <= 1 || Math.abs(y - (cy + 24)) <= 1;
+  const centralClearing = Math.abs(dx) <= 7 && Math.abs(dy) <= 7;
+  const roads = cardinal || trailRings || lumberRoads || hunterRoads || centralClearing;
+  if (roads) return { type:'path', walkable:true, blocksSight:false };
+
+  const groves = [[cx-31,cy-28],[cx+31,cy-30],[cx-32,cy+31],[cx+32,cy+30]];
+  const groveTree = groves.some(([gx,gy]) => {
+    const gxDelta = x - gx, gyDelta = y - gy;
+    return gxDelta * gxDelta + gyDelta * gyDelta <= 34 && ((x * 17 + y * 31) % 5 !== 0);
+  });
+  if (groveTree) return { type:'tree', walkable:false, blocksSight:true };
+  return { type:'grass', walkable:true, blocksSight:false };
+}
+
 function capitalUrbanTile(config, x, y) {
   if (config?.settlementClass !== 'capital') return null;
   if (config.urbanPlan === 'harbor-crescent') return harborCapitalTile(config, x, y);
+  if (config.urbanPlan === 'forest-rings') return forestCapitalTile(config, x, y);
   const bounds = config.urbanBounds;
   if (!bounds) return null;
   const minX = Number(bounds.x), minY = Number(bounds.y);
@@ -502,4 +540,4 @@ class WorldManager {
 }
 
 export const WORLD = new WorldManager();
-export { Monster, WorldManager, MAP_CONFIG, MAP_WIDTH, MAP_HEIGHT, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, SETTLEMENT_CLASSES, BIOMES };
+export { Monster, WorldManager, MAP_CONFIG, MAP_WIDTH, MAP_HEIGHT, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, SETTLEMENT_CLASSES, URBAN_PLANS, BIOMES };

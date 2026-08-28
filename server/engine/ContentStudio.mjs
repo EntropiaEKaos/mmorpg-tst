@@ -4,7 +4,7 @@
 // ===================================================================
 
 import { VOCATIONS } from './Vocations.mjs';
-import { MAP_CONFIG, BIOMES, MAP_WIDTH, MAP_HEIGHT, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, SETTLEMENT_CLASSES } from './World.mjs';
+import { MAP_CONFIG, BIOMES, MAP_WIDTH, MAP_HEIGHT, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, SETTLEMENT_CLASSES, URBAN_PLANS } from './World.mjs';
 import { validateContentReferences } from './ContentIntegrity.mjs';
 
 const ID_RE = /^[A-Za-z0-9_-]{2,100}$/;
@@ -80,7 +80,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
   ]),
   maps: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('biome', 'Biome', 'select', { optionKey: 'biomes' }), field('description', 'Description', 'textarea'),
-    field('width', 'Map width', 'number'), field('height', 'Map height', 'number'), field('settlementClass', 'Settlement class', 'select', { optionKey: 'settlementClasses' }), field('urbanBounds', 'Urban bounds', 'json'),
+    field('width', 'Map width', 'number'), field('height', 'Map height', 'number'), field('settlementClass', 'Settlement class', 'select', { optionKey: 'settlementClasses' }), field('urbanPlan', 'Urban plan', 'select', { optionKey: 'urbanPlans' }), field('urbanBounds', 'Urban bounds', 'json'),
     field('levelRequired', 'Required level', 'number'), field('seed', 'Seed', 'number'), field('spawnX', 'Spawn X', 'number'), field('spawnY', 'Spawn Y', 'number'),
     field('townX', 'Town X', 'number'), field('townY', 'Town Y', 'number'), field('townRange', 'Town range', 'number'),
     field('cityStyle', 'City style', 'select', { optionKey: 'cityStyles' }), field('cityAccent', 'City accent'), field('roofColor', 'Roof color'), field('wallColor', 'Wall color'), field('roadColor', 'Road color'),
@@ -390,6 +390,7 @@ export function validateStudioRecord(type, record, contentDB = null) {
     const height = Number(record.height ?? MAP_HEIGHT);
     const settlementClass = String(record.settlementClass || (record.id === 'eldoria' ? 'capital' : 'city'));
     if (!SETTLEMENT_CLASSES.includes(settlementClass)) return 'settlementClass is not supported';
+    if (record.urbanPlan !== undefined && record.urbanPlan !== '' && !URBAN_PLANS.has(String(record.urbanPlan))) return 'urbanPlan is not supported';
     for (const [key,dimension] of [['spawnX',width],['spawnY',height],['townX',width],['townY',height]]) { const coordError = playableCoord(record, key, dimension); if (coordError) return coordError; }
     if (record.urbanBounds !== undefined) {
       const box = record.urbanBounds;
@@ -528,7 +529,7 @@ export function getContentStudioSchema(type, contentDB) {
   const options = {
     rarities: [...RARITIES], slots: [...ITEM_SLOTS], monsterTypes: [...MONSTER_TYPES], npcRoles: [...NPC_ROLES],
     spellTypes: [...SPELL_TYPES], buffTypes: [...BUFF_TYPES], spellTargetModes: [...SPELL_TARGET_MODES], allyEffects: [...ALLY_EFFECTS], enemyEffects: [...ENEMY_EFFECTS], vocations: Object.keys(VOCATIONS).sort(),
-    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], cityStyles: [...CITY_STYLES], settlementClasses: [...SETTLEMENT_CLASSES], eventTypes: [...EVENT_TYPES], nameplateModes: [...NAMEPLATE_MODES],
+    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], cityStyles: [...CITY_STYLES], settlementClasses: [...SETTLEMENT_CLASSES], urbanPlans: [...URBAN_PLANS], eventTypes: [...EVENT_TYPES], nameplateModes: [...NAMEPLATE_MODES],
     npcs: contentDB.get('npcs').map(entry => entry.id).filter(Boolean).sort(),
     quests: contentDB.get('quests').map(entry => entry.id).filter(Boolean).sort(),
     items: contentDB.get('items').map(entry => entry.id).filter(Boolean).sort(),
@@ -540,7 +541,7 @@ export function getContentStudioSchema(type, contentDB) {
     npcs: 'NPCs are synchronized to online clients and gate linked quests/services by server proximity.',
     spells: 'Published spells merge into vocation spell slots and execute server-side.',
     quests: 'Quest NPCs, prerequisites and kill targets are checked before publish.',
-    maps: 'Map edits rebuild deterministic terrain and live portal travel. Width, height, settlement class and urban bounds are authoritative; capital maps receive higher city-authoring budgets while townRange remains a local service radius. Built-in maps cannot be deleted.',
+    maps: 'Map edits rebuild deterministic terrain and live portal travel. Width, height, settlement class, urban plan and urban bounds are authoritative; capital maps receive higher city-authoring budgets while townRange remains a local service radius. Built-in maps cannot be deleted.',
     events: 'World events rotate and reward participants from authoritative server state.',
     shops: 'Content shops extend the authoritative alpha merchant catalog and can be edited without a client rebuild.',
     lootTables: 'Loot tables are rolled server-side by monsters that reference them.',

@@ -12,8 +12,9 @@ import { ALPHA_CONTENT } from './AlphaContent.mjs';
 import { ALPHA_SYSTEMS_CONTENT } from './AlphaSystemsContent.mjs';
 import { LIVING_REALM_CONTENT } from './LivingRealmContent.mjs';
 import { ROAD_TO_TEN_CONTENT } from './RoadToTenContent.mjs';
-import { GRAND_ELDORIA_VERSION, migrateGrandEldoriaData } from './GrandEldoria.mjs';
-import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandSunreachData } from './GrandSunreach.mjs';
+import { migrateGrandEldoriaData } from './GrandEldoria.mjs';
+import { migrateGrandSunreachData } from './GrandSunreach.mjs';
+import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandIronwoodData } from './GrandIronwood.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -199,9 +200,10 @@ export class ContentDB {
 
   migrateGrandCapitalV1() {
     if (Number(this.data.grandCapitalVersion) >= GRAND_CAPITAL_SCHEMA_VERSION) return false;
-    // Eldoria remains idempotent; schema 3 adds the first independent harbor capital.
+    // Every capital migration is idempotent and exact-default-only. Schema 4 adds Ironwood.
     migrateGrandEldoriaData(this.data);
     migrateGrandSunreachData(this.data);
+    migrateGrandIronwoodData(this.data);
     this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
     this.save();
     return true;
@@ -324,10 +326,16 @@ export class ContentDB {
     this.data.materials = mergeById(this.data.materials, LIVING_REALM_CONTENT.materials);
     this.data.craftingRecipes = mergeById(this.data.craftingRecipes, LIVING_REALM_CONTENT.craftingRecipes);
     this.data.tamingSpecies = mergeById(this.data.tamingSpecies, LIVING_REALM_CONTENT.tamingSpecies);
+    for (const key of ['professionSpecializations','economyPolicies','factionPrograms','siegeAssets','dynamicWorldRules','dungeonBlueprints','questConsequences','housingUpgrades']) {
+      this.data[key] = mergeById(this.data[key], ROAD_TO_TEN_CONTENT[key]);
+    }
     this.data.version = 3;
     this.data.livingRealmVersion = 1;
+    this.data.roadToTenVersion = 1;
     migrateGrandEldoriaData(this.data);
-    this.data.grandCapitalVersion = GRAND_ELDORIA_VERSION;
+    migrateGrandSunreachData(this.data);
+    migrateGrandIronwoodData(this.data);
+    this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
 
     this.save();
   }
