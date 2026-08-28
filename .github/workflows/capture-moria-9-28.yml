@@ -1,0 +1,72 @@
+name: Mor'ia 9.28 PT-BR Visual Review
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'src/components/GameScreen.tsx'
+      - 'src/components/LoginScreen.tsx'
+      - 'src/components/LocaleBridge.tsx'
+      - 'src/components/VocationPortrait.tsx'
+      - 'src/game/render.ts'
+      - 'src/i18n/**'
+      - 'tools/capture-moria-9-28.mjs'
+      - '.github/workflows/capture-moria-9-28.yml'
+permissions:
+  contents: write
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install validated client
+        run: npm ci
+      - name: Install browser harness
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Build and serve client
+        run: |
+          npm run build
+          nohup python3 -m http.server 4173 -d dist >/tmp/moria928-http.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/moria928-http.log
+          exit 1
+      - name: Capture PT-BR and character review
+        run: node tools/capture-moria-9-28.mjs
+      - name: Validate browser evidence
+        run: |
+          test ! -s browser-console.txt
+          test -s visible-text-audit.json
+          for f in \
+            docs/screenshots/moria-9-28-login-ptbr.png \
+            docs/screenshots/moria-9-28-character-creation-a.png \
+            docs/screenshots/moria-9-28-character-creation-b.png \
+            docs/screenshots/moria-9-28-gameplay-ptbr-character.png \
+            docs/screenshots/moria-9-28-inventory-ptbr.png; do test -s "$f"; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moria-9-28-character-ptbr-review
+          path: |
+            docs/screenshots/moria-9-28-*.png
+            browser-console.txt
+            visible-text-audit.json
+          retention-days: 90
+      - name: Commit browser evidence
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/screenshots/moria-9-28-*.png
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'docs(9.28): add PT-BR character browser evidence'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

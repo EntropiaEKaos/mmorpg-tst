@@ -9,7 +9,7 @@ export const SCHOOL_META: Record<DamageSchool,{label:string;color:string;icon:st
 };
 const num=(v:unknown,f=0)=>Number.isFinite(Number(v))?Number(v):f;
 export function normalizeSchool(value?:string):DamageSchool{ const a:Record<string,string>={energy:'lightning',frost:'ice',necrotic:'death',dark:'shadow'}; const k=(a[String(value||'magic').toLowerCase()]||String(value||'magic').toLowerCase()) as DamageSchool; return (DAMAGE_SCHOOLS as readonly string[]).includes(k)?k:'magic'; }
-function skillLevel(player:Player,id:string){ const raw=(player.skills as unknown as Record<string,{level:number}|number|undefined>)[id]; return Math.max(1,num(typeof raw==='object'&&raw?raw.level:raw,10)); }
+function skillLevel(player:Player,id:string){ const raw=((player.skills || {}) as unknown as Record<string,{level:number}|number|undefined>)[id]; return Math.max(1,num(typeof raw==='object'&&raw?raw.level:raw,10)); }
 function equipment(player:Player){ return Object.values(player.equipment||{}).filter(Boolean) as Equipment[]; }
 export function buildSpellScalingBreakdown(player:Player,spell:Spell){
  const school=normalizeSchool(spell.damageType); const skillId=spell.skillId||(school==='physical'?(spell.weaponSkill||'sword'):school==='magic'?'magic':school);

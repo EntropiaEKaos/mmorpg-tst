@@ -1,5 +1,5 @@
 import { VOCATIONS } from './Vocations.mjs';
-import { MAP_CONFIG, MAP_WIDTH, MAP_HEIGHT, BIOMES } from './World.mjs';
+import { MAP_CONFIG, MAP_WIDTH, MAP_HEIGHT, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, SETTLEMENT_CLASSES, URBAN_PLANS, BIOMES } from './World.mjs';
 
 export function objectiveKey(value) {
   return String(value ?? '').trim().toLowerCase()
@@ -13,9 +13,25 @@ function hasMap(contentDB, mapId, extraMapId = '') {
   return id === extraMapId || Object.hasOwn(MAP_CONFIG, id) || contentDB.get('maps').some(map => map.id === id);
 }
 
-function validCoordinate(value) {
+function mapRecord(contentDB, mapId, extraRecord = null) {
+  if (extraRecord?.id === mapId) return extraRecord;
+  const custom = contentDB.get('maps').find(map => map?.id === mapId);
+  return custom || MAP_CONFIG[mapId] || null;
+}
+
+function mapDimensions(contentDB, mapId, extraRecord = null) {
+  const map = mapRecord(contentDB, mapId, extraRecord);
+  const width = Number(map?.width ?? MAP_WIDTH);
+  const height = Number(map?.height ?? MAP_HEIGHT);
+  return {
+    width: Number.isInteger(width) && width >= MIN_MAP_DIMENSION && width <= MAX_MAP_DIMENSION ? width : MAP_WIDTH,
+    height: Number.isInteger(height) && height >= MIN_MAP_DIMENSION && height <= MAX_MAP_DIMENSION ? height : MAP_HEIGHT,
+  };
+}
+
+function validCoordinate(value, max) {
   const n = Number(value);
-  return Number.isInteger(n) && n >= 1 && n <= MAP_WIDTH - 2;
+  return Number.isInteger(n) && n >= 1 && n <= max - 2;
 }
 
 export function validateContentReferences(contentDB, type, record) {
@@ -83,8 +99,21 @@ export function validateContentReferences(contentDB, type, record) {
     if (!/^[A-Za-z0-9_-]{2,50}$/.test(id)) return 'Map id must be 2-50 letters, numbers, dash or underscore';
     const biome = typeof record.biome === 'string' ? record.biome.trim().toLowerCase() : '';
     if (!BIOMES.has(biome)) return `Map has unsupported biome: ${biome || '(empty)'}`;
-    for (const field of ['spawnX', 'spawnY', 'townX', 'townY']) {
-      if (record[field] !== undefined && record[field] !== '' && !validCoordinate(Number(record[field]))) return `Map ${field} must be an integer from 1 to ${MAP_WIDTH - 2}`;
+    const width = Number(record.width ?? MAP_WIDTH);
+    const height = Number(record.height ?? MAP_HEIGHT);
+    if (!Number.isInteger(width) || width < MIN_MAP_DIMENSION || width > MAX_MAP_DIMENSION) return `Map width must be an integer from ${MIN_MAP_DIMENSION} to ${MAX_MAP_DIMENSION}`;
+    if (!Number.isInteger(height) || height < MIN_MAP_DIMENSION || height > MAX_MAP_DIMENSION) return `Map height must be an integer from ${MIN_MAP_DIMENSION} to ${MAX_MAP_DIMENSION}`;
+    const settlementClass = String(record.settlementClass || (id === 'eldoria' ? 'capital' : 'city'));
+    if (!SETTLEMENT_CLASSES.includes(settlementClass)) return `Map settlementClass is not supported: ${settlementClass}`;
+    if (record.urbanPlan !== undefined && record.urbanPlan !== '' && !URBAN_PLANS.has(String(record.urbanPlan))) return `Map urbanPlan is not supported: ${record.urbanPlan}`;
+    for (const [field, dimension] of [['spawnX', width], ['spawnY', height], ['townX', width], ['townY', height]]) {
+      if (record[field] !== undefined && record[field] !== '' && !validCoordinate(Number(record[field]), dimension)) return `Map ${field} must be an integer from 1 to ${dimension - 2}`;
+    }
+    if (record.urbanBounds !== undefined) {
+      const box = record.urbanBounds;
+      if (!box || typeof box !== 'object' || Array.isArray(box)) return 'Map urbanBounds must be an object';
+      for (const key of ['x','y','width','height']) if (!Number.isInteger(Number(box[key]))) return `Map urbanBounds.${key} must be an integer`;
+      if (Number(box.x) < 1 || Number(box.y) < 1 || Number(box.width) < 2 || Number(box.height) < 2 || Number(box.x) + Number(box.width) > width - 1 || Number(box.y) + Number(box.height) > height - 1) return 'Map urbanBounds must stay inside the playable area';
     }
     if (record.townRange !== undefined && record.townRange !== '') {
       const range = Number(record.townRange);
@@ -101,9 +130,11 @@ export function validateContentReferences(contentDB, type, record) {
         if (!portal || typeof portal !== 'object' || Array.isArray(portal)) return 'Map portal entries must be objects';
         const x = portal.x ?? portal.pos?.x; const y = portal.y ?? portal.pos?.y;
         const tx = portal.targetX ?? portal.targetSpawn?.x; const ty = portal.targetY ?? portal.targetSpawn?.y;
-        if (![x, y, tx, ty].every(value => validCoordinate(Number(value)))) return 'Map portal coordinates must be inside the playable area';
+        if (!validCoordinate(Number(x), width) || !validCoordinate(Number(y), height)) return 'Map portal source coordinates must be inside the source playable area';
         const targetMap = typeof portal.targetMap === 'string' ? portal.targetMap.trim() : '';
         if (!hasMap(contentDB, targetMap, id)) return `Map portal references unknown map: ${targetMap || '(empty)'}`;
+        const targetDimensions = mapDimensions(contentDB, targetMap, targetMap === id ? record : null);
+        if (!validCoordinate(Number(tx), targetDimensions.width) || !validCoordinate(Number(ty), targetDimensions.height)) return 'Map portal target coordinates must be inside the destination playable area';
       }
     }
   }

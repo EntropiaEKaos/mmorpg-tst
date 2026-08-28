@@ -1,0 +1,74 @@
+name: Mor'ia 9.41A Grand Emberhold
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-41a-grand-emberhold.py'
+      - '.github/workflows/moria-9-41a-grand-emberhold.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 34
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.41A Grand Emberhold
+        run: |
+          python -m py_compile tools/upgrade-moria-9-41a-grand-emberhold.py
+          python tools/upgrade-moria-9-41a-grand-emberhold.py
+      - name: Verify Grand Emberhold source contract
+        run: |
+          set -euxo pipefail
+          for file in server/engine/GrandEmberhold.mjs server/test/grand-emberhold-9-41.test.mjs docs/MORIA_9_41_GRAND_EMBERHOLD.md; do test -s "$file"; done
+          grep -Fq "GRAND_CAPITAL_SCHEMA_VERSION=7" server/engine/GrandEmberhold.mjs
+          grep -Fq "urbanPlan:'caldera-radials'" server/engine/GrandEmberhold.mjs
+          grep -Fq "landmarks.length,42" server/test/grand-emberhold-9-41.test.mjs
+          grep -Fq "calderaRadialsTile" server/engine/World.mjs
+          grep -Fq "calderaRadialsTile" src/game/maps.ts
+          grep -Fq "fissureA" server/engine/World.mjs
+          grep -Fq "fissureB" server/engine/World.mjs
+          grep -Fq "forgeCourts" src/game/maps.ts
+          grep -Fq "caldera-radials" server/engine/ContentStudio.mjs || grep -Fq "urbanPlans" server/engine/ContentStudio.mjs
+          grep -Fq "migrateGrandEmberholdData" server/engine/ContentDB.mjs
+          test "$(grep -Fc 'migrateGrandEmberholdData(this.data);' server/engine/ContentDB.mjs)" -ge 2
+          grep -Fq "GRAND_EMBERHOLD_MAP" server/engine/AlphaContent.mjs
+          grep -Fq "targetMap:'emberhold',targetX:80,targetY:22" server/engine/GrandFrostpeak.mjs
+          grep -Fq "9.41 — Grand Emberhold" docs/MORIA_9_41_GRAND_EMBERHOLD.md
+          node --check server/engine/GrandEmberhold.mjs
+          node --check server/engine/World.mjs
+          node --check server/engine/ContentDB.mjs
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate focused Grand Emberhold contract
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          node --test server/test/grand-emberhold-9-41.test.mjs
+      - name: Validate complete server suite
+        run: npm test --prefix server
+      - name: Commit validated Mor'ia 9.41A pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/engine/GrandEmberhold.mjs server/engine/GrandFrostpeak.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs src/game/maps.ts server/test/grand-emberhold-9-41.test.mjs server/test/grand-capital-foundation-9-35.test.mjs server/test/grand-eldoria-9-36.test.mjs server/test/grand-sunreach-9-37.test.mjs server/test/grand-shadowfen-9-40.test.mjs docs/MORIA_9_41_GRAND_EMBERHOLD.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.41a): build authoritative Grand Emberhold'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

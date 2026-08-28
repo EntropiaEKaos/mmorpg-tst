@@ -1,0 +1,107 @@
+name: Mor'ia 9.36C Eldoria Urban Density
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-36c-urban-density.py'
+      - 'tools/fix-moria-9-36c-legacy-tests.py'
+      - '.github/workflows/moria-9-36c-urban-density.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.36C urban density
+        run: |
+          python tools/upgrade-moria-9-36c-urban-density.py
+          python tools/fix-moria-9-36c-legacy-tests.py
+      - name: Verify density source contract
+        run: |
+          grep -q "GRAND_ELDORIA_VERSION = 2" server/engine/GrandEldoria.mjs
+          grep -q "GRAND_ELDORIA_RESIDENTIAL" server/engine/GrandEldoria.mjs
+          test $(grep -c "eldoria_residence_" server/engine/GrandEldoria.mjs) -ge 20
+          grep -q "showOnMinimap:false" server/engine/GrandEldoria.mjs
+          grep -q "untouchedV1Architecture" server/engine/GrandEldoria.mjs
+          grep -q "entry.showOnMinimap !== false" src/game/cityPresentation.ts
+          grep -q "ambientWidth - 3" src/game/cityPresentation.ts
+          ! grep -q "Math.min(78 - w" src/game/cityPresentation.ts
+          ! grep -q "Math.min(77," src/game/cityPresentation.ts
+          grep -q "map.tiles\[64\]\[72\].type,'floor'" server/test/grand-eldoria-9-36.test.mjs
+          grep -q "GRAND_ELDORIA_VERSION,2" server/test/grand-eldoria-9-36.test.mjs
+          test -s server/test/grand-eldoria-density-9-36.test.mjs
+          grep -q "36/64 construções" tools/capture-moria-9-36c.mjs
+          grep -q "densidade urbana autoritativa" docs/MORIA_9_36_GRAND_ELDORIA.md
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate focused density contract
+        run: |
+          npm ci --prefix server
+          node --test server/test/grand-eldoria-density-9-36.test.mjs
+      - name: Validate complete server suite
+        run: |
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Install stable visual QA browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npm audit --audit-level=high
+          npx playwright install --with-deps chromium
+      - name: Start authoritative QA server and client
+        run: |
+          rm -f /tmp/moria-936c-content.json /tmp/moria-936c-content.json.tmp
+          ADMIN_TOKEN=moria-visual-qa MORIA_CONTENT_DB=/tmp/moria-936c-content.json PORT=3000 npm start --prefix server > /tmp/moria-936c-server.log 2>&1 &
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-936c-vite.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null && curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/health
+          maps=$(curl -fsS 'http://127.0.0.1:3000/admin/api/maps?token=moria-visual-qa')
+          echo "$maps" | grep -q '"width":160'
+          echo "$maps" | grep -q 'eldoria_residence_20'
+          curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null
+      - name: Capture and assert dense Grand Eldoria visuals
+        run: |
+          rm -rf artifacts/moria-9.36c-screenshots
+          node tools/capture-moria-9-36c.mjs
+          test -s artifacts/moria-9.36c-screenshots/eldoria-minimap.png
+          test -s artifacts/moria-9.36c-screenshots/eldoria-city-designer.png
+          test -s artifacts/moria-9.36c-screenshots/eldoria-panorama.png
+          test $(stat -c%s artifacts/moria-9.36c-screenshots/eldoria-minimap.png) -gt 25000
+          test $(stat -c%s artifacts/moria-9.36c-screenshots/eldoria-city-designer.png) -gt 110000
+          test $(stat -c%s artifacts/moria-9.36c-screenshots/eldoria-panorama.png) -gt 140000
+      - name: Upload Mor'ia 9.36C screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9.36c-screenshots
+          path: artifacts/moria-9.36c-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit validated Mor'ia 9.36C pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/engine/GrandEldoria.mjs server/engine/World.mjs src/game/cityIdentity.ts src/game/maps.ts src/game/cityPresentation.ts server/test/grand-eldoria-9-36.test.mjs server/test/grand-eldoria-density-9-36.test.mjs tools/capture-moria-9-36c.mjs docs/MORIA_9_36_GRAND_ELDORIA.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.36c): densify Grand Eldoria with authoritative housing fabric'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

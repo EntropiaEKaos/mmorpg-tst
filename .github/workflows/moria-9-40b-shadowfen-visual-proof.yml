@@ -1,0 +1,109 @@
+name: Mor'ia 9.40B Grand Shadowfen Visual Proof
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-40b-shadowfen-visual-proof.py'
+      - 'tools/fix-moria-9-40b-applicator-terminator.py'
+      - '.github/workflows/moria-9-40b-shadowfen-visual-proof.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 36
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate and apply Mor'ia 9.40B visual proof
+        run: |
+          python -m py_compile tools/fix-moria-9-40b-applicator-terminator.py
+          python tools/fix-moria-9-40b-applicator-terminator.py
+          python -m py_compile tools/upgrade-moria-9-40b-shadowfen-visual-proof.py
+          python tools/upgrade-moria-9-40b-shadowfen-visual-proof.py
+      - name: Verify visual proof source contract
+        run: |
+          test -s src/components/GrandShadowfenPanorama.tsx
+          test -s tools/capture-moria-9-40b.mjs
+          grep -q 'data-grand-shadowfen-panorama' src/components/GrandShadowfenPanorama.tsx
+          grep -q 'data-water-count' src/components/GrandShadowfenPanorama.tsx
+          grep -q 'data-bridge-count' src/components/GrandShadowfenPanorama.tsx
+          grep -q 'data-path-count' src/components/GrandShadowfenPanorama.tsx
+          grep -q 'data-bush-count' src/components/GrandShadowfenPanorama.tsx
+          grep -q "panel === 'shadowfen-minimap'" src/visualQa.tsx
+          grep -q "panel === 'shadowfen-city-designer'" src/visualQa.tsx
+          grep -q "panel === 'shadowfen-panorama'" src/visualQa.tsx
+          grep -q 'water<1300' tools/capture-moria-9-40b.mjs
+          grep -q 'bridges<70' tools/capture-moria-9-40b.mjs
+          grep -q 'paths<1200' tools/capture-moria-9-40b.mjs
+          grep -q 'bushes<50' tools/capture-moria-9-40b.mjs
+          grep -q '9.40B — Prova visual autoritativa' docs/MORIA_9_40_GRAND_SHADOWFEN.md
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Install stable visual QA browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npm audit --audit-level=high
+          npx playwright install --with-deps chromium
+      - name: Start authoritative QA server and client
+        run: |
+          rm -f /tmp/moria-940b-content.json /tmp/moria-940b-content.json.tmp
+          ADMIN_TOKEN=moria-visual-qa MORIA_CONTENT_DB=/tmp/moria-940b-content.json PORT=3000 npm start --prefix server > /tmp/moria-940b-server.log 2>&1 &
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-940b-vite.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null && curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/health >/dev/null
+          maps=$(curl -fsS 'http://127.0.0.1:3000/admin/api/maps?token=moria-visual-qa')
+          echo "$maps" | grep -q 'shadowfen'
+          echo "$maps" | grep -q 'marsh-wards'
+          echo "$maps" | grep -q '"width":160'
+          echo "$maps" | grep -q '"height":160'
+          curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null
+      - name: Capture and assert Grand Shadowfen visuals
+        run: |
+          rm -rf artifacts/moria-9.40b-screenshots
+          node tools/capture-moria-9-40b.mjs
+          test -s artifacts/moria-9.40b-screenshots/shadowfen-minimap.png
+          test -s artifacts/moria-9.40b-screenshots/shadowfen-city-designer.png
+          test -s artifacts/moria-9.40b-screenshots/shadowfen-panorama.png
+          test $(stat -c%s artifacts/moria-9.40b-screenshots/shadowfen-minimap.png) -gt 25000
+          test $(stat -c%s artifacts/moria-9.40b-screenshots/shadowfen-city-designer.png) -gt 120000
+          test $(stat -c%s artifacts/moria-9.40b-screenshots/shadowfen-panorama.png) -gt 140000
+      - name: Upload Mor'ia 9.40B screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9.40b-screenshots
+          path: artifacts/moria-9.40b-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit validated Mor'ia 9.40B pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tools/upgrade-moria-9-40b-shadowfen-visual-proof.py src/components/GrandShadowfenPanorama.tsx src/visualQa.tsx tools/capture-moria-9-40b.mjs docs/MORIA_9_40_GRAND_SHADOWFEN.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.40b): add authoritative Grand Shadowfen visual proof'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

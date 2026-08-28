@@ -1,3 +1,5 @@
+import { t as tr } from '../i18n';
+
 export interface AdventureContractView {
   id: string;
   mapId: string;
@@ -50,9 +52,9 @@ export default function AdventureBoard({ state, connected, onStart, onAbandon, o
         <div className="relative">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <div className="moria-eyebrow text-amber-200/70">MVP ADVENTURE LOOP</div>
-              <h2 className="moria-title mt-1 text-2xl font-black tracking-[0.14em] text-amber-100">⚔ HUNT BOARD</h2>
-              <p className="mt-1 max-w-2xl text-xs text-slate-400">Choose one hunt, chain kills to build Momentum, then claim escalating rewards. Every third contract awards an equipment cache.</p>
+              <div className="moria-eyebrow text-amber-200/70">{tr('MVP ADVENTURE LOOP')}</div>
+              <h2 className="moria-title mt-1 text-2xl font-black tracking-[0.14em] text-amber-100">⚔ {tr('HUNT BOARD')}</h2>
+              <p className="mt-1 max-w-2xl text-xs text-slate-400">{tr('Choose one hunt, chain kills to build Momentum, then claim escalating rewards. Every third contract awards an equipment cache.')}</p>
             </div>
             <button onClick={onClose} className="moria-button rounded-xl px-3 py-2 text-slate-300">✕</button>
           </div>
@@ -60,18 +62,18 @@ export default function AdventureBoard({ state, connected, onStart, onAbandon, o
           {!connected ? (
             <div className="rounded-2xl border border-sky-300/20 bg-sky-950/20 p-8 text-center">
               <div className="text-4xl">🌐</div>
-              <div className="mt-3 font-bold text-sky-100">Hunts are server-authoritative</div>
-              <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-slate-400">Connect to the Mor'ia server to start contracts. Progress, Momentum, gold, XP and cache items are all verified and persisted by the server.</p>
+              <div className="mt-3 font-bold text-sky-100">{tr('Hunts are server-authoritative')}</div>
+              <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-slate-400">{tr("Connect to the Mor'ia server to start contracts. Progress, Momentum, gold, XP and cache items are all verified and persisted by the server.")}</p>
             </div>
           ) : !state ? (
-            <div className="py-12 text-center text-sm text-slate-400">Synchronizing Hunt Board…</div>
+            <div className="py-12 text-center text-sm text-slate-400">{tr('Synchronizing Hunt Board…')}</div>
           ) : (
             <>
               <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <Stat icon="🔥" label="STREAK" value={`${state.streak}`} note={`+${Math.min(state.streak, 5) * 10}% next reward`} />
-                <Stat icon="⚡" label="MOMENTUM" value={state.combo.count > 0 ? `${state.combo.count}x` : '—'} note={state.combo.count > 1 ? `+${Math.round((state.combo.multiplier - 1) * 100)}% kill XP` : 'Chain kills within 8s'} />
-                <Stat icon="🏆" label="COMPLETED" value={`${state.completed}`} note={`Best combo ${state.bestCombo}x`} />
-                <Stat icon="🎁" label="NEXT CACHE" value={`${state.nextCacheIn}`} note="contracts remaining" />
+                <Stat icon="🔥" label={tr('STREAK')} value={`${state.streak}`} note={`+${Math.min(state.streak, 5) * 10}% ${tr('next reward')}`} />
+                <Stat icon="⚡" label={tr('MOMENTUM')} value={state.combo.count > 0 ? `${state.combo.count}x` : '—'} note={state.combo.count > 1 ? `+${Math.round((state.combo.multiplier - 1) * 100)}% ${tr('kill XP')}` : tr('Chain kills within 8s')} />
+                <Stat icon="🏆" label={tr('COMPLETED')} value={`${state.completed}`} note={`${tr('Best combo')} ${state.bestCombo}x`} />
+                <Stat icon="🎁" label={tr('NEXT CACHE')} value={`${state.nextCacheIn}`} note={tr('contracts remaining')} />
               </div>
 
               {active && (
@@ -81,21 +83,21 @@ export default function AdventureBoard({ state, connected, onStart, onAbandon, o
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <div className="text-[9px] font-black tracking-[0.18em] text-sky-300/70">ACTIVE HUNT</div>
-                          <div className="text-lg font-black text-slate-100">{active.title}</div>
+                          <div className="text-[9px] font-black tracking-[0.18em] text-sky-300/70">{tr('ACTIVE HUNT')}</div>
+                          <div className="text-lg font-black text-slate-100">{tr(active.title)}</div>
                         </div>
                         <div className="text-right text-xs text-amber-200">{active.rewardGold}g · {active.rewardXp} XP</div>
                       </div>
                       <div className="mt-2 h-2.5 overflow-hidden rounded-full border border-white/10 bg-black/50">
                         <div className="h-full rounded-full bg-gradient-to-r from-sky-500 via-cyan-300 to-amber-300 transition-all" style={{ width: `${Math.min(100, (active.progress / Math.max(1, active.count)) * 100)}%` }} />
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400"><span>Defeat {active.targetLabel}</span><span>{active.progress}/{active.count}</span></div>
+                      <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400"><span>{tr('Defeat')} {tr(active.targetLabel)}</span><span>{active.progress}/{active.count}</span></div>
                     </div>
                     <div className="flex gap-2 sm:flex-col">
                       {active.ready ? (
-                        <button onClick={onClaim} className="moria-button-primary rounded-xl px-4 py-2 text-xs font-black tracking-wider text-amber-50">🏆 CLAIM</button>
+                        <button onClick={onClaim} className="moria-button-primary rounded-xl px-4 py-2 text-xs font-black tracking-wider text-amber-50">🏆 {tr('CLAIM')}</button>
                       ) : (
-                        <button onClick={onAbandon} className="moria-button rounded-xl px-4 py-2 text-xs text-rose-200">Abandon</button>
+                        <button onClick={onAbandon} className="moria-button rounded-xl px-4 py-2 text-xs text-rose-200">{tr('Abandon')}</button>
                       )}
                     </div>
                   </div>
@@ -114,12 +116,12 @@ export default function AdventureBoard({ state, connected, onStart, onAbandon, o
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/35 text-3xl">{contract.icon}</div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <div className="font-black text-slate-100">{contract.title}</div>
-                            <span className="text-[8px] font-black tracking-[0.18em]" style={{ color: tier.color }}>{tier.label}</span>
+                            <div className="font-black text-slate-100">{tr(contract.title)}</div>
+                            <span className="text-[8px] font-black tracking-[0.18em]" style={{ color: tier.color }}>{tr(tier.label)}</span>
                           </div>
-                          <p className="mt-1 text-[11px] leading-4 text-slate-400">{contract.description}</p>
+                          <p className="mt-1 text-[11px] leading-4 text-slate-400">{tr(contract.description)}</p>
                           <div className="mt-3 flex flex-wrap gap-2 text-[10px]">
-                            <span className="moria-chip rounded-lg px-2 py-1 text-sky-200">⚔ {contract.count} {contract.targetLabel}</span>
+                            <span className="moria-chip rounded-lg px-2 py-1 text-sky-200">⚔ {contract.count} {tr(contract.targetLabel)}</span>
                             <span className="moria-chip rounded-lg px-2 py-1 text-amber-200">🪙 {contract.rewardGold}</span>
                             <span className="moria-chip rounded-lg px-2 py-1 text-violet-200">✦ {contract.rewardXp} XP</span>
                             {contract.locked && <span className="moria-chip rounded-lg px-2 py-1 text-rose-200">🔒 Lv {contract.levelRequired}</span>}
@@ -130,7 +132,7 @@ export default function AdventureBoard({ state, connected, onStart, onAbandon, o
                   );
                 })}
               </div>
-              {state.board.length === 0 && <div className="rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-sm text-slate-400">No Hunt Board contracts are available in this region yet.</div>}
+              {state.board.length === 0 && <div className="rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-sm text-slate-400">{tr('No Hunt Board contracts are available in this region yet.')}</div>}
             </>
           )}
         </div>

@@ -1,0 +1,72 @@
+name: Mor'ia 9.36A Grand Eldoria
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-36a-grand-eldoria.py'
+      - 'tools/fix-moria-9-36a-legacy-capital-tests.py'
+      - '.github/workflows/moria-9-36a-grand-eldoria.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.36A Grand Eldoria
+        run: |
+          python tools/upgrade-moria-9-36a-grand-eldoria.py
+          python tools/fix-moria-9-36a-legacy-capital-tests.py
+      - name: Verify Grand Eldoria authoritative contract
+        run: |
+          grep -q "GRAND_ELDORIA_VERSION = 1" server/engine/GrandEldoria.mjs
+          grep -q "width:160, height:160" server/engine/GrandEldoria.mjs
+          grep -q "settlementClass:'capital'" server/engine/GrandEldoria.mjs
+          grep -q "Fortaleza Pináculo Solar" server/engine/GrandEldoria.mjs
+          grep -q "Grande Mercado de Eldoria" server/engine/GrandEldoria.mjs
+          grep -q "Grande Arena" server/engine/GrandEldoria.mjs
+          grep -q "migrateGrandCapitalV1" server/engine/ContentDB.mjs
+          grep -q "migrateGrandEldoriaData" server/engine/ContentDB.mjs
+          grep -q "capitalUrbanTile" server/engine/World.mjs
+          grep -q "capitalUrbanTile" src/game/maps.ts
+          grep -q "legacy regions stay 80x80" server/test/grand-capital-foundation-9-35.test.mjs
+          grep -q "const frostPortal = WORLD.getMap('eldoria').portals.find" server/test/hardening.test.mjs
+          grep -q "destination.tiles\[portal.targetSpawn.y\]\[portal.targetSpawn.x\].walkable" server/test/hardening.test.mjs
+          grep -q "Grand Eldoria" docs/MORIA_9_36_GRAND_ELDORIA.md
+          test -s server/test/grand-eldoria-9-36.test.mjs
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate focused Grand Eldoria server contract
+        run: |
+          npm ci --prefix server
+          node --test server/test/grand-eldoria-9-36.test.mjs
+      - name: Validate complete server suite
+        run: |
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated Mor'ia 9.36A pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/engine/GrandEldoria.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs src/game/maps.ts server/test/grand-eldoria-9-36.test.mjs server/test/grand-capital-foundation-9-35.test.mjs server/test/hardening.test.mjs docs/MORIA_9_36_GRAND_ELDORIA.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.36a): build authoritative Grand Eldoria'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Player, Item } from '../game/types';
 import { RARITY_COLORS } from '../game/equipment';
 import { T as Tooltip, ItemTooltip } from './Tooltip';
+import { t as tr } from '../i18n';
 
 interface Props {
   player: Player;
@@ -37,7 +38,7 @@ export default function Depot({ player, inventory, setInventory, onClose }: Prop
     const qty = isStack ? item.quantity : 1;
     const existing = isStack ? depot.find((i) => i.name === item.name) : undefined;
     if (!existing && depot.length >= DEPOT_SLOTS) {
-      setNotice(`Depot is full (${DEPOT_SLOTS}/${DEPOT_SLOTS}). Withdraw something first.`);
+      setNotice(`${tr('Depot is full')} (${DEPOT_SLOTS}/${DEPOT_SLOTS}). ${tr('Withdraw something first.')}`);
       return;
     }
     const newDepot = existing
@@ -72,12 +73,12 @@ export default function Depot({ player, inventory, setInventory, onClose }: Prop
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-black tracking-widest text-transparent bg-clip-text"
               style={{ backgroundImage: 'linear-gradient(180deg, #f4e04d 0%, #8b6914 100%)' }}>
-            🗄 DEPOT CHEST
+            🗄 {tr('DEPOT CHEST')}
           </h2>
-          <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-2xl">✕</button>
+          <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-2xl" aria-label={tr('Close depot')}>✕</button>
         </div>
         <div className="text-xs text-amber-200/60 mb-3">
-          Safe storage for your items. Items here are <span className="text-green-400">never lost on death</span>. Gold in bank: <span className="text-amber-300 font-bold">{player.bankGold.toLocaleString()} 🪙</span>
+          {tr('Safe storage for your items. Items here are')} <span className="text-green-400">{tr('never lost on death')}</span>. {tr('Gold in bank:')} <span className="text-amber-300 font-bold">{player.bankGold.toLocaleString('pt-BR')} 🪙</span>
         </div>
 
         {notice && <div className="mb-3 rounded-lg border border-rose-400/30 bg-rose-950/35 px-3 py-2 text-xs text-rose-200">⚠ {notice}</div>}
@@ -85,7 +86,7 @@ export default function Depot({ player, inventory, setInventory, onClose }: Prop
           {/* Depot side */}
           <div className="flex flex-col">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-xs text-amber-300 tracking-widest font-bold">🗄 DEPOT ({depot.length}/{DEPOT_SLOTS})</div>
+              <div className="text-xs text-amber-300 tracking-widest font-bold">🗄 {tr('DEPOT')} ({depot.length}/{DEPOT_SLOTS})</div>
             </div>
             <div className="moria-scrollbar grid grid-cols-5 gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-2 sm:grid-cols-6" style={{ maxHeight: '50vh' }}>
               {depot.map((item) => (
@@ -107,13 +108,13 @@ export default function Depot({ player, inventory, setInventory, onClose }: Prop
                 <div key={`de_${i}`} className="aspect-square rounded border border-amber-900/20 bg-black/30" />
               ))}
             </div>
-            <div className="text-[10px] text-amber-200/40 mt-1 text-center">Click an item to withdraw →</div>
+            <div className="text-[10px] text-amber-200/40 mt-1 text-center">{tr('Click an item to withdraw →')}</div>
           </div>
 
           {/* Inventory side */}
           <div className="flex flex-col">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-xs text-amber-300 tracking-widest font-bold">🎒 BACKPACK ({inventory.length})</div>
+              <div className="text-xs text-amber-300 tracking-widest font-bold">🎒 {tr('BACKPACK')} ({inventory.length})</div>
             </div>
             <div className="moria-scrollbar grid grid-cols-5 gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-2 sm:grid-cols-6" style={{ maxHeight: '50vh' }}>
               {inventory.map((item) => (
@@ -132,7 +133,7 @@ export default function Depot({ player, inventory, setInventory, onClose }: Prop
                 </Tooltip>
               ))}
             </div>
-            <div className="text-[10px] text-amber-200/40 mt-1 text-center">← Click an item to deposit</div>
+            <div className="text-[10px] text-amber-200/40 mt-1 text-center">{tr('← Click an item to deposit')}</div>
           </div>
         </div>
       </div>

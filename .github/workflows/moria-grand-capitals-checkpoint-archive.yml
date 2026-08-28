@@ -1,0 +1,219 @@
+name: Mor'ia Grand Capitals Checkpoint Archive
+
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - '.github/workflows/moria-grand-capitals-checkpoint-archive.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+
+      - name: Archive final approved capital visual proofs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/screenshots /tmp/moria-capitals
+
+          download_artifact() {
+            local name="$1"
+            local out="$2"
+            local json id
+            echo "Resolving artifact: $name"
+            json="$(curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${name}&per_page=100")"
+            id="$(printf '%s' "$json" | jq -r '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | last | .id // empty')"
+            if [ -z "$id" ]; then
+              echo "Artifact not found or expired: $name" >&2
+              return 1
+            fi
+            rm -rf "$out" "${out}.zip"
+            mkdir -p "$out"
+            curl -fsSL -L \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" \
+              -o "${out}.zip"
+            unzip -q "${out}.zip" -d "$out"
+            echo "Archived artifact $name ($id)"
+          }
+
+          copy_proof() {
+            local root="$1" src="$2" dst="$3"
+            local file
+            file="$(find "$root" -type f -name "$src" -print -quit)"
+            if [ -z "$file" ]; then
+              echo "Missing proof $src in $root" >&2
+              find "$root" -maxdepth 3 -type f -print >&2 || true
+              exit 1
+            fi
+            cp "$file" "docs/screenshots/$dst"
+          }
+
+          download_artifact moria-9.36d-screenshots /tmp/moria-capitals/eldoria
+          copy_proof /tmp/moria-capitals/eldoria eldoria-minimap.png moria-9-36-eldoria-minimap.png
+          copy_proof /tmp/moria-capitals/eldoria eldoria-city-designer.png moria-9-36-eldoria-city-designer.png
+          copy_proof /tmp/moria-capitals/eldoria eldoria-panorama.png moria-9-36-eldoria-panorama.png
+
+          download_artifact moria-9.37b-screenshots /tmp/moria-capitals/sunreach
+          copy_proof /tmp/moria-capitals/sunreach sunreach-minimap.png moria-9-37-sunreach-minimap.png
+          copy_proof /tmp/moria-capitals/sunreach sunreach-city-designer.png moria-9-37-sunreach-city-designer.png
+          copy_proof /tmp/moria-capitals/sunreach sunreach-panorama.png moria-9-37-sunreach-panorama.png
+
+          download_artifact moria-9.38b-screenshots /tmp/moria-capitals/ironwood
+          copy_proof /tmp/moria-capitals/ironwood ironwood-minimap.png moria-9-38-ironwood-minimap.png
+          copy_proof /tmp/moria-capitals/ironwood ironwood-city-designer.png moria-9-38-ironwood-city-designer.png
+          copy_proof /tmp/moria-capitals/ironwood ironwood-panorama.png moria-9-38-ironwood-panorama.png
+
+          download_artifact moria-9.39b-screenshots /tmp/moria-capitals/frostpeak
+          copy_proof /tmp/moria-capitals/frostpeak frostpeak-minimap.png moria-9-39-frostpeak-minimap.png
+          copy_proof /tmp/moria-capitals/frostpeak frostpeak-city-designer.png moria-9-39-frostpeak-city-designer.png
+          copy_proof /tmp/moria-capitals/frostpeak frostpeak-panorama.png moria-9-39-frostpeak-panorama.png
+
+          if ! download_artifact moria-9.40b1-screenshots /tmp/moria-capitals/shadowfen; then
+            download_artifact moria-9.40b-screenshots /tmp/moria-capitals/shadowfen
+          fi
+          copy_proof /tmp/moria-capitals/shadowfen shadowfen-minimap.png moria-9-40-shadowfen-minimap.png
+          copy_proof /tmp/moria-capitals/shadowfen shadowfen-city-designer.png moria-9-40-shadowfen-city-designer.png
+          copy_proof /tmp/moria-capitals/shadowfen shadowfen-panorama.png moria-9-40-shadowfen-panorama.png
+
+          download_artifact moria-9.41b-screenshots /tmp/moria-capitals/emberhold
+          copy_proof /tmp/moria-capitals/emberhold emberhold-minimap.png moria-9-41-emberhold-minimap.png
+          copy_proof /tmp/moria-capitals/emberhold emberhold-city-designer.png moria-9-41-emberhold-city-designer.png
+          copy_proof /tmp/moria-capitals/emberhold emberhold-panorama.png moria-9-41-emberhold-panorama.png
+
+          download_artifact moria-9.42b-screenshots /tmp/moria-capitals/crystal
+          copy_proof /tmp/moria-capitals/crystal crystal-deep-minimap.png moria-9-42-crystal-deep-minimap.png
+          copy_proof /tmp/moria-capitals/crystal crystal-deep-city-designer.png moria-9-42-crystal-deep-city-designer.png
+          copy_proof /tmp/moria-capitals/crystal crystal-deep-panorama.png moria-9-42-crystal-deep-panorama.png
+
+          download_artifact moria-9.43b-screenshots /tmp/moria-capitals/stormwatch
+          copy_proof /tmp/moria-capitals/stormwatch stormwatch-minimap.png moria-9-43-stormwatch-minimap.png
+          copy_proof /tmp/moria-capitals/stormwatch stormwatch-city-designer.png moria-9-43-stormwatch-city-designer.png
+          copy_proof /tmp/moria-capitals/stormwatch stormwatch-panorama.png moria-9-43-stormwatch-panorama.png
+
+          count="$(find docs/screenshots -maxdepth 1 -type f -name 'moria-9-*-*.png' | grep -E 'moria-9-(36|37|38|39|40|41|42|43)-' | wc -l | tr -d ' ')"
+          test "$count" -eq 24
+          for file in docs/screenshots/moria-9-{36,37,38,39,40,41,42,43}-*.png; do
+            test -s "$file"
+            file "$file" | grep -q 'PNG image data'
+          done
+
+          cat > docs/MORIA_9_35_9_43_GRAND_CAPITALS_CHECKPOINT.md <<'EOF'
+          # Mor'ia 9.35–9.43 — Grand Capitals Checkpoint
+
+          **Status:** 8 de 10 capitais gigantes concluídas, validadas e aprovadas visualmente.
+
+          Este checkpoint consolida a fundação de mapas de capital 160×160 e as oito primeiras capitais autoritativas. Cada capital usa uma topologia própria, migração `exact-default-only`/admin-safe, conteúdo autoritativo de servidor e prova visual capturada com o renderer de produção.
+
+          ## Gate de qualidade aplicado
+
+          1. implementação e migração autoritativa;
+          2. documentação da versão;
+          3. auditorias de segurança e PT-BR;
+          4. typecheck e build do cliente;
+          5. testes focados e suíte completa do servidor;
+          6. sincronização com servidor autoritativo em Visual QA;
+          7. captura Playwright de minimapa, City Designer e panorâmica;
+          8. inspeção humana das três provas antes da aprovação.
+
+          ## Capitais aprovadas
+
+          | Versão | Capital | Plano urbano autoritativo | Estado |
+          |---|---|---|---|
+          | 9.36 | Eldoria | `royal-grid` | Aprovada |
+          | 9.37 | Sunreach Coast | `harbor-crescent` | Aprovada |
+          | 9.38 | Ironwood | `forest-rings` | Aprovada |
+          | 9.39 | Frostpeak | `terraced-bastion` | Aprovada |
+          | 9.40 | Shadowfen | `marsh-wards` | Aprovada |
+          | 9.41 | Emberhold | `caldera-radials` | Aprovada |
+          | 9.42 | Crystal Deep | `geode-chambers` | Aprovada |
+          | 9.43 | Stormwatch Isle | `tempest-archipelago` | Aprovada |
+
+          ## Provas visuais versionadas
+
+          ### 9.36 — Eldoria
+          - [Minimapa](screenshots/moria-9-36-eldoria-minimap.png)
+          - [City Designer](screenshots/moria-9-36-eldoria-city-designer.png)
+          - [Panorâmica](screenshots/moria-9-36-eldoria-panorama.png)
+
+          ### 9.37 — Sunreach Coast
+          - [Minimapa](screenshots/moria-9-37-sunreach-minimap.png)
+          - [City Designer](screenshots/moria-9-37-sunreach-city-designer.png)
+          - [Panorâmica](screenshots/moria-9-37-sunreach-panorama.png)
+
+          ### 9.38 — Ironwood
+          - [Minimapa](screenshots/moria-9-38-ironwood-minimap.png)
+          - [City Designer](screenshots/moria-9-38-ironwood-city-designer.png)
+          - [Panorâmica](screenshots/moria-9-38-ironwood-panorama.png)
+
+          ### 9.39 — Frostpeak
+          - [Minimapa](screenshots/moria-9-39-frostpeak-minimap.png)
+          - [City Designer](screenshots/moria-9-39-frostpeak-city-designer.png)
+          - [Panorâmica](screenshots/moria-9-39-frostpeak-panorama.png)
+
+          ### 9.40 — Shadowfen
+          - [Minimapa](screenshots/moria-9-40-shadowfen-minimap.png)
+          - [City Designer](screenshots/moria-9-40-shadowfen-city-designer.png)
+          - [Panorâmica](screenshots/moria-9-40-shadowfen-panorama.png)
+
+          ### 9.41 — Emberhold
+          - [Minimapa](screenshots/moria-9-41-emberhold-minimap.png)
+          - [City Designer](screenshots/moria-9-41-emberhold-city-designer.png)
+          - [Panorâmica](screenshots/moria-9-41-emberhold-panorama.png)
+
+          ### 9.42 — Crystal Deep
+          - [Minimapa](screenshots/moria-9-42-crystal-deep-minimap.png)
+          - [City Designer](screenshots/moria-9-42-crystal-deep-city-designer.png)
+          - [Panorâmica](screenshots/moria-9-42-crystal-deep-panorama.png)
+
+          ### 9.43 — Stormwatch Isle
+          - [Minimapa](screenshots/moria-9-43-stormwatch-minimap.png)
+          - [City Designer](screenshots/moria-9-43-stormwatch-city-designer.png)
+          - [Panorâmica](screenshots/moria-9-43-stormwatch-panorama.png)
+
+          ## Próximo ciclo
+
+          Permanecem duas capitais no roadmap de dez cidades gigantes:
+
+          - **9.44 — Grand Voidlands**;
+          - **9.45 — Grand Nightfall Citadel**.
+
+          O `GM Sanctum` continua uma área administrativa especial e não entra na contagem das dez capitais públicas.
+          EOF
+
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/MORIA_9_43_GRAND_STORMWATCH_ISLE.md')
+          text=p.read_text(encoding='utf-8')
+          marker='## Provas versionadas no checkpoint'
+          if marker not in text:
+              text += '''\n\n## Provas versionadas no checkpoint\n\n- [Minimapa](screenshots/moria-9-43-stormwatch-minimap.png)\n- [City Designer](screenshots/moria-9-43-stormwatch-city-designer.png)\n- [Panorâmica](screenshots/moria-9-43-stormwatch-panorama.png)\n'''
+              p.write_text(text,encoding='utf-8')
+          PY
+
+      - name: Commit checkpoint archive
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/screenshots docs/MORIA_9_35_9_43_GRAND_CAPITALS_CHECKPOINT.md docs/MORIA_9_43_GRAND_STORMWATCH_ISLE.md
+          test "$(git diff --cached --name-only | grep -c '^docs/screenshots/moria-9-' || true)" -eq 24
+          git commit -m 'docs(9.35-9.43): archive approved grand capital visual proofs'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

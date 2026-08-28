@@ -1,0 +1,105 @@
+name: Mor'ia 9.41B Grand Emberhold Visual Proof
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-41b-emberhold-visual-proof.py'
+      - '.github/workflows/moria-9-41b-emberhold-visual-proof.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate and apply Mor'ia 9.41B visual proof
+        run: |
+          python -m py_compile tools/upgrade-moria-9-41b-emberhold-visual-proof.py
+          python tools/upgrade-moria-9-41b-emberhold-visual-proof.py
+      - name: Verify visual proof source contract
+        run: |
+          set -euxo pipefail
+          test -s src/components/GrandEmberholdPanorama.tsx
+          test -s tools/capture-moria-9-41b.mjs
+          grep -q 'data-grand-emberhold-panorama' src/components/GrandEmberholdPanorama.tsx
+          grep -q 'data-lava-count' src/components/GrandEmberholdPanorama.tsx
+          grep -q 'data-bridge-count' src/components/GrandEmberholdPanorama.tsx
+          grep -q 'data-path-count' src/components/GrandEmberholdPanorama.tsx
+          grep -q "panel === 'emberhold-minimap'" src/visualQa.tsx
+          grep -q "panel === 'emberhold-city-designer'" src/visualQa.tsx
+          grep -q "panel === 'emberhold-panorama'" src/visualQa.tsx
+          grep -q 'lava<600' tools/capture-moria-9-41b.mjs
+          grep -q 'bridges<350' tools/capture-moria-9-41b.mjs
+          grep -q 'paths<2500' tools/capture-moria-9-41b.mjs
+          grep -q '9.41B — Prova visual autoritativa' docs/MORIA_9_41_GRAND_EMBERHOLD.md
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Install stable visual QA browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npm audit --audit-level=high
+          npx playwright install --with-deps chromium
+      - name: Start authoritative QA server and client
+        run: |
+          rm -f /tmp/moria-941b-content.json /tmp/moria-941b-content.json.tmp
+          ADMIN_TOKEN=moria-visual-qa MORIA_CONTENT_DB=/tmp/moria-941b-content.json PORT=3000 npm start --prefix server > /tmp/moria-941b-server.log 2>&1 &
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-941b-vite.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null && curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/health >/dev/null
+          maps=$(curl -fsS 'http://127.0.0.1:3000/admin/api/maps?token=moria-visual-qa')
+          echo "$maps" | grep -q 'emberhold'
+          echo "$maps" | grep -q 'caldera-radials'
+          echo "$maps" | grep -q '"width":160'
+          echo "$maps" | grep -q '"height":160'
+          curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null
+      - name: Capture and assert Grand Emberhold visuals
+        run: |
+          rm -rf artifacts/moria-9.41b-screenshots
+          node tools/capture-moria-9-41b.mjs
+          test -s artifacts/moria-9.41b-screenshots/emberhold-minimap.png
+          test -s artifacts/moria-9.41b-screenshots/emberhold-city-designer.png
+          test -s artifacts/moria-9.41b-screenshots/emberhold-panorama.png
+          test $(stat -c%s artifacts/moria-9.41b-screenshots/emberhold-minimap.png) -gt 25000
+          test $(stat -c%s artifacts/moria-9.41b-screenshots/emberhold-city-designer.png) -gt 120000
+          test $(stat -c%s artifacts/moria-9.41b-screenshots/emberhold-panorama.png) -gt 140000
+      - name: Upload Mor'ia 9.41B screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9.41b-screenshots
+          path: artifacts/moria-9.41b-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit validated Mor'ia 9.41B pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/GrandEmberholdPanorama.tsx src/visualQa.tsx tools/capture-moria-9-41b.mjs docs/MORIA_9_41_GRAND_EMBERHOLD.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.41b): add authoritative Grand Emberhold visual proof'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

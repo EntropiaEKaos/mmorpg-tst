@@ -6,6 +6,7 @@ import { RECIPES, canCraft } from '../game/crafting';
 import { GEMS } from '../game/itemSets';
 import { getItemMastery } from '../game/economy';
 import { Draggable, DropZone } from './DragDrop';
+import { t as tr } from '../i18n';
 
 interface Props {
   items: Item[];
@@ -41,7 +42,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                 tab === 'items' ? 'bg-gradient-to-b from-amber-500 to-amber-700 text-black' : 'text-amber-200/60 hover:text-amber-200'
               }`}
             >
-              📦 ITEMS
+              📦 {tr('ITEMS')}
             </button>
             <button
               onClick={() => setTab('craft')}
@@ -49,7 +50,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                 tab === 'craft' ? 'bg-gradient-to-b from-amber-500 to-amber-700 text-black' : 'text-amber-200/60 hover:text-amber-200'
               }`}
             >
-              ⚒ CRAFTING
+              ⚒ {tr('CRAFTING')}
             </button>
             <button
               onClick={() => setTab('socket')}
@@ -57,22 +58,22 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                 tab === 'socket' ? 'bg-gradient-to-b from-purple-500 to-purple-700 text-white' : 'text-purple-200/60 hover:text-purple-200'
               }`}
             >
-              💎 SOCKET
+              💎 {tr('SOCKET')}
             </button>
           </div>
-          <button onClick={onClose} className="moria-button flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm text-slate-400" aria-label="Close inventory">✕</button>
+          <button onClick={onClose} className="moria-button flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm text-slate-400" aria-label={tr('Close inventory')}>✕</button>
         </div>
 
         {tab === 'socket' && onSocketGem && (
           <div className="mb-3 p-3 rounded border border-purple-700/50 bg-black/40">
-            <div className="text-xs text-purple-300 tracking-widest mb-2">💎 GEM SOCKETING</div>
+            <div className="text-xs text-purple-300 tracking-widest mb-2">💎 {tr('GEM SOCKETING')}</div>
             {gemsInInventory.length === 0 ? (
               <div className="text-purple-200/40 text-xs italic text-center py-4">
-                No gems found! Defeat elite/boss monsters to obtain gems.
+                {tr('No gems found! Defeat elite/boss monsters to obtain gems.')}
               </div>
             ) : !selectedSocketItem ? (
               <div>
-                <div className="text-[10px] text-purple-200/60 mb-1.5">Select an item to socket:</div>
+                <div className="text-[10px] text-purple-200/60 mb-1.5">{tr('Select an item to socket:')}</div>
                 <div className="grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
                   {socketableItems.map((item) => {
                     const eq = item.equipment!;
@@ -84,7 +85,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                               disabled={available <= 0}
                               className={`p-2 rounded border text-center transition-all ${available > 0 ? 'border-purple-600/60 bg-purple-900/20 hover:bg-purple-900/40 cursor-pointer' : 'border-gray-700/40 bg-black/40 opacity-40 cursor-not-allowed'}`}>
                         <div className="text-2xl">{item.icon}</div>
-                        <div className="text-[9px] text-purple-200 truncate">{item.name}</div>
+                        <div className="text-[9px] text-purple-200 truncate">{tr(item.name)}</div>
                         <div className="text-[9px] mt-0.5">{filled}/{sockets} 💎</div>
                       </button>
                     );
@@ -96,12 +97,12 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                 <div className="flex items-center gap-2 mb-2 p-2 rounded bg-purple-900/20 border border-purple-600/40">
                   <span className="text-2xl">{selectedSocketItem.icon}</span>
                   <div className="flex-1">
-                    <div className="text-purple-200 font-bold text-xs">{selectedSocketItem.name}</div>
-                    <div className="text-[9px] text-purple-200/60">{selectedSocketItem.equipment!.socketedGems?.length ?? 0}/{selectedSocketItem.equipment!.sockets ?? 0} sockets filled</div>
+                    <div className="text-purple-200 font-bold text-xs">{tr(selectedSocketItem.name)}</div>
+                    <div className="text-[9px] text-purple-200/60">{selectedSocketItem.equipment!.socketedGems?.length ?? 0}/{selectedSocketItem.equipment!.sockets ?? 0} {tr('sockets filled')}</div>
                   </div>
                   <button onClick={() => setSelectedSocketItem(null)} className="text-purple-200/60 text-xs">✕</button>
                 </div>
-                <div className="text-[10px] text-purple-200/60 mb-1.5">Choose a gem to socket:</div>
+                <div className="text-[10px] text-purple-200/60 mb-1.5">{tr('Choose a gem to socket:')}</div>
                 <div className="grid grid-cols-3 gap-1.5">
                   {gemsInInventory.map((gem) => {
                     const gemData = GEMS.find((g) => g.name === gem.name);
@@ -110,8 +111,8 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                       <button key={gem.id} onClick={() => { onSocketGem(selectedSocketItem.id, gemData.id); setSelectedSocketItem(null); }}
                               className="p-2 rounded border border-purple-600/60 bg-purple-900/20 hover:bg-purple-900/40 text-center transition-all">
                         <div className="text-xl">{gem.icon}</div>
-                        <div className="text-[9px] text-purple-200 truncate">{gem.name}</div>
-                        <div className="text-[9px]" style={{ color: gemData.color }}>{gemData.description}</div>
+                        <div className="text-[9px] text-purple-200 truncate">{tr(gem.name)}</div>
+                        <div className="text-[9px]" style={{ color: gemData.color }}>{tr(gemData.description)}</div>
                         <div className="text-[8px] text-amber-300">×{gem.quantity}</div>
                       </button>
                     );
@@ -124,7 +125,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
 
         {tab === 'craft' && onCraft && (
           <div className="mb-3 p-3 rounded border border-amber-700/50 bg-black/40">
-            <div className="text-xs text-amber-300 tracking-widest mb-2">⚒ CRAFTING RECIPES</div>
+            <div className="text-xs text-amber-300 tracking-widest mb-2">⚒ {tr('CRAFTING RECIPES')}</div>
             <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto">
               {RECIPES.map((recipe) => {
                 const available = canCraft(recipe, items, playerLevel);
@@ -145,8 +146,8 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">{recipe.icon}</span>
                       <div className="flex-1 min-w-0">
-                        <div className="text-amber-100 font-bold text-xs truncate">{recipe.name}</div>
-                        {!levelOk && <div className="text-red-400 text-[9px]">Lv {recipe.levelRequired}+</div>}
+                        <div className="text-amber-100 font-bold text-xs truncate">{tr(recipe.name)}</div>
+                        {!levelOk && <div className="text-red-400 text-[9px]">{tr('Lv')} {recipe.levelRequired}+</div>}
                       </div>
                     </div>
                     <div className="mt-1 text-[9px] space-y-0.5">
@@ -155,7 +156,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                         const enough = have >= ing.quantity;
                         return (
                           <div key={i} className={enough ? 'text-green-300' : 'text-red-300'}>
-                            {enough ? '✓' : '✗'} {ing.name} ×{ing.quantity} (have {have})
+                            {enough ? '✓' : '✗'} {tr(ing.name)} ×{ing.quantity} ({tr('have')} {have})
                           </div>
                         );
                       })}
@@ -170,7 +171,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
         {tab === 'items' && showShop && shopItems && onBuy && (
           <div className="mb-4 p-3 rounded border-2"
                style={{ borderColor: '#f4e04d', background: 'rgba(244,224,77,0.05)' }}>
-            <div className="moria-eyebrow mb-2">🛒 {shopName || 'MERCHANT'} · SHOP</div>
+            <div className="moria-eyebrow mb-2">🛒 {tr(shopName || 'MERCHANT')} · {tr('SHOP')}</div>
             <div className="grid grid-cols-2 gap-1.5">
               {shopItems.map((item, i) => (
                 <button
@@ -181,8 +182,8 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">{item.icon}</span>
                     <div className="flex-1">
-                      <div className="text-amber-100 font-bold">{item.name}</div>
-                      {item.description && <div className="text-amber-200/60 text-[10px]">{item.description}</div>}
+                      <div className="text-amber-100 font-bold">{tr(item.name)}</div>
+                      {item.description && <div className="text-amber-200/60 text-[10px]">{tr(item.description)}</div>}
                       <div className="text-amber-400 font-bold">{item.price} 🪙</div>
                     </div>
                   </div>
@@ -235,7 +236,7 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
                     const mPct = Math.max(0, Math.min(100, (mastery.progress / Math.max(1, mastery.level * 10)) * 100));
                     return mastery.level > 1 ? (
                       <div className="absolute bottom-0 left-0 right-0 px-0.5 pb-0.5 pointer-events-none">
-                        <div className="text-[7px] text-amber-300 text-center font-bold leading-tight" style={{ textShadow: '0 0 2px #000' }}>Lv{mastery.level}</div>
+                        <div className="text-[7px] text-amber-300 text-center font-bold leading-tight" style={{ textShadow: '0 0 2px #000' }}>{tr('Lv')}{mastery.level}</div>
                         <div className="h-0.5 bg-black/70 rounded overflow-hidden">
                           <div className="h-full" style={{ width: `${mPct}%`, background: 'linear-gradient(90deg,#f4e04d,#ff8c00)' }} />
                         </div>
@@ -264,18 +265,18 @@ export default function Inventory({ items, onClose, onUse, onEquip, shopItems, o
           <DropZone onDrop={(p) => { if (p.type === 'item' && p.source === 'inventory') onDropItem(p.data); }}
                     className="mt-3 mx-auto w-1/2 border-2 border-dashed border-red-700/50 rounded-lg p-2 text-center hover:bg-red-900/20 transition-all"
                     activeClassName="border-red-500 bg-red-900/30">
-            <div className="text-[10px] text-red-300/70">🗑 Drop here to throw on ground<br/><span className="text-[9px] text-red-300/40">(drag an item here)</span></div>
+            <div className="text-[10px] text-red-300/70">🗑 {tr('Drop here to throw on ground')}<br/><span className="text-[9px] text-red-300/40">{tr('(drag an item here)')}</span></div>
           </DropZone>
         )}
 
         <div className="mt-3 text-[10px] text-amber-200/60 text-center space-y-0.5">
-          <div>Click potions to use · Click equipment to equip · Drag to move/drop</div>
+          <div>{tr('Click potions to use · Click equipment to equip · Drag to move/drop')}</div>
           <div className="text-amber-300">
-            Rarity: <span style={{ color: RARITY_COLORS.common }}>Common</span> ·
-            <span style={{ color: RARITY_COLORS.uncommon }}> Uncommon</span> ·
-            <span style={{ color: RARITY_COLORS.rare }}> Rare</span> ·
-            <span style={{ color: RARITY_COLORS.epic }}> Epic</span> ·
-            <span style={{ color: RARITY_COLORS.legendary }}> Legendary</span>
+            {tr('Rarity:')} <span style={{ color: RARITY_COLORS.common }}>{tr('Common')}</span> ·
+            <span style={{ color: RARITY_COLORS.uncommon }}> {tr('Uncommon')}</span> ·
+            <span style={{ color: RARITY_COLORS.rare }}> {tr('Rare')}</span> ·
+            <span style={{ color: RARITY_COLORS.epic }}> {tr('Epic')}</span> ·
+            <span style={{ color: RARITY_COLORS.legendary }}> {tr('Legendary')}</span>
           </div>
         </div>
       </div>

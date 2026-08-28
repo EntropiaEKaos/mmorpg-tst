@@ -1,0 +1,83 @@
+name: Mor'ia 9.28 Character & PT-BR
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/moria-9-28.trigger'
+      - '.github/workflows/run-moria-9-28.yml'
+permissions:
+  contents: write
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - name: Apply base 9.28 migration only when absent
+        run: |
+          if [ ! -f src/i18n/index.ts ]; then
+            python tools/apply-moria-9-28-character-i18n.py
+            python tools/fix-moria-9-28-typecheck.py
+          else
+            echo 'Base 9.28 product already committed'
+          fi
+      - name: Apply character preview and PT-BR polish
+        run: python tools/polish-moria-9-28-character-i18n.py
+      - name: Install client
+        run: npm ci
+      - name: Audit client
+        run: npm audit
+      - name: Typecheck client
+        run: npm run typecheck
+      - name: Build client
+        run: npm run build
+      - name: Architecture budget
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/components/GameScreen.tsx')
+          print(f'GameScreen bytes={p.stat().st_size}')
+          assert p.stat().st_size <= 158500
+          PY
+      - name: Install server
+        run: npm ci --prefix server --no-fund
+      - name: Audit server
+        run: npm audit --prefix server
+      - name: Check server
+        run: npm run check --prefix server
+      - name: Test server
+        run: npm test --prefix server
+      - name: PT-BR and character presentation audit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          i=Path('src/i18n/index.ts').read_text()
+          bridge=Path('src/components/LocaleBridge.tsx').read_text()
+          avatar=Path('src/game/playerAvatar.ts').read_text()
+          preview=Path('src/components/VocationPortrait.tsx').read_text()
+          assert "'pt-BR' | 'en-US'" in i
+          assert 'MutationObserver' in bridge
+          assert 'Cavaleiro da Morte' in i and 'Casa de Leilões' in i
+          assert 'PT_BR_FRAGMENTS' in i
+          assert 'vocationId);' in avatar
+          assert 'data-vocation-preview' in preview
+          print('PT-BR catalog, bridge and real vocation previews present')
+          PY
+      - name: Commit validated 9.28 polish
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/i18n src/components/LocaleBridge.tsx src/components/VocationPortrait.tsx src/App.tsx src/components/LoginScreen.tsx src/game/playerAvatar.ts src/game/render.ts src/components/GameScreen.tsx package.json package-lock.json server/package.json server/package-lock.json server/test/i18n-character-9-28.test.mjs
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.28): deepen class previews and PT-BR coverage'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

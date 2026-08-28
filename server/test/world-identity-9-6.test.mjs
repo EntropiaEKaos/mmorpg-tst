@@ -71,7 +71,7 @@ test('9.6 client city designer is live and minimap consumes real maps', () => {
   assert.match(editor, /City Designer · Live/);
   assert.match(editor, /<CityDesigner onApplied=/);
   assert.doesNotMatch(editor, /Maps · Preview/);
-  assert.match(designer, /APPLY TO WORLD/);
+  assert.match(designer, /APLICAR AO MUNDO/);
   assert.match(designer, /moria_city_designer_maps/);
   assert.match(designer, /syncServerMaps\(records\)/);
   assert.match(minimap, /generateMap\(map\.id\)/);

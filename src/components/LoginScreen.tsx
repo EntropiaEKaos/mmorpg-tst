@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Account } from '../game/types';
 import { VOCATIONS } from '../game/classes';
 import { audio } from '../game/audio';
+import VocationPortrait from './VocationPortrait';
+import { translateGameText as tr } from '../i18n';
 import {
   createCharacter,
   loginAccount,
@@ -166,18 +168,18 @@ export default function LoginScreen({ onLogin }: Props) {
           <div className="mb-6 flex items-start gap-4">
             <div className="moria-chip flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl">🔐</div>
             <div>
-              <div className="moria-eyebrow mb-1">Account recovery</div>
-              <h2 className="moria-title text-2xl font-bold">Save your recovery code</h2>
+              <div className="moria-eyebrow mb-1">{tr('Account recovery')}</div>
+              <h2 className="moria-title text-2xl font-bold">{tr('Save your recovery code')}</h2>
             </div>
           </div>
           <p className="mb-5 text-sm leading-6 text-slate-300/75">
-            This code is shown once. Store it somewhere private: anyone holding it can recover the account.
+            {tr('This code is shown once. Store it somewhere private: anyone holding it can recover the account.')}
           </p>
           <div className="select-all break-all rounded-2xl border border-amber-300/25 bg-black/45 p-5 font-mono text-sm leading-6 text-amber-100 shadow-inner">
             {oneTimeRecoveryCode}
           </div>
           <button onClick={continueAfterRecovery} className="moria-button-primary mt-6 w-full rounded-xl py-3.5 text-sm font-black tracking-[0.16em]">
-            I SAVED IT — CONTINUE
+            {tr('I SAVED IT — CONTINUE')}
           </button>
         </div>
       </Shell>
@@ -188,12 +190,12 @@ export default function LoginScreen({ onLogin }: Props) {
     <Shell>
       <div className="grid w-full max-w-5xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
         <section className="hidden lg:block moria-fade-up">
-          <div className="moria-eyebrow mb-5">Persistent online realm</div>
+          <div className="moria-eyebrow mb-5">{tr('Persistent online realm')}</div>
           <h1 className="moria-title max-w-xl text-5xl font-black leading-[1.02] xl:text-6xl">
-            Enter a world built for <span className="text-amber-200">danger</span>, mastery and legend.
+            {tr('Enter a world built for')} <span className="text-amber-200">{tr('danger')}</span>{tr(', mastery and legend.')}
           </h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-slate-300/70">
-            Mor'ia blends old-school MMO tension with a modern authoritative server, living progression and a world that grows with its players.
+            {tr("Mor'ia blends old-school MMO tension with a modern authoritative server, living progression and a world that grows with its players.")}
           </p>
           <div className="mt-8 grid max-w-lg grid-cols-3 gap-3">
             <Feature icon="⚔" title="Authoritative" subtitle="Server-owned combat" />
@@ -204,12 +206,15 @@ export default function LoginScreen({ onLogin }: Props) {
 
         <section className="moria-panel moria-fade-up w-full rounded-3xl p-5 sm:p-7" style={{ animationDelay: '80ms' }}>
           <div className="mb-6 text-center">
-            <div className="relative mx-auto mb-2 w-full max-w-[260px]">
-              <div className="absolute inset-6 rounded-full bg-amber-200/10 blur-3xl" />
-              <img src="/images/logo.png" alt="Mor'ia" className="relative mx-auto w-full drop-shadow-[0_10px_30px_rgba(0,0,0,0.75)]" />
+            <div className="relative mx-auto mb-4 flex min-h-[150px] w-full max-w-[300px] items-center justify-center overflow-hidden rounded-2xl border border-amber-200/10 bg-[radial-gradient(circle_at_50%_45%,rgba(229,196,119,0.11),transparent_56%)] px-5">
+              <div className="absolute inset-x-8 top-1/2 h-px bg-gradient-to-r from-transparent via-amber-200/25 to-transparent" />
+              <div className="relative text-center drop-shadow-[0_12px_28px_rgba(0,0,0,0.75)]">
+                <div className="moria-title bg-gradient-to-b from-amber-100 via-amber-300 to-amber-700 bg-clip-text text-5xl font-black tracking-[0.08em] text-transparent sm:text-6xl">MOR'IA</div>
+                <div className="mx-auto mt-3 h-px w-32 bg-gradient-to-r from-transparent via-amber-300/60 to-transparent" />
+              </div>
             </div>
-            <p className="moria-eyebrow">Realm of Shadows</p>
-            <p className="mt-2 text-[11px] tracking-[0.16em] text-slate-400">SECURE ACCOUNT · AUTHORITATIVE WORLD</p>
+            <p className="moria-eyebrow">{tr('Realm of Shadows')}</p>
+            <p className="mt-2 text-[11px] tracking-[0.16em] text-slate-400">{tr('SECURE ACCOUNT · AUTHORITATIVE WORLD')}</p>
           </div>
 
           {mode !== 'character' && (
@@ -223,14 +228,14 @@ export default function LoginScreen({ onLogin }: Props) {
           {mode === 'character' ? (
             <>
               <div className="mb-5">
-                <div className="moria-eyebrow">New adventurer</div>
-                <h2 className="moria-title mt-1 text-2xl font-bold">Create your character</h2>
-                <p className="mt-1 text-xs text-slate-400">Signed in as {serverAccount?.username}</p>
+                <div className="moria-eyebrow">{tr('New adventurer')}</div>
+                <h2 className="moria-title mt-1 text-2xl font-bold">{tr('Create your character')}</h2>
+                <p className="mt-1 text-xs text-slate-400">{tr('Signed in as')} {serverAccount?.username}</p>
               </div>
               <Field label="CHARACTER NAME" value={charName} onChange={setCharName} type="text" onEnter={submit} autoComplete="off" />
               <div className="mt-4">
-                <label className="mb-2 block text-[10px] font-bold tracking-[0.18em] text-slate-400">VOCATION</label>
-                <div className="moria-scrollbar grid max-h-56 grid-cols-2 gap-2 overflow-y-auto pr-1">
+                <label className="mb-2 block text-[10px] font-bold tracking-[0.18em] text-slate-400">{tr('VOCATION')}</label>
+                <div className="moria-scrollbar grid max-h-[390px] grid-cols-2 gap-2 overflow-y-auto pr-1">
                   {VOCATION_LIST.map(v => {
                     const active = vocation === v.id;
                     return (
@@ -238,13 +243,13 @@ export default function LoginScreen({ onLogin }: Props) {
                         key={v.id}
                         type="button"
                         onClick={() => setVocation(v.id)}
-                        className={`relative rounded-xl border p-3 text-left transition-all ${active ? 'border-amber-200/55 bg-amber-200/10 shadow-[0_0_22px_rgba(229,196,119,0.08)]' : 'border-slate-500/15 bg-white/[0.025] hover:border-slate-400/30 hover:bg-white/[0.045]'}`}
+                        className={`relative min-h-[104px] rounded-xl border p-2.5 text-left transition-all ${active ? 'border-amber-200/55 bg-amber-200/10 shadow-[0_0_22px_rgba(229,196,119,0.08)]' : 'border-slate-500/15 bg-white/[0.025] hover:border-slate-400/30 hover:bg-white/[0.045]'}`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-black/25 text-2xl" style={{ filter: `drop-shadow(0 0 8px ${v.color})` }}>{v.icon}</span>
+                          <VocationPortrait id={v.id} color={v.color} active={active} />
                           <div className="min-w-0">
-                            <div className={`truncate text-xs font-bold ${active ? 'text-amber-100' : 'text-slate-200'}`}>{v.name}</div>
-                            <div className="mt-1 text-[9px] tracking-wider text-slate-500">{active ? 'SELECTED' : 'CHOOSE'}</div>
+                            <div className={`text-[11px] font-bold leading-tight ${active ? 'text-amber-100' : 'text-slate-200'}`}>{tr(v.name)}</div>
+                            <div className="mt-1 text-[9px] tracking-wider text-slate-500">{active ? tr('SELECTED') : tr('CHOOSE')}</div>
                           </div>
                         </div>
                       </button>
@@ -269,28 +274,28 @@ export default function LoginScreen({ onLogin }: Props) {
 
           {error && (
             <div role="alert" className="mt-4 rounded-xl border border-rose-400/20 bg-rose-500/8 px-3 py-2.5 text-center text-xs text-rose-200">
-              <span className="mr-1.5">⚠</span>{error}
+              <span className="mr-1.5">⚠</span>{tr(error)}
             </div>
           )}
           {status && (
             <div aria-live="polite" className="mt-4 rounded-xl border border-sky-300/15 bg-sky-400/7 px-3 py-2.5 text-center text-xs text-sky-100/80">
-              <span className="mr-1.5 inline-block moria-soft-pulse">✦</span>{status}
+              <span className="mr-1.5 inline-block moria-soft-pulse">✦</span>{tr(status)}
             </div>
           )}
 
           <button onClick={submit} className="moria-button-primary mt-5 w-full rounded-xl py-3.5 text-sm font-black tracking-[0.14em]">
-            {mode === 'login' ? 'ENTER MOR\'IA' : mode === 'create' ? 'CREATE ACCOUNT' : mode === 'recover' ? 'RESET PASSWORD' : 'CREATE HERO'}
+            {tr(mode === 'login' ? "ENTER MOR'IA" : mode === 'create' ? 'CREATE ACCOUNT' : mode === 'recover' ? 'RESET PASSWORD' : 'CREATE HERO')}
           </button>
 
           {mode === 'login' && (
             <button onClick={handleDemoLogin} className="moria-button mt-2.5 w-full rounded-xl py-2.5 text-xs font-semibold tracking-wide text-slate-300">
-              ▶ OFFLINE QUICK PLAY
+              {tr('▶ OFFLINE QUICK PLAY')}
             </button>
           )}
 
           <div className="mt-5 flex items-center justify-center gap-2 text-[10px] text-slate-500">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80 shadow-[0_0_8px_rgba(52,211,153,0.55)]" />
-            Passwords are hashed server-side and never stored in browser account lists.
+            {tr('Passwords are hashed server-side and never stored in browser account lists.')}
           </div>
         </section>
       </div>
@@ -314,8 +319,8 @@ function Feature({ icon, title, subtitle }: { icon: string; title: string; subti
   return (
     <div className="moria-card rounded-2xl p-3.5">
       <div className="text-xl">{icon}</div>
-      <div className="mt-2 text-xs font-bold text-slate-100">{title}</div>
-      <div className="mt-1 text-[10px] leading-4 text-slate-400">{subtitle}</div>
+      <div className="mt-2 text-xs font-bold text-slate-100">{tr(title)}</div>
+      <div className="mt-1 text-[10px] leading-4 text-slate-400">{tr(subtitle)}</div>
     </div>
   );
 }
@@ -327,7 +332,7 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
       onClick={onClick}
       className={`rounded-lg py-2.5 text-[10px] font-black tracking-[0.14em] transition-all ${active ? 'bg-white/[0.08] text-amber-100 shadow-inner' : 'text-slate-500 hover:bg-white/[0.035] hover:text-slate-300'}`}
     >
-      {children}
+      {typeof children === 'string' ? tr(children) : children}
     </button>
   );
 }
@@ -342,7 +347,7 @@ function Field({ label, value, onChange, type, onEnter, autoComplete }: {
 }) {
   return (
     <div className="mt-3.5">
-      <label className="mb-1.5 block text-[10px] font-bold tracking-[0.18em] text-slate-400">{label}</label>
+      <label className="mb-1.5 block text-[10px] font-bold tracking-[0.18em] text-slate-400">{tr(label)}</label>
       <input
         type={type}
         value={value}

@@ -12,6 +12,14 @@ import { ALPHA_CONTENT } from './AlphaContent.mjs';
 import { ALPHA_SYSTEMS_CONTENT } from './AlphaSystemsContent.mjs';
 import { LIVING_REALM_CONTENT } from './LivingRealmContent.mjs';
 import { ROAD_TO_TEN_CONTENT } from './RoadToTenContent.mjs';
+import { migrateGrandEldoriaData } from './GrandEldoria.mjs';
+import { migrateGrandSunreachData } from './GrandSunreach.mjs';
+import { migrateGrandIronwoodData } from './GrandIronwood.mjs';
+import { migrateGrandFrostpeakData } from './GrandFrostpeak.mjs';
+import { migrateGrandShadowfenData } from './GrandShadowfen.mjs';
+import { migrateGrandEmberholdData } from './GrandEmberhold.mjs';
+import { migrateGrandCrystalDeepData } from './GrandCrystalDeep.mjs';
+import { GRAND_CAPITAL_SCHEMA_VERSION, migrateGrandStormwatchData } from './GrandStormwatch.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,7 +29,7 @@ const TYPE_ALIASES = Object.freeze({ events: 'worldEvents' });
 
 function emptyContentData() {
   return {
-    version: 1, livingRealmVersion: 0, roadToTenVersion: 0,
+    version: 1, livingRealmVersion: 0, roadToTenVersion: 0, grandCapitalVersion: 0,
     items: [], monsters: [], npcs: [], quests: [], spells: [], maps: [],
     worldEvents: [], shops: [], lootTables: [], gmRoster: [], taskQuests: [], houses: [], housingDecor: [], outfits: [], mounts: [],
     nodes: [], factions: [], materials: [], craftingRecipes: [], tamingSpecies: [],
@@ -77,6 +85,7 @@ export function normalizeContentData(raw) {
   normalized.version = Number.isInteger(version) && version > 0 ? version : 1;
   normalized.livingRealmVersion = Number.isInteger(Number(raw.livingRealmVersion)) && Number(raw.livingRealmVersion) > 0 ? Number(raw.livingRealmVersion) : 0;
   normalized.roadToTenVersion = Number.isInteger(Number(raw.roadToTenVersion)) && Number(raw.roadToTenVersion) > 0 ? Number(raw.roadToTenVersion) : 0;
+  normalized.grandCapitalVersion = Number.isInteger(Number(raw.grandCapitalVersion)) && Number(raw.grandCapitalVersion) > 0 ? Number(raw.grandCapitalVersion) : 0;
   for (const key of COLLECTION_KEYS) {
     if (key === 'worldEvents') continue;
     normalized[key] = normalizeCollection(raw[key], { requireId: key !== 'shops' && key !== 'lootTables' });
@@ -95,7 +104,7 @@ export class ContentDB {
     // Only seed a brand-new or unrecoverably corrupt database. A valid empty
     // collection is intentional admin state and must stay empty after restart.
     if (!this.load()) this.seedDefaults();
-    else { this.migrateAlphaV2(); this.migrateAlphaV3(); this.migrateLivingRealmV1(); this.migrateRoadToTenV1(); }
+    else { this.migrateAlphaV2(); this.migrateAlphaV3(); this.migrateLivingRealmV1(); this.migrateRoadToTenV1(); this.migrateGrandCapitalV1(); }
   }
 
   load() {
@@ -190,6 +199,22 @@ export class ContentDB {
       }
     }
     this.data.roadToTenVersion = 1;
+    this.save();
+    return true;
+  }
+
+  migrateGrandCapitalV1() {
+    if (Number(this.data.grandCapitalVersion) >= GRAND_CAPITAL_SCHEMA_VERSION) return false;
+    // Every capital migration is idempotent and exact-default-only. Schema 9 adds Stormwatch Isle.
+    migrateGrandEldoriaData(this.data);
+    migrateGrandSunreachData(this.data);
+    migrateGrandIronwoodData(this.data);
+    migrateGrandFrostpeakData(this.data);
+    migrateGrandShadowfenData(this.data);
+    migrateGrandEmberholdData(this.data);
+    migrateGrandCrystalDeepData(this.data);
+    migrateGrandStormwatchData(this.data);
+    this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
     this.save();
     return true;
   }
@@ -311,8 +336,21 @@ export class ContentDB {
     this.data.materials = mergeById(this.data.materials, LIVING_REALM_CONTENT.materials);
     this.data.craftingRecipes = mergeById(this.data.craftingRecipes, LIVING_REALM_CONTENT.craftingRecipes);
     this.data.tamingSpecies = mergeById(this.data.tamingSpecies, LIVING_REALM_CONTENT.tamingSpecies);
+    for (const key of ['professionSpecializations','economyPolicies','factionPrograms','siegeAssets','dynamicWorldRules','dungeonBlueprints','questConsequences','housingUpgrades']) {
+      this.data[key] = mergeById(this.data[key], ROAD_TO_TEN_CONTENT[key]);
+    }
     this.data.version = 3;
     this.data.livingRealmVersion = 1;
+    this.data.roadToTenVersion = 1;
+    migrateGrandEldoriaData(this.data);
+    migrateGrandSunreachData(this.data);
+    migrateGrandIronwoodData(this.data);
+    migrateGrandFrostpeakData(this.data);
+    migrateGrandShadowfenData(this.data);
+    migrateGrandEmberholdData(this.data);
+    migrateGrandCrystalDeepData(this.data);
+    migrateGrandStormwatchData(this.data);
+    this.data.grandCapitalVersion = GRAND_CAPITAL_SCHEMA_VERSION;
 
     this.save();
   }

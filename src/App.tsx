@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import LoginScreen from './components/LoginScreen';
 import GameScreen from './components/GameScreen';
 import GlobalTooltipRenderer from './components/Tooltip';
+import LocaleBridge, { LocaleToggle } from './components/LocaleBridge';
+import { t } from './i18n';
 import type { Account } from './game/types';
 import { logoutSession, resumeSession } from './game/auth';
 import { dpsMeter } from './game/dpsMeter';
@@ -34,7 +36,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-black text-amber-400">
-        <div className="text-xl tracking-widest animate-pulse" style={{ fontFamily: 'serif' }}>VALIDATING MOR'IA SESSION...</div>
+        <div className="text-xl tracking-widest animate-pulse" style={{ fontFamily: 'serif' }}>{t("VALIDATING MOR'IA SESSION...")}</div>
       </div>
     );
   }
@@ -42,6 +44,8 @@ export default function App() {
   if (!account) {
     return (
       <>
+        <LocaleBridge />
+        <LocaleToggle />
         <LoginScreen onLogin={setAccount} />
         <GlobalTooltipRenderer />
       </>
@@ -50,6 +54,7 @@ export default function App() {
 
   return (
     <>
+      <LocaleBridge />
       <GameScreen account={account} onLogout={handleLogout} />
       <GlobalTooltipRenderer />
     </>

@@ -1,0 +1,110 @@
+name: Mor'ia 9.36C.1 City Designer Toolbar
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-36c1-city-designer-toolbar.py'
+      - '.github/workflows/moria-9-36c1-city-designer-toolbar.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.36C.1 toolbar polish
+        run: python tools/upgrade-moria-9-36c1-city-designer-toolbar.py
+      - name: Verify toolbar presentation contract
+        run: |
+          grep -q 'data-city-tool-grid="true"' src/components/CityDesigner.tsx
+          grep -q 'grid grid-cols-2 gap-2' src/components/CityDesigner.tsx
+          grep -q 'data-city-tool={entry}' src/components/CityDesigner.tsx
+          grep -q 'min-h-9' src/components/CityDesigner.tsx
+          grep -q '9.36C.1 — acabamento do City Designer' docs/MORIA_9_36_GRAND_ELDORIA.md
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate complete server suite
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Install stable visual QA browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npm audit --audit-level=high
+          npx playwright install --with-deps chromium
+      - name: Start authoritative QA server and client
+        run: |
+          rm -f /tmp/moria-936c1-content.json /tmp/moria-936c1-content.json.tmp
+          ADMIN_TOKEN=moria-visual-qa MORIA_CONTENT_DB=/tmp/moria-936c1-content.json PORT=3000 npm start --prefix server > /tmp/moria-936c1-server.log 2>&1 &
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-936c1-vite.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null && curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/health
+          curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null
+      - name: Capture focused City Designer proof
+        run: |
+          rm -rf artifacts/moria-9.36c1-screenshots
+          node - <<'NODE'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          (async () => {
+            fs.mkdirSync('artifacts/moria-9.36c1-screenshots', { recursive: true });
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage({ viewport: { width: 1680, height: 900 }, deviceScaleFactor: 1 });
+            await page.goto('http://127.0.0.1:4173/visual-qa.html?panel=eldoria-city-designer&qaServer=http://127.0.0.1:3000&qaToken=moria-visual-qa', { waitUntil: 'networkidle' });
+            await page.locator('[data-grand-eldoria-server-ready="designer"]').waitFor({ state: 'visible', timeout: 15000 });
+            const select = page.locator('[data-city-designer-map-select="true"]');
+            await select.selectOption('eldoria');
+            const grid = page.locator('[data-city-tool-grid="true"]');
+            await grid.waitFor({ state: 'visible' });
+            const labels = await grid.locator('button').allInnerTexts();
+            const expected = ['SELEÇÃO','CONSTRUIR','DISTRITO','OBJETO'];
+            if (JSON.stringify(labels) !== JSON.stringify(expected)) throw new Error(`Toolbar labels mismatch: ${JSON.stringify(labels)}`);
+            const boxes = await Promise.all(expected.map((_, i) => grid.locator('button').nth(i).boundingBox()));
+            if (boxes.some((b) => !b || b.width < 130 || b.height < 34)) throw new Error(`Toolbar buttons too small: ${JSON.stringify(boxes)}`);
+            if (!(boxes[0].y === boxes[1].y && boxes[2].y === boxes[3].y && boxes[2].y > boxes[0].y)) throw new Error(`Toolbar is not 2x2: ${JSON.stringify(boxes)}`);
+            const designer = page.locator('[data-city-designer-root="true"]');
+            const text = await designer.innerText();
+            if (!text.includes('36/64 construções')) throw new Error('Dense Eldoria count missing');
+            await designer.screenshot({ path: 'artifacts/moria-9.36c1-screenshots/eldoria-city-designer.png' });
+            await browser.close();
+          })().catch((error) => { console.error(error); process.exit(1); });
+          NODE
+          test -s artifacts/moria-9.36c1-screenshots/eldoria-city-designer.png
+          test $(stat -c%s artifacts/moria-9.36c1-screenshots/eldoria-city-designer.png) -gt 120000
+      - name: Upload Mor'ia 9.36C.1 screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9.36c.1-screenshots
+          path: artifacts/moria-9.36c1-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit validated Mor'ia 9.36C.1 pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/CityDesigner.tsx docs/MORIA_9_36_GRAND_ELDORIA.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'fix(9.36c.1): polish City Designer tool grid'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

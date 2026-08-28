@@ -4,7 +4,7 @@
 // ===================================================================
 
 import { VOCATIONS } from './Vocations.mjs';
-import { MAP_CONFIG, BIOMES, MAP_WIDTH, MAP_HEIGHT } from './World.mjs';
+import { MAP_CONFIG, BIOMES, MAP_WIDTH, MAP_HEIGHT, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, SETTLEMENT_CLASSES, URBAN_PLANS } from './World.mjs';
 import { validateContentReferences } from './ContentIntegrity.mjs';
 
 const ID_RE = /^[A-Za-z0-9_-]{2,100}$/;
@@ -80,6 +80,7 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
   ]),
   maps: Object.freeze([
     field('id', 'ID'), field('name', 'Name'), field('biome', 'Biome', 'select', { optionKey: 'biomes' }), field('description', 'Description', 'textarea'),
+    field('width', 'Map width', 'number'), field('height', 'Map height', 'number'), field('settlementClass', 'Settlement class', 'select', { optionKey: 'settlementClasses' }), field('urbanPlan', 'Urban plan', 'select', { optionKey: 'urbanPlans' }), field('urbanBounds', 'Urban bounds', 'json'),
     field('levelRequired', 'Required level', 'number'), field('seed', 'Seed', 'number'), field('spawnX', 'Spawn X', 'number'), field('spawnY', 'Spawn Y', 'number'),
     field('townX', 'Town X', 'number'), field('townY', 'Town Y', 'number'), field('townRange', 'Town range', 'number'),
     field('cityStyle', 'City style', 'select', { optionKey: 'cityStyles' }), field('cityAccent', 'City accent'), field('roofColor', 'Roof color'), field('wallColor', 'Wall color'), field('roadColor', 'Road color'),
@@ -212,11 +213,22 @@ function optionalColor(record) {
   return COLOR_RE.test(String(record.color)) ? null : 'color must be a CSS hex color';
 }
 
-function playableCoord(record, key) {
-  return numberIn(record, key, 1, MAP_WIDTH - 2, { integer: true });
+function dimensionsForMap(contentDB, mapId, ownRecord = null) {
+  const custom = ownRecord?.id === mapId ? ownRecord : contentDB?.get?.('maps')?.find?.(entry => entry?.id === mapId);
+  const base = MAP_CONFIG[mapId];
+  const width = Number(custom?.width ?? base?.width ?? MAP_WIDTH);
+  const height = Number(custom?.height ?? base?.height ?? MAP_HEIGHT);
+  return {
+    width: Number.isInteger(width) && width >= MIN_MAP_DIMENSION && width <= MAX_MAP_DIMENSION ? width : MAP_WIDTH,
+    height: Number.isInteger(height) && height >= MIN_MAP_DIMENSION && height <= MAX_MAP_DIMENSION ? height : MAP_HEIGHT,
+  };
 }
 
-export function validateStudioRecord(type, record) {
+function playableCoord(record, key, dimension = MAP_WIDTH) {
+  return numberIn(record, key, 1, dimension - 2, { integer: true });
+}
+
+export function validateStudioRecord(type, record, contentDB = null) {
   for (const key of ['damageBonuses','resistances','weaknesses','resistancePierce']) { const error=schoolMap(record,key,{min:key==='resistances'?0:-100,max:key==='resistancePierce'?80:400}); if(error) return error; }
   { const error=skillMap(record,'skillBonuses'); if(error) return error; }
   if (!CONTENT_STUDIO_SCHEMAS[type]) return `Unsupported content type: ${type}`;
@@ -228,7 +240,10 @@ export function validateStudioRecord(type, record) {
 
   if (type === 'nodes') {
     if (!NODE_SPECIALIZATIONS.includes(String(record.specialization || 'neutral'))) return 'node specialization is not supported';
-    for (const [key,min,max] of [['x',1,78],['y',1,78],['radius',2,30],['maxHp',500,1000000],['taxRate',0,25]]) { const e=numberIn(record,key,min,max,{required:true}); if(e)return e; }
+    const nodeDimensions = dimensionsForMap(contentDB, String(record.mapId || ''));
+    let e=playableCoord(record,'x',nodeDimensions.width); if(e)return e;
+    e=playableCoord(record,'y',nodeDimensions.height); if(e)return e;
+    for (const [key,min,max] of [['radius',2,30],['maxHp',500,1000000],['taxRate',0,25]]) { const error=numberIn(record,key,min,max,{required:true}); if(error)return error; }
     if (record.enabled !== undefined && typeof record.enabled !== 'boolean') return 'enabled must be boolean';
     if (!Array.isArray(record.stageThresholds) || record.stageThresholds.length < 7) return 'stageThresholds must contain 7 XP thresholds';
     return null;
@@ -293,12 +308,14 @@ export function validateStudioRecord(type, record) {
       ['goldMin',0,100_000_000,false,true], ['goldMax',0,100_000_000,false,true], ['count',1,25,false,true], ['speed',50,600_000,false,true],
     ]) { const error = numberIn(record, key, min, max, { required, integer }); if (error) return error; }
     if (Number(record.goldMax || 0) < Number(record.goldMin || 0)) return 'goldMax cannot be lower than goldMin';
-    for (const key of ['posX','posY']) { const error = playableCoord(record, key); if (error) return error; }
+    const monsterDimensions = dimensionsForMap(contentDB, String(record.mapId || ''));
+    for (const [key,dimension] of [['posX',monsterDimensions.width],['posY',monsterDimensions.height]]) { const error = playableCoord(record, key, dimension); if (error) return error; }
     return optionalColor(record);
   }
 
   if (type === 'npcs') {
-    for (const key of ['posX','posY']) { const error = playableCoord(record, key); if (error) return error; }
+    const npcDimensions = dimensionsForMap(contentDB, String(record.mapId || ''));
+    for (const [key,dimension] of [['posX',npcDimensions.width],['posY',npcDimensions.height]]) { const error = playableCoord(record, key, dimension); if (error) return error; }
     const role = String(record.role || '');
     if (role && !NPC_ROLES.includes(role)) return 'NPC role is not supported';
     return optionalColor(record);
@@ -342,9 +359,10 @@ export function validateStudioRecord(type, record) {
   }
 
   if (type === 'houses') {
-    for (const key of ['x','y','entranceX','entranceY']) { const error=playableCoord(record,key); if(error)return error; }
+    const houseDimensions = dimensionsForMap(contentDB, String(record.mapId || ''));
+    for (const [key,dimension] of [['x',houseDimensions.width],['entranceX',houseDimensions.width],['y',houseDimensions.height],['entranceY',houseDimensions.height]]) { const error=playableCoord(record,key,dimension); if(error)return error; }
     for (const [key,min,max] of [['width',2,12],['height',2,12],['price',0,100000000],['weeklyRent',0,10000000],['levelRequired',1,100000]]) { const error=numberIn(record,key,min,max,{required:true,integer:true}); if(error)return error; }
-    if (Number(record.x)+Number(record.width)>MAP_WIDTH-1 || Number(record.y)+Number(record.height)>MAP_HEIGHT-1) return 'house interior exceeds map bounds';
+    if (Number(record.x)+Number(record.width)>houseDimensions.width-1 || Number(record.y)+Number(record.height)>houseDimensions.height-1) return 'house interior exceeds map bounds';
     const nearBox=Number(record.entranceX)>=Number(record.x)-2&&Number(record.entranceX)<=Number(record.x)+Number(record.width)+1&&Number(record.entranceY)>=Number(record.y)-2&&Number(record.entranceY)<=Number(record.y)+Number(record.height)+1;
     if(!nearBox)return 'house entrance must stay beside its footprint';
     return null;
@@ -366,8 +384,27 @@ export function validateStudioRecord(type, record) {
   if (type === 'maps') {
     const biome = String(record.biome || '').toLowerCase();
     if (!BIOMES.has(biome)) return 'biome is not supported';
-    for (const key of ['spawnX','spawnY','townX','townY']) { const error = playableCoord(record, key); if (error) return error; }
-    let error = numberIn(record, 'levelRequired', 1, 100_000, { required: true, integer: true }); if (error) return error;
+    let error = numberIn(record, 'width', MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, { required: false, integer: true }); if (error) return error;
+    error = numberIn(record, 'height', MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, { required: false, integer: true }); if (error) return error;
+    const width = Number(record.width ?? MAP_WIDTH);
+    const height = Number(record.height ?? MAP_HEIGHT);
+    const settlementClass = String(record.settlementClass || (record.id === 'eldoria' ? 'capital' : 'city'));
+    if (!SETTLEMENT_CLASSES.includes(settlementClass)) return 'settlementClass is not supported';
+    if (record.urbanPlan !== undefined && record.urbanPlan !== '' && !URBAN_PLANS.has(String(record.urbanPlan))) return 'urbanPlan is not supported';
+    for (const [key,dimension] of [['spawnX',width],['spawnY',height],['townX',width],['townY',height]]) { const coordError = playableCoord(record, key, dimension); if (coordError) return coordError; }
+    if (record.urbanBounds !== undefined) {
+      const box = record.urbanBounds;
+      if (!box || typeof box !== 'object' || Array.isArray(box)) return 'urbanBounds must be a JSON object';
+      for (const key of ['x','y','width','height']) { const boxError = numberIn(box,key,key === 'width' || key === 'height' ? 2 : 1,key === 'width' ? width - 2 : key === 'height' ? height - 2 : key === 'x' ? width - 3 : height - 3,{required:true,integer:true}); if(boxError)return `urbanBounds ${boxError}`; }
+      if (Number(box.x)+Number(box.width)>width-1 || Number(box.y)+Number(box.height)>height-1) return 'urbanBounds must stay inside map bounds';
+    }
+    const capital = settlementClass === 'capital';
+    const districtLimit = capital ? 24 : 8;
+    const landmarkLimit = capital ? 64 : 12;
+    const propLimit = capital ? 320 : 80;
+    const districtRadiusLimit = capital ? 24 : 12;
+    const landmarkSizeLimit = capital ? 20 : 10;
+    error = numberIn(record, 'levelRequired', 1, 100_000, { required: true, integer: true }); if (error) return error;
     error = numberIn(record, 'seed', 1, 2_147_483_646, { required: true, integer: true }); if (error) return error;
     error = numberIn(record, 'townRange', 0, 20, { required: true, integer: true }); if (error) return error;
     if (record.portals !== undefined && !Array.isArray(record.portals)) return 'portals must be a JSON array';
@@ -380,16 +417,16 @@ export function validateStudioRecord(type, record) {
     if (record.residentialRingEnabled !== undefined && typeof record.residentialRingEnabled !== 'boolean') return 'residentialRingEnabled must be boolean';
     for (const key of ['monsterNameplateShowLevel','monsterNameplateShowValues','bossNameplateAlwaysVisible']) if (record[key] !== undefined && typeof record[key] !== 'boolean') return `${key} must be boolean`;
     if (record.districts !== undefined) {
-      if (!Array.isArray(record.districts) || record.districts.length > 8) return 'districts must be a JSON array with at most 8 entries';
-      for (const entry of record.districts) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'district entries must be objects'; for (const key of ['x','y']) { const e=playableCoord(entry,key); if(e)return `district ${e}`; } const e=numberIn(entry,'radius',1,12,{required:true,integer:true}); if(e)return `district ${e}`; if(entry.color && !COLOR_RE.test(String(entry.color))) return 'district color must be a CSS hex color'; }
+      if (!Array.isArray(record.districts) || record.districts.length > districtLimit) return `districts must be a JSON array with at most ${districtLimit} entries`;
+      for (const entry of record.districts) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'district entries must be objects'; for (const [key,dimension] of [['x',width],['y',height]]) { const e=playableCoord(entry,key,dimension); if(e)return `district ${e}`; } const e=numberIn(entry,'radius',1,districtRadiusLimit,{required:true,integer:true}); if(e)return `district ${e}`; if(entry.color && !COLOR_RE.test(String(entry.color))) return 'district color must be a CSS hex color'; }
     }
     if (record.landmarks !== undefined) {
-      if (!Array.isArray(record.landmarks) || record.landmarks.length > 12) return 'landmarks must be a JSON array with at most 12 entries';
-      for (const entry of record.landmarks) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'landmark entries must be objects'; if (!CITY_LANDMARK_KINDS.has(String(entry.kind||''))) return 'landmark kind is not supported'; for (const key of ['x','y']) { const e=playableCoord(entry,key); if(e)return `landmark ${e}`; } for (const key of ['w','h']) { const e=numberIn(entry,key,1,10,{required:true,integer:true}); if(e)return `landmark ${e}`; } }
+      if (!Array.isArray(record.landmarks) || record.landmarks.length > landmarkLimit) return `landmarks must be a JSON array with at most ${landmarkLimit} entries`;
+      for (const entry of record.landmarks) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'landmark entries must be objects'; if (!CITY_LANDMARK_KINDS.has(String(entry.kind||''))) return 'landmark kind is not supported'; for (const [key,dimension] of [['x',width],['y',height]]) { const e=playableCoord(entry,key,dimension); if(e)return `landmark ${e}`; } for (const key of ['w','h']) { const e=numberIn(entry,key,1,landmarkSizeLimit,{required:true,integer:true}); if(e)return `landmark ${e}`; } }
     }
     if (record.props !== undefined) {
-      if (!Array.isArray(record.props) || record.props.length > 80) return 'props must be a JSON array with at most 80 entries';
-      for (const entry of record.props) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'prop entries must be objects'; if (!CITY_PROP_KINDS.has(String(entry.kind||''))) return 'prop kind is not supported'; for (const key of ['x','y']) { const e=playableCoord(entry,key); if(e)return `prop ${e}`; } if(entry.color && !COLOR_RE.test(String(entry.color))) return 'prop color must be a CSS hex color'; }
+      if (!Array.isArray(record.props) || record.props.length > propLimit) return `props must be a JSON array with at most ${propLimit} entries`;
+      for (const entry of record.props) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'prop entries must be objects'; if (!CITY_PROP_KINDS.has(String(entry.kind||''))) return 'prop kind is not supported'; for (const [key,dimension] of [['x',width],['y',height]]) { const e=playableCoord(entry,key,dimension); if(e)return `prop ${e}`; } if(entry.color && !COLOR_RE.test(String(entry.color))) return 'prop color must be a CSS hex color'; }
     }
     if (!MAP_ACCESS.includes(String(record.access || 'public'))) return 'map access is not supported';
     return null;
@@ -492,7 +529,7 @@ export function getContentStudioSchema(type, contentDB) {
   const options = {
     rarities: [...RARITIES], slots: [...ITEM_SLOTS], monsterTypes: [...MONSTER_TYPES], npcRoles: [...NPC_ROLES],
     spellTypes: [...SPELL_TYPES], buffTypes: [...BUFF_TYPES], spellTargetModes: [...SPELL_TARGET_MODES], allyEffects: [...ALLY_EFFECTS], enemyEffects: [...ENEMY_EFFECTS], vocations: Object.keys(VOCATIONS).sort(),
-    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], cityStyles: [...CITY_STYLES], eventTypes: [...EVENT_TYPES], nameplateModes: [...NAMEPLATE_MODES],
+    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], cityStyles: [...CITY_STYLES], settlementClasses: [...SETTLEMENT_CLASSES], urbanPlans: [...URBAN_PLANS], eventTypes: [...EVENT_TYPES], nameplateModes: [...NAMEPLATE_MODES],
     npcs: contentDB.get('npcs').map(entry => entry.id).filter(Boolean).sort(),
     quests: contentDB.get('quests').map(entry => entry.id).filter(Boolean).sort(),
     items: contentDB.get('items').map(entry => entry.id).filter(Boolean).sort(),
@@ -504,7 +541,7 @@ export function getContentStudioSchema(type, contentDB) {
     npcs: 'NPCs are synchronized to online clients and gate linked quests/services by server proximity.',
     spells: 'Published spells merge into vocation spell slots and execute server-side.',
     quests: 'Quest NPCs, prerequisites and kill targets are checked before publish.',
-    maps: 'Map edits rebuild deterministic terrain and live portal travel. City style, palette, districts, landmarks, street props, nameplates and residential presentation controls drive the runtime presentation and minimap. Built-in maps cannot be deleted.',
+    maps: 'Map edits rebuild deterministic terrain and live portal travel. Width, height, settlement class, urban plan and urban bounds are authoritative; capital maps receive higher city-authoring budgets while townRange remains a local service radius. Built-in maps cannot be deleted.',
     events: 'World events rotate and reward participants from authoritative server state.',
     shops: 'Content shops extend the authoritative alpha merchant catalog and can be edited without a client rebuild.',
     lootTables: 'Loot tables are rolled server-side by monsters that reference them.',
@@ -528,7 +565,7 @@ export function collectContentDiagnostics(contentDB) {
       const id = typeof record?.id === 'string' ? record.id : '(missing)';
       if (seen.has(id)) push('error', type, id, 'Duplicate content id');
       seen.add(id);
-      const semantic = validateStudioRecord(type, record);
+      const semantic = validateStudioRecord(type, record, contentDB);
       if (semantic) push('error', type, id, semantic);
       const reference = validateContentReferences(contentDB, type, record);
       if (reference) push('error', type, id, reference);

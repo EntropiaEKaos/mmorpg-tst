@@ -56,6 +56,9 @@ import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/rend
 import Weather from './Weather';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
+import { drawWorldCinematicPass } from '../game/worldVisualRevamp927';
+import { translateGameText as tr } from '../i18n';
+import { drawProjectile927, drawParticle927 } from '../game/combatVfx927';
 import { drawHousing } from '../game/housingPresentation';
 import { createWorldLabelQueue } from '../game/worldNameplates';
 import { enforceNpcSpatialIntegrity } from '../game/spatialIntegrity';
@@ -2140,7 +2143,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       for (let x = 0; x < VIEW_W + 1; x++) {
         const tx = cam.x + x, ty = cam.y + y;
         if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) continue;
-        drawTile(ctx, world[ty][tx], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE);
+        drawTile(ctx,world[ty][tx],x*TILE_SIZE,y*TILE_SIZE,TILE_SIZE,tx,ty,now);
         drawCityTileOverlay(ctx, MAPS[currentMapIdRef.current] || MAPS.eldoria, tx, ty, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, world[ty][tx].type);
       }
     }
@@ -2158,9 +2161,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       for (let y = 0; y < VIEW_H + 1; y++) {
         for (let x = 0; x < VIEW_W + 1; x++) {
           const tx = cam.x + x, ty = cam.y + y;
-          if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT && world[ty][tx].type === 'grass') {
-            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-          }
+          if(tx>=0&&tx<MAP_WIDTH&&ty>=0&&ty<MAP_HEIGHT&&world[ty][tx].type==='grass'){ctx.globalAlpha=.76+(((tx*17+ty*31)%11)/11)*.18;ctx.fillRect(x*TILE_SIZE,y*TILE_SIZE,TILE_SIZE,TILE_SIZE);ctx.globalAlpha=1;}
         }
       }
     }
@@ -2187,7 +2188,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       drawBuilding(ctx, sx, sy, b, TILE_SIZE, now);
     }
 
-    drawCityDecor(ctx, MAPS[currentMapIdRef.current] || MAPS.eldoria, cam, TILE_SIZE, now);
+    drawCityDecor(ctx, MAPS[currentMapIdRef.current] || MAPS.eldoria, cam, TILE_SIZE, now, legacyOverrideDarkness(dayTimeOverrideRef.current, worldClockRef.current.darkness));
 
     // Houses and decoration are presentation-only projections of global server state.
     if (serverSync.isActive()) drawHousing(ctx, p.housing, cam, TILE_SIZE, now);
@@ -2284,7 +2285,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     const isInvisible = p.buffs.some((b) => b.type === 'invisible');
     if (isInvisible) ctx.globalAlpha = 0.4;
     drawPlayer(ctx, px, py, TILE_SIZE, p.direction, p.name, p.hp, p.maxHp, now,
-      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount, p.mana, p.maxMana, MAPS[currentMapIdRef.current] || MAPS.eldoria);
+      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount, p.mana, p.maxMana, MAPS[currentMapIdRef.current] || MAPS.eldoria, p.vocation);
     ctx.globalAlpha = 1;
 
     // Draw other players — authoritative server data takes priority
@@ -2392,38 +2393,14 @@ export default function GameScreen({ account, onLogout }: Props) {
         ctx.strokeStyle = pr.color;
         ctx.lineWidth = 3;
         ctx.stroke();
-      } else {
-        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 16);
-        grad.addColorStop(0, pr.color);
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 16, 0, Math.PI * 2);
-        ctx.fill();
-        if (pr.emoji) {
-          ctx.font = '16px system-ui';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(pr.emoji, cx, cy);
-        } else {
-          ctx.fillStyle = '#fff';
-          ctx.beginPath();
-          ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
+      } else {const q=Math.max(0,t-.09),px=(pr.from.x+(pr.to.x-pr.from.x)*q-cam.x+.5)*TILE_SIZE,py=(pr.from.y+(pr.to.y-pr.from.y)*q-cam.y+.5)*TILE_SIZE;drawProjectile927(ctx,pr,cx,cy,px,py);}
     }
 
     // Particles
     for (const pp of particlesRef.current) {
       const sx = (pp.pos.x - cam.x + 0.5) * TILE_SIZE;
       const sy = (pp.pos.y - cam.y + 0.5) * TILE_SIZE;
-      ctx.globalAlpha = pp.life;
-      ctx.fillStyle = pp.color;
-      ctx.beginPath();
-      ctx.arc(sx, sy, pp.size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      drawParticle927(ctx,pp,sx,sy);
     }
 
     // Floating texts
@@ -2463,16 +2440,18 @@ export default function GameScreen({ account, onLogout }: Props) {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
+    const activeBiome = MAPS[currentMapIdRef.current]?.biome || 'plains';
     drawWorldAtmosphere(
       ctx,
       canvas,
-      MAPS[currentMapIdRef.current]?.biome || 'plains',
+      activeBiome,
       nightAlpha,
       p.pos,
       cam,
       TILE_SIZE,
       now,
     );
+    drawWorldCinematicPass(ctx, canvas, activeBiome, weather, nightAlpha, now);
 
     worldLabels.draw(ctx,MAPS[currentMapIdRef.current]||MAPS.eldoria);
 
@@ -2524,7 +2503,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       <div className="moria-panel moria-topbar-95 relative z-40 flex min-h-12 shrink-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-1.5 text-xs">
         <div className="flex shrink-0 items-center gap-3 pr-2">
           <span className="moria-title text-base font-black tracking-[0.16em] text-amber-100">MOR'IA</span>
-          <span className="hidden text-slate-500 md:inline">{VOCATIONS[player.vocation]?.name} · Lv {player.level}</span>
+          <span className="hidden text-slate-500 md:inline">{tr(VOCATIONS[player.vocation]?.name || player.vocation)} · {tr(`Lv ${player.level}`)}</span>
           <span className="moria-chip rounded-lg px-2 py-1 text-[9px] font-bold tracking-wider" style={{ color: MAPS[currentMapId]?.biome === 'snow' ? '#9bd4ff' : MAPS[currentMapId]?.biome === 'shadow' ? '#b398ff' : '#71d8ac', borderColor: 'currentColor' }}>◆ {MAPS[currentMapId]?.name}</span>
         </div>
         <div className="moria-scrollbar flex min-w-0 flex-1 items-center justify-end gap-1 overflow-x-auto pb-0.5">
@@ -2539,9 +2518,9 @@ export default function GameScreen({ account, onLogout }: Props) {
             <button
               onClick={() => setShowAdmin((s) => !s)}
               className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-violet-200"
-              title="Offline Debug Admin (Ctrl+Shift+A)"
+              title={tr('Offline Debug Admin (Ctrl+Shift+A)')}
             >
-              <span>⚡</span><span className="hidden lg:inline">Debug</span>
+              <span>⚡</span><span className="hidden lg:inline">{tr('Debug')}</span>
             </button>
           )}
           <button
@@ -2562,7 +2541,7 @@ export default function GameScreen({ account, onLogout }: Props) {
             onClick={onLogout}
             className="moria-button shrink-0 rounded-lg px-2 py-1 text-[10px] text-rose-200"
           >
-            🚪 Logout
+            {tr('🚪 Logout')}
           </button>
         </div>
       </div>
@@ -2791,7 +2770,7 @@ export default function GameScreen({ account, onLogout }: Props) {
           {inDungeon && (
             <div className="moria-panel pointer-events-none absolute left-1/2 top-14 z-10 -translate-x-1/2 animate-pulse rounded-full border border-violet-300/40 px-4 py-1.5"
                  style={{ boxShadow: '0 0 28px rgba(168,85,247,.18)' }}>
-              <span className="text-purple-200 font-bold text-sm tracking-wider">🌀 DUNGEON · WAVE {dungeonWave}/{dungeonTotalWavesRef.current}</span>
+              <span className="text-purple-200 font-bold text-sm tracking-wider">🌀 {tr('DUNGEON')} · {tr('WAVE')} {dungeonWave}/{dungeonTotalWavesRef.current}</span>
             </div>
           )}
 
@@ -3076,7 +3055,7 @@ function UILayoutEditor({ player, layout, onLayoutChange, onClose }: { player: P
         <button onClick={() => {
           const reset = saveUILayout(player.name, { ...layout, panelOrder: [...DEFAULT_UI_PANEL_ORDER] });
           onLayoutChange(reset);
-        }} className="moria-button mb-3 w-full rounded-lg py-2 text-xs text-sky-200">↺ Reset default order</button>
+        }} className="moria-button mb-3 w-full rounded-lg py-2 text-xs text-sky-200">{tr('↺ Reset default order')}</button>
         <div className="text-[10px] text-blue-200/40 text-center">Operational controls such as UI, Mount, Admin, Audio, Network and Logout stay fixed for safety.</div>
       </div>
     </div>
@@ -3088,10 +3067,10 @@ function TopButton({ icon, label, hotkey, onClick }: { icon: string; label: stri
     <button
       onClick={onClick}
       className="moria-button flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-slate-300"
-      title={`${label} (${hotkey})`}
+      title={`${tr(label)} (${hotkey})`}
     >
       <span>{icon}</span>
-      <span className="hidden lg:inline">{label}</span>
+      <span className="hidden lg:inline">{tr(label)}</span>
       {hotkey && <span className="text-[8px] text-amber-200/45">{hotkey}</span>}
     </button>
   );

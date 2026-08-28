@@ -3,7 +3,7 @@
 <div align="center">
   <img src="public/images/logo.png" alt="Mor'ia Logo" width="280" />
   <p><b>Um MMORPG completo com combate autoritativo, inspiração em Tibia & WoW, 100% no navegador.</b></p>
-  <p><b>Versão atual: Mor'ia 9.26.1 — Road to 10 Candidate</b></p>
+  <p><b>Versão atual: Mor'ia 9.27 — Deep Visual Revamp</b></p>
 </div>
 
 ---
@@ -29,6 +29,42 @@ O gate oficial de qualidade executa `npm audit`, TypeScript, build de produção
 A linha 9.1 adiciona uma base de lançamento alpha orientada a conteúdo: **11 mapas** (10 regiões públicas + **Astra Sanctum, a Ilha dos GMs**), mais de **70 itens**, mais de **70 monstros**, mais de **40 NPCs**, mais de **45 quests**, novos feitiços para as 14 vocações, eventos regionais, lojas e loot tables autoritativas.
 
 Todo esse conteúdo é materializado no ContentDB e pode ser criado/editado/removido pelo `/admin`. Servidores 9.0 existentes migram uma única vez para a base 9.1 preservando valores já personalizados pelo admin. A Ilha GM usa acesso `gm` validado no servidor pela lista **GM Roster** do próprio Admin.
+
+---
+
+## 🎨 Mor'ia 9.27 — Deep Visual Revamp
+
+A **9.27** é uma reforma gráfica profunda e exclusivamente de apresentação, construída antes da Road to 10 para elevar o mundo sem transferir autoridade do servidor para o cliente. O visual clássico/pixel foi preservado, mas recebeu uma nova camada de profundidade: materiais menos planos, arquitetura 2.5D, sombras de contato, vegetação em massas, silhuetas mais presentes, acabamento cinematográfico por bioma e uma revisão completa da leitura de HUD, inventário e combate.
+
+O mundo agora combina **micro-bevel e variação estável por coordenada nos tiles**, água/lava com acabamento vivo, fachadas com plano lateral, fundação e sombra de beiral, telhados com oclusão de primeiro plano, árvores com sombra de copa e props urbanos ancorados ao chão. Lampiões, braseiros e cristais possuem halos emissivos preservando o núcleo pixelado; a intensidade reage à escuridão de apresentação e produz um reflexo curto no piso durante a noite.
+
+Clima também passou a alterar a leitura material. **Rain/Storm** aplicam resposta molhada, brilho especular discreto e gradação fria; tempestades ganham pressão atmosférica e exposição rara de relâmpago. O passe continua estritamente visual: não altera colisão, combate, economia, movimentação, IA ou qualquer estado autoritativo.
+
+O combate recebeu VFX extraídos para módulo próprio, com trails e partículas aditivas, enquanto `GameScreen.tsx` permanece dentro do budget arquitetural e o contrato histórico de escala de sprites da 9.7 é preservado. A interface mantém `prefers-reduced-motion` e a revisão real em Chromium terminou sem erros de console/página.
+
+### Entrada — direção dark-fantasy
+
+![Mor'ia 9.27 login revamp](docs/screenshots/moria-9-27-login-revamp.png)
+
+### Eldoria — dia claro
+
+![Mor'ia 9.27 world day](docs/screenshots/moria-9-27-world-day.png)
+
+### Eldoria — noite e iluminação urbana
+
+![Mor'ia 9.27 world night](docs/screenshots/moria-9-27-world-night.png)
+
+### Eldoria — tempestade e superfícies reativas
+
+![Mor'ia 9.27 world storm](docs/screenshots/moria-9-27-world-storm.png)
+
+### Inventário + HUD
+
+![Mor'ia 9.27 inventory HUD](docs/screenshots/moria-9-27-inventory-hud.png)
+
+> Evidência visual versionada no próprio repositório: **todo print final de evolução deve entrar no README antes do merge**. A 9.27 fecha com uma matriz determinística de cinco capturas reais em Chromium.
+
+Detalhes técnicos e limites de autoridade: **[Mor'ia 9.27 — Deep Visual Revamp](docs/MORIA_9_27_DEEP_VISUAL_REVAMP.md)**.
 
 ---
 

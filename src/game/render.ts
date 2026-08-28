@@ -1,5 +1,6 @@
 import type { Tile } from './types';
 import { drawAvatar, type AvatarAppearance, type AvatarMount, type AvatarNameplateOptions } from './playerAvatar';
+import { translateGameText } from '../i18n';
 import { drawClassicMonsterSprite, drawClassicNpcSprite } from './classicEntityPresentation';
 
 const tileCache = new Map<string, HTMLCanvasElement>();
@@ -42,6 +43,80 @@ function buildTileCache(size: number) {
     }
   }, size));
 
+
+  tileCache.set(`grass_swamp_${size}`, createTileCanvas((ctx, s) => {
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#2d432c'; ctx.fillRect(0,0,s,s);
+    const px=Math.max(1,Math.round(s/32));
+    for(let i=0;i<40;i++){
+      const x=Math.floor(hash(i,121)*s/px)*px,y=Math.floor(hash(i,127)*s/px)*px;
+      const tones=['#233827','#365037','#405a3b','#4b4a32','#596044'];
+      ctx.fillStyle=tones[Math.floor(hash(i,131)*tones.length)];
+      ctx.fillRect(x,y,px*(hash(i,137)>.72?2:1),px);
+    }
+    for(let i=0;i<7;i++){
+      const x=Math.floor(hash(i+70,139)*s),y=Math.floor(hash(i+70,149)*s);
+      ctx.fillStyle='rgba(91,80,50,.34)';ctx.fillRect(x,y,Math.max(px,s*.14),Math.max(px,s*.04));
+    }
+    ctx.fillStyle='rgba(116,139,73,.18)';ctx.fillRect(0,0,s,px);
+  }, size));
+
+  tileCache.set(`water_swamp_${size}`, createTileCanvas((ctx, s) => {
+    const grad=ctx.createLinearGradient(0,0,0,s);
+    grad.addColorStop(0,'#355c50');grad.addColorStop(.5,'#294b43');grad.addColorStop(1,'#17352f');
+    ctx.fillStyle=grad;ctx.fillRect(0,0,s,s);
+    const px=Math.max(1,Math.round(s/32));
+    for(let i=0;i<7;i++){
+      const x=hash(i,151)*s,y=hash(i,157)*s;
+      ctx.fillStyle=i%2?'rgba(126,143,76,.22)':'rgba(72,105,73,.28)';
+      ctx.fillRect(x,y,Math.max(px,s*(.08+hash(i,163)*.12)),px);
+    }
+    ctx.strokeStyle='rgba(151,177,118,.18)';ctx.lineWidth=Math.max(1,px);
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(s*(.25+i*.23),s*(.30+i*.17),Math.max(1,s*(.08+i*.02)),0,Math.PI);ctx.stroke();}
+    ctx.fillStyle='rgba(186,201,135,.24)';ctx.fillRect(s*.62,s*.18,px,px);ctx.fillRect(s*.28,s*.72,px,px);
+    ctx.fillStyle='rgba(7,28,24,.20)';ctx.fillRect(0,s-px,s,px);
+  }, size));
+
+  tileCache.set(`bridge_swamp_${size}`, createTileCanvas((ctx, s) => {
+    ctx.fillStyle='#294b43';ctx.fillRect(0,0,s,s);
+    ctx.fillStyle='#63543b';ctx.fillRect(2,0,s-4,s);
+    const plank=Math.max(3,Math.round(s/6));
+    for(let y=0;y<s;y+=plank){ctx.fillStyle=y%(plank*2)===0?'#756248':'#594a36';ctx.fillRect(3,y,s-6,Math.max(1,plank-1));ctx.fillStyle='rgba(146,159,86,.20)';ctx.fillRect(3,y,Math.max(1,s*.22),1);}
+    ctx.fillStyle='#39432d';ctx.fillRect(0,0,2,s);ctx.fillRect(s-2,0,2,s);
+  }, size));
+
+
+  tileCache.set(`wall_crystal_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#17182b';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));
+    for(let i=0;i<18;i++){const x=Math.floor(hash(i,201)*s/px)*px,y=Math.floor(hash(i,211)*s/px)*px;ctx.fillStyle=['#242743','#30335a','#433d70','#2b4664'][Math.floor(hash(i,223)*4)];ctx.fillRect(x,y,px*(hash(i,227)>.6?2:1),px*(hash(i,229)>.72?2:1));}
+    for(let i=0;i<4;i++){const x=s*(.18+i*.21),h=s*(.18+hash(i,233)*.32);ctx.fillStyle=i%2?'#5f65a5':'#4da6bd';ctx.fillRect(x,s-h,Math.max(px,s*.05),h);ctx.fillStyle='rgba(164,241,255,.38)';ctx.fillRect(x,s-h,px,Math.max(px,h*.35));}
+  },size));
+  tileCache.set(`floor_crystal_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#343753';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));for(let i=0;i<22;i++){const x=Math.floor(hash(i,239)*s/px)*px,y=Math.floor(hash(i,241)*s/px)*px;ctx.fillStyle=hash(i,251)>.72?'rgba(126,222,241,.34)':'rgba(152,133,221,.20)';ctx.fillRect(x,y,px,px);}ctx.fillStyle='rgba(183,238,255,.12)';ctx.fillRect(0,0,s,px);
+  },size));
+  tileCache.set(`path_crystal_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#424762';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));ctx.fillStyle='#65718c';ctx.fillRect(0,s*.28,s,s*.44);ctx.fillStyle='rgba(116,225,255,.34)';ctx.fillRect(0,s*.46,s,Math.max(px,s*.05));for(let i=0;i<5;i++){const x=Math.floor(hash(i,257)*s);ctx.fillStyle='rgba(166,143,238,.28)';ctx.fillRect(x,0,px,s);}
+  },size));
+
+
+  tileCache.set(`water_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;const grad=ctx.createLinearGradient(0,0,s,s);grad.addColorStop(0,'#102b3b');grad.addColorStop(.5,'#173d50');grad.addColorStop(1,'#0b2130');ctx.fillStyle=grad;ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));
+    for(let i=0;i<8;i++){const y=Math.floor(hash(i,301)*s);const x=Math.floor(hash(i,307)*s*.55);ctx.fillStyle=i%3===0?'rgba(183,225,239,.32)':'rgba(92,142,165,.24)';ctx.fillRect(x,y,Math.max(px,s*(.16+hash(i,311)*.30)),px);}
+    ctx.fillStyle='rgba(4,14,23,.34)';ctx.fillRect(0,s-px,s,px);
+  },size));
+  tileCache.set(`rock_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#283845';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));for(let i=0;i<18;i++){const x=Math.floor(hash(i,313)*s),y=Math.floor(hash(i,317)*s);ctx.fillStyle=['#354b5a','#425866','#1e2f3b','#596975'][Math.floor(hash(i,319)*4)];ctx.fillRect(x,y,Math.max(px,s*.11),Math.max(px,s*.055));}ctx.fillStyle='rgba(187,222,232,.16)';ctx.fillRect(px,px,s*.48,px);ctx.fillStyle='rgba(4,12,18,.28)';ctx.fillRect(0,s-Math.max(px,s*.08),s,Math.max(px,s*.08));
+  },size));
+  tileCache.set(`snow_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#758a98';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));for(let i=0;i<16;i++){const x=Math.floor(hash(i,331)*s),y=Math.floor(hash(i,337)*s);ctx.fillStyle=hash(i,347)>.55?'rgba(205,226,234,.20)':'rgba(41,58,70,.18)';ctx.fillRect(x,y,Math.max(px,s*.10),px);}ctx.fillStyle='rgba(14,35,48,.13)';ctx.fillRect(0,s*.72,s,s*.28);
+  },size));
+  tileCache.set(`path_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#455a68';ctx.fillRect(0,0,s,s);const px=Math.max(1,Math.round(s/32));ctx.fillStyle='#647986';ctx.fillRect(0,s*.18,s,s*.64);for(let y=Math.round(s*.25);y<s;y+=Math.max(3,Math.round(s*.24))){ctx.fillStyle='rgba(17,33,43,.38)';ctx.fillRect(0,y,s,px);}ctx.fillStyle='rgba(129,222,248,.34)';ctx.fillRect(0,s*.48,s,Math.max(px,s*.035));
+  },size));
+  tileCache.set(`bridge_storm_${size}`, createTileCanvas((ctx,s)=>{
+    ctx.imageSmoothingEnabled=false;ctx.fillStyle='#102d3e';ctx.fillRect(0,0,s,s);ctx.fillStyle='#5b6470';ctx.fillRect(2,0,s-4,s);const plank=Math.max(3,Math.round(s/6));for(let y=0;y<s;y+=plank){ctx.fillStyle=y%(plank*2)===0?'#69737c':'#4b555f';ctx.fillRect(3,y,s-6,Math.max(1,plank-1));ctx.fillStyle='rgba(185,225,235,.14)';ctx.fillRect(4,y,Math.max(1,s*.35),1);}ctx.fillStyle='#293943';ctx.fillRect(0,0,2,s);ctx.fillRect(s-2,0,2,s);ctx.fillStyle='rgba(108,218,245,.24)';ctx.fillRect(s*.48,0,Math.max(1,s*.04),s);
+  },size));
+
   tileCache.set(`water_${size}`, createTileCanvas((ctx, s) => {
     // Deep water gradient with depth
     const grad = ctx.createLinearGradient(0, 0, 0, s);
@@ -77,10 +152,12 @@ function buildTileCache(size: number) {
     ctx.fillRect(0, 0, s, s);
     const u = Math.max(1, Math.round(s / 16));
 
-    // Ground detail and tight pixel shadow.
+    // Ground detail and layered canopy shadow.
+    ctx.fillStyle = 'rgba(14,20,13,.20)';
+    ctx.fillRect(s/2-u*7, s-u*4, u*14, u*3);
     ctx.fillStyle = '#294d27';
     ctx.fillRect(u, s-u*2, s-u*2, u);
-    ctx.fillStyle = 'rgba(20,24,16,.45)';
+    ctx.fillStyle = 'rgba(20,24,16,.52)';
     ctx.fillRect(s/2-u*5, s-u*3, u*10, u*2);
 
     // Trunk, roots and bark highlights.
@@ -151,6 +228,22 @@ function buildTileCache(size: number) {
       ctx.fillStyle = `rgba(${190 + hash(i, 1) * 30}, ${170 + hash(i, 3) * 25}, ${110 + hash(i, 5) * 25}, ${hash(i, 1) * 0.5})`;
       ctx.fillRect(hash(i, 2) * s, hash(i, 3) * s, 1, 1);
     }
+  }, size));
+
+
+  tileCache.set(`snow_${size}`, createTileCanvas((ctx, s) => {
+    ctx.imageSmoothingEnabled = false;
+    const grad = ctx.createLinearGradient(0, 0, s, s);
+    grad.addColorStop(0, '#eef7fb'); grad.addColorStop(.55, '#dcecf4'); grad.addColorStop(1, '#bfd3df');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, s, s);
+    const px = Math.max(1, Math.round(s / 32));
+    for (let i = 0; i < 24; i++) {
+      const xx = Math.floor(hash(i, 71) * s / px) * px, yy = Math.floor(hash(i, 79) * s / px) * px;
+      ctx.fillStyle = hash(i,83) > .45 ? 'rgba(255,255,255,.48)' : 'rgba(126,161,181,.18)';
+      ctx.fillRect(xx, yy, px * (hash(i,89) > .78 ? 2 : 1), px);
+    }
+    ctx.fillStyle='rgba(255,255,255,.34)'; ctx.fillRect(0,0,s,px);
+    ctx.fillStyle='rgba(90,126,148,.10)'; ctx.fillRect(0,s-px,s,px);
   }, size));
 
   tileCache.set(`path_${size}`, createTileCanvas((ctx, s) => {
@@ -333,11 +426,71 @@ function buildTileCache(size: number) {
   }, size));
 }
 
-export function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, size: number) {
+function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: number, y: number, size: number, worldX = 0, worldY = 0, time = 0, variant?: Tile['variant']) {
+  const px = Math.max(1, Math.round(size / 32));
+  ctx.save();
   ctx.imageSmoothingEnabled = false;
-  buildTileCache(size);
-  const cached = tileCache.get(`${tile.type}_${size}`);
-  if (cached) ctx.drawImage(cached, x, y, size, size);
+
+  // Universal micro-bevel: preserves tile readability while breaking the flat plane.
+  ctx.fillStyle = 'rgba(255,244,213,.035)';
+  ctx.fillRect(x, y, size, px);
+  ctx.fillRect(x, y, px, size);
+  ctx.fillStyle = 'rgba(5,8,12,.09)';
+  ctx.fillRect(x, y + size - px, size, px);
+  ctx.fillRect(x + size - px, y, px, size);
+
+  if (type === 'water') {
+    ctx.fillStyle = variant === 'swamp' ? 'rgba(172,193,124,.12)' : variant === 'storm' ? 'rgba(184,225,239,.13)' : 'rgba(217,241,255,.20)';
+    ctx.fillRect(x + size*.12, y + size*.24, size*.28, px);
+    ctx.fillRect(x + size*.56, y + size*.66, size*.22, px);
+    ctx.fillStyle = variant === 'swamp' ? 'rgba(10,39,31,.24)' : variant === 'storm' ? 'rgba(3,20,31,.28)' : 'rgba(5,26,58,.18)';
+    ctx.fillRect(x + size*.18, y + size*.83, size*.56, px);
+  } else if (type === 'lava') {
+    ctx.shadowColor = 'rgba(255,83,24,.45)';
+    ctx.shadowBlur = Math.max(2, size*.12);
+    ctx.fillStyle = 'rgba(255,205,82,.26)';
+    ctx.fillRect(x + size*.28, y + size*.42, size*.12, px);
+    ctx.fillRect(x + size*.59, y + size*.63, size*.18, px);
+    ctx.shadowBlur = 0;
+  } else if (type === 'grass' || type === 'sand' || type === 'snow') {
+    ctx.fillStyle = type === 'grass' ? (variant === 'swamp' ? 'rgba(141,158,87,.065)' : 'rgba(210,228,144,.08)') : type === 'snow' ? (variant === 'storm' ? 'rgba(194,221,230,.09)' : 'rgba(255,255,255,.16)') : 'rgba(255,235,174,.11)';
+    ctx.fillRect(x + size*.22, y + size*.19, px, px);
+    ctx.fillRect(x + size*.67, y + size*.72, px, px);
+  } else if (type === 'path' || type === 'floor' || type === 'wood_floor' || type === 'bridge') {
+    ctx.fillStyle = 'rgba(255,239,196,.055)';
+    ctx.fillRect(x + px*2, y + px*2, size - px*4, px);
+  }
+  const variation = hash(worldX, worldY, type.length);
+  if ((type === 'path' || type === 'floor') && variation > .58) {
+    ctx.fillStyle = `rgba(42,34,27,${.06 + variation * .06})`;
+    const ox = Math.floor(hash(worldX, worldY, 22) * size * .58) + size * .12;
+    const oy = Math.floor(hash(worldY, worldX, 31) * size * .56) + size * .14;
+    ctx.fillRect(x + ox, y + oy, Math.max(px, size * .18), px);
+    if (variation > .82) { ctx.fillRect(x + ox + size*.10, y + oy + px, px, Math.max(px, size*.13)); ctx.fillStyle = 'rgba(119,130,72,.10)'; ctx.fillRect(x + ox - px, y + oy - px, px*2, px*2); }
+  } else if (type === 'grass') {
+    const ox = Math.floor(hash(worldX, worldY, 41) * size), oy = Math.floor(hash(worldY, worldX, 53) * size);
+    ctx.fillStyle = variation > .72 ? 'rgba(215,224,126,.17)' : 'rgba(18,50,22,.16)'; ctx.fillRect(x + ox, y + oy, px, px * (variation > .5 ? 2 : 1));
+    if (variation > .88) { ctx.fillStyle = 'rgba(255,218,128,.26)'; ctx.fillRect(x + ((ox + px*5) % size), y + ((oy + px*3) % size), px, px); }
+    if (variation > .54) {
+      const patchX = x + size * (.12 + hash(worldX, worldY, 61) * .58);
+      const patchY = y + size * (.18 + hash(worldY, worldX, 67) * .56);
+      ctx.fillStyle = variation > .80 ? 'rgba(112,151,72,.18)' : 'rgba(22,53,27,.13)';
+      ctx.fillRect(patchX, patchY, Math.max(px*2, size*.16), Math.max(px, size*.055));
+      ctx.fillRect(patchX + px, patchY - px*2, px, px*3);
+      if (variation > .76) ctx.fillRect(patchX + px*4, patchY - px, px, px*2);
+    }
+  } else if (type === 'sand' && variation > .62) { ctx.fillStyle = 'rgba(116,88,50,.09)'; ctx.fillRect(x + size*.18, y + size*(.28 + variation*.25), size*.48, px); }
+  if (type === 'water') {
+    const wave = (Math.sin(time / 430 + worldX * .7 + worldY * .31) + 1) * .5; ctx.fillStyle = variant === 'swamp' ? `rgba(171,192,120,${.025 + wave*.065})` : variant === 'storm' ? `rgba(166,219,236,${.035 + wave*.075})` : `rgba(220,245,255,${.05 + wave*.11})`; ctx.fillRect(x + size*.12, y + size * (.28 + wave * .20), size*(.22 + wave*.22), px);
+  } else if (type === 'lava') {
+    const pulse = (Math.sin(time / 260 + worldX + worldY * .6) + 1) * .5; ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = `rgba(255,118,35,${.08 + pulse*.18})`; ctx.fillRect(x + size*.20, y + size*.32, size*.58, size*.34); ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.restore();
+}
+
+export function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, size: number, worldX = 0, worldY = 0, time = 0) {
+  ctx.imageSmoothingEnabled = false; buildTileCache(size); const cacheKey = tile.variant ? `${tile.type}_${tile.variant}_${size}` : `${tile.type}_${size}`; const cached = tileCache.get(cacheKey) || tileCache.get(`${tile.type}_${size}`);
+  if (cached) { ctx.drawImage(cached, x, y, size, size); drawMaterialFinish(ctx, tile.type, x, y, size, worldX, worldY, time, tile.variant); }
 }
 
 export function drawPlayer(
@@ -358,8 +511,9 @@ export function drawPlayer(
   mana = 0,
   maxMana = 0,
   nameplate?: AvatarNameplateOptions | null,
+  vocationId?: string,
 ) {
-  drawAvatar(ctx, x, y, size, direction, name, hp, maxHp, time, vocationColor, mounted, mountIcon, appearance, mount, mana, maxMana, nameplate);
+  drawAvatar(ctx, x, y, size, direction, name, hp, maxHp, time, vocationColor, mounted, mountIcon, appearance, mount, mana, maxMana, nameplate, vocationId);
 }
 
 export function drawMonster(
@@ -374,12 +528,16 @@ export function drawMonster(
   const bob = Math.sin(time / 300 + x) * 1;
   const cx = x + size / 2;
   const cy = y + size / 2 + bob;
-  const entitySize = size * msSize;
+  const entitySize = size * msSize * 1.08;
 
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  // Layered contact shadow anchors sprites to the terrain without a blurry halo.
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
   ctx.beginPath();
-  ctx.ellipse(cx, y + size - 3, entitySize * 0.32, entitySize * 0.08, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, y + size - 2, entitySize * 0.40, entitySize * 0.105, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.beginPath();
+  ctx.ellipse(cx, y + size - 3, entitySize * 0.27, entitySize * 0.065, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Pixel-native rarity corners: readable without a vector glow halo.
@@ -394,7 +552,7 @@ export function drawMonster(
     ctx.fillRect(cx+r-m, cy-r, m, m*3);
   }
 
-  drawClassicMonsterSprite(ctx, cx, cy, entitySize, monster, time);
+  drawClassicMonsterSprite(ctx, cx, cy, entitySize, { ...monster, name: translateGameText(monster.name) }, time);
 
   // World labels are rendered in a dedicated overlay pass so nearby entities
   // can resolve collisions and distance fading as one layout problem.
@@ -412,12 +570,16 @@ export function drawNPC(
   const cx = x + size / 2;
   const cy = y + size / 2 + bob;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillStyle = 'rgba(0,0,0,0.14)';
   ctx.beginPath();
-  ctx.ellipse(cx, y + size - 3, size * 0.32, size * 0.08, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, y + size - 2, size * 0.39, size * 0.10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.36)';
+  ctx.beginPath();
+  ctx.ellipse(cx, y + size - 3, size * 0.25, size * 0.06, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  drawClassicNpcSprite(ctx, cx, cy, size, npc, time);
+  drawClassicNpcSprite(ctx, cx, cy, size, { ...npc, role: translateGameText(npc.role) }, time);
 
   // NPC labels are also deferred to the shared world-nameplate pass.
 }
@@ -491,6 +653,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
+  if (building.type !== 'tree_deco') { const gs=ctx.createLinearGradient(sx,sy+h*.70,sx,sy+h); gs.addColorStop(0,'rgba(0,0,0,0)'); gs.addColorStop(1,'rgba(0,0,0,.30)'); ctx.fillStyle=gs; ctx.fillRect(sx-tileSize*.08,sy+h*.58,w+tileSize*.22,h*.42+tileSize*.08); }
 
   if (building.type === 'tree_deco') {
     drawTile(ctx, { type: 'tree', walkable: false }, sx, sy, tileSize);
@@ -498,7 +661,8 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
     return;
   }
   if (building.type === 'well') {
-    ctx.fillStyle = 'rgba(0,0,0,.32)'; ctx.fillRect(sx + w*.18, sy+h*.72, w*.64, h*.10);
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(sx + w*.08, sy+h*.68, w*.84, h*.18);
+    ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.fillRect(sx + w*.18, sy+h*.72, w*.64, h*.10);
     ctx.fillStyle = '#4a4740'; ctx.fillRect(sx+w*.18, sy+h*.49, w*.64, h*.25);
     ctx.fillStyle = '#847d6d'; ctx.fillRect(sx+w*.22, sy+h*.45, w*.56, h*.10);
     ctx.fillStyle = '#173a4c'; ctx.fillRect(sx+w*.29, sy+h*.51, w*.42, h*.14);
@@ -523,6 +687,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
     ctx.strokeStyle=accent;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(cx,sy+h*.60,w*.28,h*.17,0,0,Math.PI*2);ctx.stroke();ctx.restore();return;
   }
   if (building.type === 'market') {
+    ctx.fillStyle='rgba(0,0,0,.22)';ctx.fillRect(sx+w*.03,sy+h*.67,w*.94,h*.18);
     for(let i=0;i<3;i++){const bx=sx+i*w/3;const stripe=i%2?accent:roof;ctx.fillStyle='#5f4027';ctx.fillRect(bx+3,sy+h*.43,w/3-6,h*.40);ctx.fillStyle=stripe;ctx.beginPath();ctx.moveTo(bx,sy+h*.43);ctx.lineTo(bx+w/6,sy+h*.12);ctx.lineTo(bx+w/3,sy+h*.43);ctx.closePath();ctx.fill();ctx.fillStyle='#d8bd85';ctx.fillRect(bx+6,sy+h*.50,w/3-12,h*.08);} ctx.restore();return;
   }
 
@@ -537,6 +702,19 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   ctx.fillRect(sx, wallTop, w, wallH);
   ctx.fillStyle = wall;
   ctx.fillRect(sx + 2, wallTop + 2, w - 4, wallH - 4);
+
+  // 2.5D facade model: roof/eave cast shadow, right side plane and heavy foundation AO.
+  const sideW = Math.max(3, Math.round(tileSize * .12));
+  ctx.fillStyle = 'rgba(25,20,17,.20)';
+  ctx.fillRect(sx + w - sideW - 2, wallTop + 2, sideW, wallH - 4);
+  ctx.fillStyle = 'rgba(255,239,205,.08)';
+  ctx.fillRect(sx + 2, wallTop + 2, Math.max(2, tileSize*.08), wallH - 5);
+  ctx.fillStyle = 'rgba(20,15,12,.23)';
+  ctx.fillRect(sx + 2, wallTop + 2, w - 4, Math.max(3, Math.round(tileSize*.12)));
+  ctx.fillStyle = 'rgba(21,18,14,.30)';
+  ctx.fillRect(sx + 2, wallTop + wallH - Math.max(4, Math.round(tileSize*.14)), w - 4, Math.max(4, Math.round(tileSize*.14)));
+  ctx.fillStyle = 'rgba(130,112,82,.18)';
+  for (let xx=sx+Math.max(4,tileSize*.12); xx<sx+w-6; xx+=Math.max(12,Math.round(tileSize*.72))) ctx.fillRect(xx, wallTop+wallH-Math.max(3,tileSize*.10), Math.max(3,tileSize*.12), Math.max(2,tileSize*.06));
 
   // Pixel masonry courses and alternating vertical joints.
   const course = Math.max(5, Math.round(tileSize*.20));
@@ -575,6 +753,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
     if (Math.abs(wx-cx) < doorW*.65) continue;
     const wy = wallTop + wallH*.22;
     const ww = Math.max(8,tileSize*.32), wh=Math.max(8,tileSize*.28);
+    ctx.fillStyle='rgba(20,15,12,.52)';ctx.fillRect(wx-ww/2-3,wy-3,ww+7,wh+7);
     ctx.fillStyle='#34291f';ctx.fillRect(wx-ww/2-2,wy-2,ww+4,wh+4);
     ctx.fillStyle=`rgba(239,190,91,${flicker})`;ctx.fillRect(wx-ww/2,wy,ww,wh);
     ctx.fillStyle='rgba(255,239,169,.7)';ctx.fillRect(wx-ww/2+2,wy+2,ww*.38,2);
@@ -583,6 +762,10 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 
   // Roof mass and tile bands.
   drawPixelRoofTiles(ctx, sx, sy, w, h, roof);
+  ctx.fillStyle = 'rgba(18,13,11,.34)';
+  ctx.fillRect(sx - 4, sy + h*.425, w + 8, Math.max(3, Math.round(tileSize*.10)));
+  ctx.fillStyle = 'rgba(255,224,173,.08)';
+  ctx.fillRect(sx, sy + h*.415, w, Math.max(1, Math.round(tileSize*.035)));
 
   // Chimney and type accents.
   if (building.w >= 3 && !['castle','tower'].includes(building.type)) {

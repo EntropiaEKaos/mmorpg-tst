@@ -532,7 +532,7 @@ function handleAdminAPI(req, res, route) {
 
       const existing = contentDB.get(type).find(i => i.id === data.id);
       const candidate = existing ? { ...existing, ...data, id: data.id } : { ...data, id: data.id };
-      const semanticError = validateStudioRecord(type, candidate);
+      const semanticError = validateStudioRecord(type, candidate, contentDB);
       if (semanticError) return json(res, 400, { error: semanticError });
       const referenceError = validateContentReferences(contentDB, type, candidate);
       if (referenceError) return json(res, 409, { error: referenceError });

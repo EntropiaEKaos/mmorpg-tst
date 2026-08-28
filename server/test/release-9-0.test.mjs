@@ -47,7 +47,7 @@ test('9.0 release tree contains no retired one-shot 6.x or 8.0 applicators', () 
 
 test('9.0 server write path performs semantic validation before reference validation', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  const semantic = source.indexOf('validateStudioRecord(type, candidate)');
+  const semantic = source.indexOf('validateStudioRecord(type, candidate, contentDB)');
   const references = source.indexOf('validateContentReferences(contentDB, type, candidate)');
   assert.ok(semantic > 0 && references > semantic);
   assert.match(source, /AUTHORITATIVE SERVER v9\.0 RELEASE/);

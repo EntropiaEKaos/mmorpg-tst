@@ -1,4 +1,4 @@
-import type { GameMap } from './maps';
+import { getMapDimensions, type GameMap } from './maps';
 import type { Building } from './render';
 import { getCityPalette, type CityLandmark, type CityProp, type CityPropKind } from './cityIdentity';
 
@@ -63,14 +63,15 @@ export function getCityBuildings(map: GameMap): Building[] {
   // decorative houses must never masquerade as authoritative collision geometry.
   // Admins may deliberately enable a bounded density from Content Studio.
   const tc = map.townCenter;
+  const { width: mapWidth, height: mapHeight } = getMapDimensions(map);
   const homes: Array<[number, number, number, number]> = [
     [-13,-6,4,3], [-13,3,3,3], [-9,7,4,3], [-4,8,3,3], [2,8,4,3],
     [8,7,4,3], [11,3,3,3], [11,-3,4,3], [8,-10,4,3], [1,-12,3,3],
   ];
   const density = map.residentialRingEnabled === true ? Math.max(0, Math.min(homes.length, Math.round(Number(map.residentialRingDensity) || homes.length))) : 0;
   for (const [dx, dy, w, h] of homes.slice(0, density)) {
-    const x = Math.max(1, Math.min(78 - w, tc.x + dx));
-    const y = Math.max(1, Math.min(78 - h, tc.y + dy));
+    const x = Math.max(1, Math.min(mapWidth - w - 2, tc.x + dx));
+    const y = Math.max(1, Math.min(mapHeight - h - 2, tc.y + dy));
     if (overlapsLandmark(map, x, y, w, h, 1)) continue;
     buildings.push({ x, y, w, h, type: 'house', roofColor: palette.roof, wallColor: palette.wall, accentColor: palette.accent });
   }
@@ -80,7 +81,7 @@ export function getCityBuildings(map: GameMap): Building[] {
 export function getCityMinimapMarkers(map: GameMap): CityMinimapMarker[] {
   const palette = getCityPalette({ id: map.id, style: map.cityStyle, biome: map.biome, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor });
   return [
-    ...map.landmarks.map((entry) => ({ id: entry.id, name: entry.name, icon: entry.icon, x: entry.x + entry.w / 2, y: entry.y + entry.h / 2, color: palette.accent, kind: 'landmark' as const })),
+    ...map.landmarks.filter((entry) => entry.showOnMinimap !== false).map((entry) => ({ id: entry.id, name: entry.name, icon: entry.icon, x: entry.x + entry.w / 2, y: entry.y + entry.h / 2, color: palette.accent, kind: 'landmark' as const })),
     ...map.districts.map((entry) => ({ id: entry.id, name: entry.name, icon: entry.icon, x: entry.x, y: entry.y, color: entry.color || palette.accent, kind: 'district' as const })),
     ...map.portals.map((portal, index) => ({ id: `${map.id}_portal_${index}`, name: portal.label || portal.targetMap, icon: '◉', x: portal.pos.x, y: portal.pos.y, color: '#7fe7ff', kind: 'portal' as const })),
   ];
@@ -201,11 +202,12 @@ function ambientKinds(map: GameMap): CityPropKind[] {
 
 export function getAmbientCityProps(map: GameMap): CityProp[] {
   const kinds = ambientKinds(map);
+  const { width: ambientWidth, height: ambientHeight } = getMapDimensions(map);
   const existing = new Set(map.props.map((prop) => `${prop.x}:${prop.y}`));
   const props: CityProp[] = [];
   AMBIENT_OFFSETS.forEach(([dx, dy], index) => {
-    const x = Math.max(2, Math.min(77, Math.round(map.townCenter.x + dx)));
-    const y = Math.max(2, Math.min(77, Math.round(map.townCenter.y + dy)));
+    const x = Math.max(2, Math.min(ambientWidth - 3, Math.round(map.townCenter.x + dx)));
+    const y = Math.max(2, Math.min(ambientHeight - 3, Math.round(map.townCenter.y + dy)));
     if (existing.has(`${x}:${y}`)) return;
     if (overlapsLandmark(map, x, y, 1, 1, 0)) return;
     props.push({ id: `${map.id}_ambient_${index}`, kind: kinds[index % kinds.length], x, y });
@@ -220,13 +222,47 @@ function pixelRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
 }
 
-function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number, y: number, size: number, time: number, accent: string) {
+function drawLocalEmissiveHalo(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number, rgb: string, alpha: number) {
+  // Local emissive halo is presentation-only; the crisp pixel prop remains the visual anchor.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  halo.addColorStop(0, `rgba(${rgb},${alpha})`);
+  halo.addColorStop(.36, `rgba(${rgb},${alpha * .38})`);
+  halo.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = halo;
+  ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+  ctx.restore();
+}
+
+function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number, y: number, size: number, time: number, accent: string, darkness = 0) {
   const cx = x + size / 2;
   const cy = y + size * 0.70;
   const u = Math.max(1, Math.round(size / 16));
   const pulse = 0.72 + Math.sin(time / 450 + prop.x) * 0.08;
+  const lightDarkness = Math.max(0, Math.min(1, darkness));
+  const emissiveScale = .55 + lightDarkness * 2.5;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
+
+  // Ground every prop before drawing the authored pixel silhouette.
+  ctx.fillStyle = 'rgba(13,15,13,.24)';
+  ctx.fillRect(x + size*.22, y + size*.78, size*.56, Math.max(2, size*.075));
+  ctx.fillStyle = 'rgba(30,35,27,.13)';
+  ctx.fillRect(x + size*.31, y + size*.75, size*.38, Math.max(1, size*.04));
+
+  // Night-sensitive floor bounce anchors authored emissive props to nearby masonry.
+  if (lightDarkness > .06 && (prop.kind === 'lamp' || prop.kind === 'brazier' || prop.kind === 'crystal')) {
+    const warm = prop.kind === 'crystal' ? '151,143,255' : prop.kind === 'brazier' ? '255,112,48' : '255,205,105';
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const floorAlpha = Math.min(.18, .035 + lightDarkness * .22);
+    ctx.fillStyle = `rgba(${warm},${floorAlpha})`;
+    ctx.fillRect(x + size*.25, y + size*.79, size*.50, Math.max(1, size*.04));
+    ctx.fillStyle = `rgba(${warm},${floorAlpha*.42})`;
+    ctx.fillRect(x + size*.34, y + size*.84, size*.32, Math.max(1, size*.03));
+    ctx.restore();
+  }
 
   switch (prop.kind) {
     case 'banner':
@@ -234,15 +270,18 @@ function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number,
       pixelRect(ctx,cx+u,y+size*.20,u*5,u*6,prop.color || accent);
       ctx.fillStyle='rgba(255,255,255,.24)';ctx.fillRect(cx+u*2,y+size*.22,u,u*4); break;
     case 'lamp':
+      drawLocalEmissiveHalo(ctx,cx,y+size*.32,size*(.46 + lightDarkness*.16),'255,205,105',(.16 + pulse*.07)*emissiveScale);
       pixelRect(ctx,cx-u,y+size*.31,u*2,size*.52,'#42392d');
       ctx.fillStyle=`rgba(255,211,104,${pulse*.25})`;ctx.fillRect(cx-u*5,y+size*.17,u*10,u*10);
       pixelRect(ctx,cx-u*2,y+size*.21,u*4,u*5,'#e7bd5c');
       ctx.fillStyle='#fff0a7';ctx.fillRect(cx-u,y+size*.23,u*2,u*2); break;
     case 'brazier':
+      drawLocalEmissiveHalo(ctx,cx,cy-u*4,size*(.52 + lightDarkness*.20),'255,118,48',(.14 + pulse*.09)*emissiveScale);
       pixelRect(ctx,cx-u*4,cy,u*8,u*3,'#524438');
       ctx.fillStyle='#8f3926';ctx.fillRect(cx-u*3,cy-u*3,u*6,u*3);
       ctx.fillStyle='#ff9737';ctx.fillRect(cx-u*2,cy-u*6,u*4,u*4);ctx.fillStyle='#ffd15e';ctx.fillRect(cx-u,cy-u*7,u*2,u*4); break;
     case 'crystal':
+      drawLocalEmissiveHalo(ctx,cx,y+size*.43,size*(.48 + lightDarkness*.18),'151,143,255',(.11 + pulse*.07)*emissiveScale);
       ctx.fillStyle=prop.color || accent;ctx.fillRect(cx-u*2,y+size*.28,u*4,u*8);ctx.fillRect(cx-u,y+size*.18,u*2,u*12);
       ctx.fillStyle='rgba(255,255,255,.52)';ctx.fillRect(cx-u,y+size*.22,u,u*5); break;
     case 'grave':
@@ -278,6 +317,7 @@ export function drawCityDecor(
   camera: { x: number; y: number },
   tileSize: number,
   time: number,
+  darkness = 0,
 ) {
   const palette = getCityPalette({ id: map.id, style: map.cityStyle, biome: map.biome, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor });
   const visualProps = [...getAmbientCityProps(map), ...map.props];
@@ -285,7 +325,7 @@ export function drawCityDecor(
     const sx = (prop.x - camera.x) * tileSize;
     const sy = (prop.y - camera.y) * tileSize;
     if (sx < -tileSize || sy < -tileSize || sx > ctx.canvas.width + tileSize || sy > ctx.canvas.height + tileSize) continue;
-    drawPropGlyph(ctx, prop, sx, sy, tileSize, time, palette.accent);
+    drawPropGlyph(ctx, prop, sx, sy, tileSize, time, palette.accent, darkness);
   }
 
   // Landmarks remain navigation anchors, but typography follows the world pixel

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, memo } from 'react';
 import type { ChatMessage } from '../game/types';
 import MovableHudWindow from './MovableHudWindow';
+import { t as tr } from '../i18n';
 
 export type SendChannel = 'world' | 'say' | 'party' | 'guild' | 'trade';
 
@@ -11,6 +12,8 @@ interface Props {
 }
 
 type Filter = 'all' | ChatMessage['channel'];
+
+const CHANNEL_LABELS: Record<string, string> = { all:'TODOS', world:'MUNDO', say:'FALAR', party:'GRUPO', guild:'GUILDA', trade:'COMÉRCIO', battle:'BATALHA', loot:'SAQUE', quest:'MISSÃO', system:'SISTEMA' };
 
 function ChatInner({ messages, onSendMessage, social }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
@@ -44,7 +47,7 @@ function ChatInner({ messages, onSendMessage, social }: Props) {
   return (
     <MovableHudWindow
       id="chat"
-      title="Chat"
+      title={tr('Chat')}
       className={`${expanded ? 'h-[390px] w-[520px]' : 'h-[204px] w-[330px]'} max-w-[calc(100vw-16px)]`}
       contentClassName="flex h-[calc(100%-28px)] flex-col"
       defaultStyle={{ left: 8, bottom: 8 }}
@@ -53,27 +56,27 @@ function ChatInner({ messages, onSendMessage, social }: Props) {
         <div className="moria-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
           {filters.map((t) => {
             const active = filter === t;
-            return <button key={t} onClick={() => setFilter(t)} className={`shrink-0 border px-2 py-1 text-[9px] font-black tracking-wider transition-all ${active ? 'border-amber-200/35 bg-amber-100/8 text-amber-100' : 'border-transparent text-slate-500 hover:border-white/10 hover:text-slate-300'}`} style={active ? { boxShadow: `inset 0 -1px ${channelColors[t]}` } : undefined}>{t === 'all' ? 'ALL' : t.toUpperCase()}</button>;
+            return <button key={t} onClick={() => setFilter(t)} className={`shrink-0 border px-2 py-1 text-[9px] font-black tracking-wider transition-all ${active ? 'border-amber-200/35 bg-amber-100/8 text-amber-100' : 'border-transparent text-slate-500 hover:border-white/10 hover:text-slate-300'}`} style={active ? { boxShadow: `inset 0 -1px ${channelColors[t]}` } : undefined}>{CHANNEL_LABELS[t] || tr(t.toUpperCase())}</button>;
           })}
         </div>
-        <button data-no-drag onClick={() => setExpanded((s) => !s)} className="flex h-6 w-6 shrink-0 items-center justify-center border border-amber-200/15 bg-black/40 text-[10px] text-slate-400 hover:text-amber-100" title={expanded ? 'Collapse chat' : 'Expand chat'}>{expanded ? '▼' : '▲'}</button>
+        <button data-no-drag onClick={() => setExpanded((s) => !s)} className="flex h-6 w-6 shrink-0 items-center justify-center border border-amber-200/15 bg-black/40 text-[10px] text-slate-400 hover:text-amber-100" title={tr(expanded ? 'Collapse chat' : 'Expand chat')}>{expanded ? '▼' : '▲'}</button>
       </div>
 
       <div ref={scrollRef} className="moria-scrollbar flex-1 space-y-0.5 overflow-y-auto bg-black/20 px-3 py-2 font-mono text-[11px]">
         {filtered.slice(-100).map((m) => {
           const time = new Date(m.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const systemSender = m.sender === 'System' || m.sender === 'Loot' || m.sender === 'Quest' || m.sender === 'Server';
-          return <div key={m.id} className="group flex gap-1.5 px-1 py-0.5 leading-[1.35] hover:bg-white/[0.025]"><span className="w-9 shrink-0 text-[8px] text-slate-600">{time}</span><span className="w-3 shrink-0 text-center text-[9px]" title={m.channel}>{channelIcons[m.channel] || '💬'}</span>{!systemSender && <span className="shrink-0 font-bold text-amber-200/85">{m.sender}:</span>}<span className="min-w-0 break-words" style={{ color: m.color }}>{m.text}</span></div>;
+          return <div key={m.id} className="group flex gap-1.5 px-1 py-0.5 leading-[1.35] hover:bg-white/[0.025]"><span className="w-9 shrink-0 text-[8px] text-slate-600">{time}</span><span className="w-3 shrink-0 text-center text-[9px]" title={m.channel}>{channelIcons[m.channel] || '💬'}</span>{!systemSender && <span className="shrink-0 font-bold text-amber-200/85">{m.sender}:</span>}<span className="min-w-0 break-words" style={{ color: m.color }}>{tr(m.text)}</span></div>;
         })}
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 border-t border-amber-200/10 bg-[#080704] p-1.5">
         <select data-no-drag value={sendChannel} onChange={e => setSendChannel(e.target.value as SendChannel)} className="moria-input rounded-none px-1 py-1.5 text-[9px] font-black uppercase">
-          {sendChannels.map(channel => <option key={channel} value={channel}>{channel}</option>)}
+          {sendChannels.map(channel => <option key={channel} value={channel}>{CHANNEL_LABELS[channel] || tr(channel)}</option>)}
         </select>
         <span className="text-[10px] text-slate-500">›</span>
-        <input data-no-drag type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={`Message ${sendChannel}...`} className="moria-input min-w-0 flex-1 rounded-none border-0 px-2 py-1.5 text-[11px] focus:outline-none" maxLength={200} />
-        <button data-no-drag onClick={send} disabled={!input.trim()} className="moria-button flex h-7 items-center justify-center rounded-none px-2 text-[9px] font-black tracking-wider disabled:opacity-30">SEND</button>
+        <input data-no-drag type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tr(`Message ${sendChannel}...`)} className="moria-input min-w-0 flex-1 rounded-none border-0 px-2 py-1.5 text-[11px] focus:outline-none" maxLength={200} />
+        <button data-no-drag onClick={send} disabled={!input.trim()} className="moria-button flex h-7 items-center justify-center rounded-none px-2 text-[9px] font-black tracking-wider disabled:opacity-30">{tr('SEND')}</button>
       </div>
     </MovableHudWindow>
   );

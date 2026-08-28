@@ -36,16 +36,24 @@ test('travel requires a real portal, ignores client coordinates and enforces lev
   try {
     assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'frostpeak', spawnX: 1, spawnY: 1 } }), false);
     assert.equal(player.mapId, 'eldoria');
-    player.x = 10; player.y = 40; player.level = 8;
+    const frostPortal = WORLD.getMap('eldoria').portals.find(portal => portal.targetMap === 'frostpeak');
+    assert.ok(frostPortal);
+    player.x = frostPortal.pos.x; player.y = frostPortal.pos.y; player.level = 14;
+    assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'frostpeak', spawnX: 1, spawnY: 1 } }), false);
+    assert.equal(player.mapId, 'eldoria');
+    player.level = 15;
     assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'frostpeak', spawnX: 1, spawnY: 1 } }), true);
     assert.equal(player.mapId, 'frostpeak');
-    assert.deepEqual({ x: player.x, y: player.y }, { x: 70, y: 40 });
+    assert.deepEqual({ x: player.x, y: player.y }, frostPortal.targetSpawn);
     assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'hacked-map' } }), false);
-    player.mapId = 'shadowfen'; player.x = 10; player.y = 10; player.level = 24;
+    const voidPortal = WORLD.getMap('shadowfen').portals.find(portal => portal.targetMap === 'voidlands');
+    assert.ok(voidPortal);
+    player.mapId = 'shadowfen'; player.x = voidPortal.pos.x; player.y = voidPortal.pos.y; player.level = 24;
     assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'voidlands' } }), false);
+    assert.equal(player.mapId, 'shadowfen');
     player.level = 25;
     assert.equal(engine.processIntent(id, { type: 'travel', payload: { targetMap: 'voidlands' } }), true);
-    assert.deepEqual({ x: player.x, y: player.y }, { x: 70, y: 70 });
+    assert.deepEqual({ x: player.x, y: player.y }, voidPortal.targetSpawn);
   } finally { cleanup(id); }
 });
 
@@ -136,9 +144,13 @@ test('map events remain available to every snapshot until explicitly consumed', 
 
 test('server portal tiles are deterministic and walkable', () => {
   const map = WORLD.getMap('eldoria');
-  assert.equal(map.tiles[40][10].type, 'path');
-  assert.equal(map.tiles[40][10].walkable, true);
-  assert.equal(map.portals.find(p => p.targetMap === 'frostpeak').targetSpawn.x, 70);
+  const portal = map.portals.find(p => p.targetMap === 'frostpeak');
+  assert.ok(portal);
+  assert.equal(map.tiles[portal.pos.y][portal.pos.x].type, 'path');
+  assert.equal(map.tiles[portal.pos.y][portal.pos.x].walkable, true);
+  const destination = WORLD.getMap(portal.targetMap);
+  assert.ok(destination);
+  assert.equal(destination.tiles[portal.targetSpawn.y][portal.targetSpawn.x].walkable, true);
 });
 
 test('authoritative drop and unequip preserve item ownership', () => {

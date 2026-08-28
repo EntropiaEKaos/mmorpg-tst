@@ -33,6 +33,7 @@ export interface CityLandmark {
   y: number;
   w: number;
   h: number;
+  showOnMinimap?: boolean;
 }
 
 export interface CityProp {

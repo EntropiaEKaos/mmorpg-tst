@@ -146,6 +146,10 @@ export function drawClassicMonsterSprite(
     ctx.fillRect(left + 10 * u, top + 9 * u, 2 * u, 6 * u);
   }
 
+  // Small directional rim pixels make silhouettes survive dark biomes.
+  ctx.fillStyle = monster.type === 'boss' ? 'rgba(255,220,126,.72)' : 'rgba(220,232,240,.18)';
+  ctx.fillRect(left + 3 * u, top + 2 * u, Math.max(1, u), Math.max(2, 3 * u));
+
   if (monster.type === 'boss') {
     ctx.fillStyle = '#e2b64f';
     ctx.fillRect(left + 2 * u, top - u, 2 * u, 3 * u);

@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
+import { t as tr } from '../i18n';
 
 interface CastInfo {
   name: string;
@@ -52,8 +53,8 @@ function CastBarInner() {
         <div className="mb-2 flex items-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.06] bg-black/25 text-xl" style={{ filter: `drop-shadow(0 0 7px ${cast.color}aa)` }}>{cast.icon}</span>
           <div className="min-w-0 flex-1">
-            <div className="moria-eyebrow text-[8px]" style={{ color: cast.color }}>CASTING</div>
-            <div className="truncate text-xs font-black text-slate-100">{cast.name}</div>
+            <div className="moria-eyebrow text-[8px]" style={{ color: cast.color }}>{tr('CASTING')}</div>
+            <div className="truncate text-xs font-black text-slate-100">{tr(cast.name)}</div>
           </div>
           <span className="font-mono text-[10px] text-slate-400">{(remainingMs / 1000).toFixed(1)}s</span>
         </div>

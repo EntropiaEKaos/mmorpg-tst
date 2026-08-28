@@ -1,0 +1,66 @@
+name: Mor'ia 9.28 PT-BR Runtime Closure
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/close-moria-9-28-ptbr.py'
+      - 'tools/fix-moria-9-28-ptbr-closure-syntax.py'
+      - '.github/workflows/close-moria-9-28-ptbr.yml'
+permissions:
+  contents: write
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply PT-BR runtime closure
+        run: |
+          python tools/close-moria-9-28-ptbr.py
+          python tools/fix-moria-9-28-ptbr-closure-syntax.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('src/i18n/pt-BR.928.json')
+          d=json.loads(p.read_text(encoding='utf-8'))
+          d.update({'WAVE':'ONDA','Wave':'Onda','have':'possui','left':'restantes','invasion':'invasão','worldboss':'chefe mundial','gathering':'coleta','bounty':'recompensa','Warning':'Alerta'})
+          p.write_text(json.dumps(d,ensure_ascii=False,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Install and audit client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+      - name: Typecheck and build client
+        run: |
+          npm run typecheck
+          npm run build
+      - name: Guard GameScreen budget
+        run: |
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Install and audit server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+      - name: Validate server
+        run: |
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated PT-BR closure
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/i18n/index.ts src/i18n/pt-BR.928.json src/components/LoginScreen.tsx src/components/MovableHudWindow.tsx src/components/Chat.tsx src/components/HUD.tsx src/components/Inventory.tsx src/components/RaidWarning.tsx src/components/WorldEvents.tsx src/components/GameScreen.tsx
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.28): close PT-BR player-facing runtime'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

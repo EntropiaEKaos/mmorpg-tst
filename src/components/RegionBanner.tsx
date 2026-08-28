@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { GameMap } from '../game/maps';
 import { ATMOSPHERE_PROFILES, type WorldWeather } from '../game/worldAtmosphere';
 import { CINEMATIC_EVENT_NAME, type CinematicRewardDescriptor } from '../game/cinematicRewards';
+import { t as tr } from '../i18n';
 
 interface Props {
   map: GameMap;
@@ -34,13 +35,13 @@ function RegionBannerInner({ map, weather }: Props) {
     <>
       <div className="moria-region-banner pointer-events-none absolute left-1/2 top-16 z-20 w-[min(520px,88%)] -translate-x-1/2 text-center">
         <div className="text-[9px] font-black uppercase tracking-[0.42em]" style={{ color: profile.accent }}>
-          {WEATHER_ICON[weather]} {profile.name} {map.dangerLevel ? `· ${map.dangerLevel}` : ''}
+          {WEATHER_ICON[weather]} {tr(profile.name)} {map.dangerLevel ? `· ${map.dangerLevel}` : ''}
         </div>
-        <div className="moria-title mt-1 text-2xl font-black tracking-[0.18em] text-amber-50 sm:text-3xl">{map.name}</div>
+        <div className="moria-title mt-1 text-2xl font-black tracking-[0.18em] text-amber-50 sm:text-3xl">{tr(map.name)}</div>
         <div className="mx-auto mt-2 h-px w-40 bg-gradient-to-r from-transparent via-current to-transparent opacity-60" style={{ color: profile.accent }} />
-        <div className="mx-auto mt-2 max-w-md text-[10px] font-semibold tracking-wide text-slate-300/75">{map.description}</div>
+        <div className="mx-auto mt-2 max-w-md text-[10px] font-semibold tracking-wide text-slate-300/75">{tr(map.description)}</div>
         {map.levelRequired && map.levelRequired > 1 && (
-          <div className="mt-2 text-[9px] font-black uppercase tracking-widest text-rose-300">Recommended level {map.levelRequired}+</div>
+          <div className="mt-2 text-[9px] font-black uppercase tracking-widest text-rose-300">{tr('Recommended level')} {map.levelRequired}+</div>
         )}
       </div>
 
@@ -57,9 +58,9 @@ function RegionBannerInner({ map, weather }: Props) {
             }}
           >
             <div className="text-4xl drop-shadow-[0_0_18px_currentColor] sm:text-5xl" style={{ color: cinematic.color }}>{cinematic.icon}</div>
-            <div className="mt-2 text-[10px] font-black uppercase tracking-[0.48em]" style={{ color: cinematic.color }}>{cinematic.title}</div>
-            <div className="moria-title mt-2 text-2xl font-black tracking-[0.12em] text-white sm:text-4xl">{cinematic.subtitle}</div>
-            {cinematic.description && <div className="mx-auto mt-2 max-w-xl text-[11px] font-semibold tracking-wide text-slate-300/80">{cinematic.description}</div>}
+            <div className="mt-2 text-[10px] font-black uppercase tracking-[0.48em]" style={{ color: cinematic.color }}>{tr(cinematic.title)}</div>
+            <div className="moria-title mt-2 text-2xl font-black tracking-[0.12em] text-white sm:text-4xl">{tr(cinematic.subtitle)}</div>
+            {cinematic.description && <div className="mx-auto mt-2 max-w-xl text-[11px] font-semibold tracking-wide text-slate-300/80">{tr(cinematic.description)}</div>}
             <div className="mx-auto mt-4 h-px w-56 bg-gradient-to-r from-transparent via-current to-transparent" style={{ color: cinematic.color }} />
           </div>
         </div>

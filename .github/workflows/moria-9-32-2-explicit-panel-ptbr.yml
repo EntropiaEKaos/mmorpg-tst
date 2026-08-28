@@ -1,0 +1,87 @@
+name: Mor'ia 9.32.2 Explicit Panel PT-BR
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-32-2-explicit-panel-ptbr.py'
+      - '.github/workflows/moria-9-32-2-explicit-panel-ptbr.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply visual QA locale parity
+        run: python tools/upgrade-moria-9-32-1-visual-qa-parity.py
+      - name: Apply explicit panel localization closure
+        run: python tools/upgrade-moria-9-32-2-explicit-panel-ptbr.py
+      - name: Verify explicit PT-BR ownership and docs
+        run: |
+          grep -q "tr('LIBRARY')" src/components/BookLibrary.tsx
+          grep -q "tr('MAILBOX')" src/components/MailBox.tsx
+          grep -q "tr(m.subject)" src/components/MailBox.tsx
+          grep -q "tr('AUTHORITATIVE SOCIAL')" src/components/SocialHub.tsx
+          grep -q "tr('Nobody ignored.')" src/components/SocialHub.tsx
+          grep -q "forbiddenByPanel" tools/capture-moria-9-32.mjs
+          grep -q "9.32.2 — Fechamento explícito dos painéis" docs/MORIA_9_32_LIBRARY_MAIL_SOCIAL_PTBR.md
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Install stable visual QA browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npm audit --audit-level=high
+          npx playwright install --with-deps chromium
+      - name: Capture PT-BR screenshots with leak assertions
+        run: |
+          rm -rf artifacts/moria-9.32.2-screenshots artifacts/moria-9.32-screenshots
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/moria-vite.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4173/visual-qa.html >/dev/null
+          node tools/capture-moria-9-32.mjs
+          mkdir -p artifacts/moria-9.32.2-screenshots
+          cp artifacts/moria-9.32-screenshots/*.png artifacts/moria-9.32.2-screenshots/
+          test -s artifacts/moria-9.32.2-screenshots/library.png
+          test -s artifacts/moria-9.32.2-screenshots/mail.png
+          test -s artifacts/moria-9.32.2-screenshots/social.png
+      - name: Upload corrected screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: moria-9.32.2-screenshots
+          path: artifacts/moria-9.32.2-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+      - name: Commit validated 9.32 visual closure
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/BookLibrary.tsx src/components/MailBox.tsx src/components/SocialHub.tsx src/visualQa.tsx tools/capture-moria-9-32.mjs docs/MORIA_9_32_LIBRARY_MAIL_SOCIAL_PTBR.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'fix(9.32.2): close explicit PT-BR panel visual QA'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

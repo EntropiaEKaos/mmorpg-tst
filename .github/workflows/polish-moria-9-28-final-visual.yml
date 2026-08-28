@@ -1,0 +1,49 @@
+name: Mor'ia 9.28 Final Visual Polish
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/polish-moria-9-28-final-visual.py'
+      - '.github/workflows/polish-moria-9-28-final-visual.yml'
+permissions:
+  contents: write
+jobs:
+  polish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply final visual polish
+        run: python tools/polish-moria-9-28-final-visual.py
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate server
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated polish
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/i18n/pt-BR.928.json src/components/RegionBanner.tsx src/components/LoginScreen.tsx
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'polish(9.28): refine PT-BR world and login presentation'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr

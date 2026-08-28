@@ -1,7 +1,7 @@
 {
   "name": "moria-realm-of-shadows",
   "private": true,
-  "version": "9.26.1",
+  "version": "9.28.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

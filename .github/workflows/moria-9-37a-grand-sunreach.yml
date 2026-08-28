@@ -1,0 +1,69 @@
+name: Mor'ia 9.37A Grand Sunreach Coast
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-37a-grand-sunreach.py'
+      - 'tools/fix-moria-9-37a-current-capital-anchor.py'
+      - '.github/workflows/moria-9-37a-grand-sunreach.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Align and apply Mor'ia 9.37A Grand Sunreach
+        run: |
+          python tools/fix-moria-9-37a-current-capital-anchor.py
+          python tools/upgrade-moria-9-37a-grand-sunreach.py
+      - name: Verify Grand Sunreach source contract
+        run: |
+          test -s server/engine/GrandSunreach.mjs
+          grep -q 'GRAND_SUNREACH_VERSION = 1' server/engine/GrandSunreach.mjs
+          grep -q 'GRAND_CAPITAL_SCHEMA_VERSION = 3' server/engine/GrandSunreach.mjs
+          grep -q "urbanPlan:'harbor-crescent'" server/engine/GrandSunreach.mjs
+          grep -q 'width:160, height:160' server/engine/GrandSunreach.mjs
+          grep -q 'harborCapitalTile' server/engine/World.mjs
+          grep -q 'harborCapitalTile' src/game/maps.ts
+          grep -q 'migrateGrandSunreachData' server/engine/ContentDB.mjs
+          grep -q 'royalAxes' server/engine/World.mjs
+          grep -q 'civicPlaza' server/engine/World.mjs
+          test -s server/test/grand-sunreach-9-37.test.mjs
+          test -s docs/MORIA_9_37_GRAND_SUNREACH.md
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate focused Grand Sunreach contract
+        run: |
+          npm ci --prefix server
+          node --test server/test/grand-sunreach-9-37.test.mjs
+      - name: Validate complete server suite
+        run: |
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated Mor'ia 9.37A pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/engine/GrandSunreach.mjs server/engine/GrandEldoria.mjs server/engine/World.mjs server/engine/ContentDB.mjs src/game/maps.ts server/test/grand-sunreach-9-37.test.mjs docs/MORIA_9_37_GRAND_SUNREACH.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.37a): build authoritative Grand Sunreach Coast'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr
