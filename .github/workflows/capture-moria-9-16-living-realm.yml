@@ -1,23 +1,33 @@
-name: Mor'ia 9.16 Living Realm Visual Gate
+name: "Mor'ia 9.16 Living Realm Visual Gate"
+
 on:
   push:
-    branches: [moria-9.11-9.16-living-realm]
-    paths: [tools/moria-9-16-capture.trigger]
+    branches:
+      - moria-9.11-9.16-living-realm
+    paths:
+      - tools/moria-9-16-capture.trigger
+
 permissions:
   contents: write
+
 jobs:
   capture:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           ref: moria-9.11-9.16-living-realm
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
       - name: Validate production client
+        shell: bash
         run: |
           npm ci
           npm audit
@@ -26,172 +36,39 @@ jobs:
           bytes=$(wc -c < src/components/GameScreen.tsx)
           echo "GameScreen bytes=$bytes"
           test "$bytes" -le 155000
+
       - name: Install browser harness
+        shell: bash
         run: |
           mkdir -p /tmp/moria916-shot
           cd /tmp/moria916-shot
-          npm init -y >/dev/null 2>&1
+          npm init -y
           npm install playwright@latest --no-fund --no-audit
           npx playwright install --with-deps chromium
+          cp "$GITHUB_WORKSPACE/tools/capture-moria-9-16.mjs" capture.mjs
+
       - name: Capture Living Realm surfaces
+        shell: bash
         run: |
           python3 -m http.server 4173 -d dist >/tmp/moria916-http.log 2>&1 &
-          cat > /tmp/moria916-shot/capture.mjs <<'EOF'
-          import { chromium } from 'playwright';
-          import fs from 'node:fs';
-          const out='/tmp/moria916-capture'; fs.mkdirSync(out,{recursive:true});
-          const browser=await chromium.launch({headless:true});
-          const page=await browser.newPage({viewport:{width:1440,height:900}});
-          const errors=[]; const consoleLines=[];
-          page.on('console',m=>{const line=`[${m.type()}] ${m.text()}`;consoleLines.push(line);if(m.type()==='error')errors.push(line)});
-          page.on('pageerror',e=>{const line=`[pageerror] ${e.message}`;consoleLines.push(line);errors.push(line)});
-          await page.goto('http://127.0.0.1:4173',{waitUntil:'networkidle'});
-          await page.getByRole('button',{name:/OFFLINE QUICK PLAY/i}).click();
-          await page.waitForSelector('canvas',{state:'visible',timeout:15000});
-          await page.waitForTimeout(3000);
-          await page.screenshot({path:`${out}/moria-9-16-gameplay.png`});
-          await page.getByRole('button',{name:/Debug/i}).click();
-          await page.getByRole('button',{name:/Game Editor/i}).click();
-          await page.getByRole('button',{name:/Living Realm 9\.16/i}).click();
-          await page.getByText(/THE LIVING REALM/i).first().waitFor({state:'visible',timeout:10000});
-          const shots=[
-            [/Nodes/i,'moria-9-16-living-nodes.png'],
-            [/Factions/i,'moria-9-16-factions.png'],
-            [/Chronicle/i,'moria-9-16-chronicle.png'],
-            [/Grand Craft/i,'moria-9-16-grand-crafting.png'],
-            [/Taming/i,'moria-9-16-taming-breeding.png'],
-          ];
-          for(const [label,file] of shots){
-            await page.getByRole('button',{name:label}).last().click();
-            await page.waitForTimeout(350);
-            await page.screenshot({path:`${out}/${file}`});
-          }
-          fs.writeFileSync(`${out}/browser-console.txt`,consoleLines.join('\n'));
-          fs.writeFileSync(`${out}/browser-errors.txt`,errors.join('\n'));
-          await browser.close();
-          if(errors.length){console.error(errors.join('\n'));process.exit(1)}
-          EOF
-          cd /tmp/moria916-shot && node capture.mjs
-          for f in moria-9-16-gameplay.png moria-9-16-living-nodes.png moria-9-16-factions.png moria-9-16-chronicle.png moria-9-16-grand-crafting.png moria-9-16-taming-breeding.png; do test -s "/tmp/moria916-capture/$f"; done
+          cd /tmp/moria916-shot
+          node capture.mjs
+          test ! -s /tmp/moria916-capture/browser-errors.txt
+
       - name: Version screenshots and release documentation
+        shell: bash
         run: |
-          mkdir -p docs/screenshots
-          cp /tmp/moria916-capture/moria-9-16-*.png docs/screenshots/
-          python3 - <<'PY'
-          from pathlib import Path
-          readme=Path('README.md')
-          s=readme.read_text()
-          s=s.replace("<p><b>Versão atual: Mor'ia 9.10 — Elemental Reactions</b></p>","<p><b>Versão atual: Mor'ia 9.16 — The Living Realm</b></p>")
-          section="""## 🏰 Mor'ia 9.11–9.16 — The Living Realm
+          python3 tools/finalize-moria-9-16-docs.py
 
-A linha **Living Realm** transforma regiões em estruturas persistentes e disputáveis. Os **Living Nodes** evoluem por atividade real do servidor; facções são escolhidas durante a aventura; guerras passam por preparação, cerco, ocupação e recuperação; o **Mor'ia Chronicle** registra fatos do servidor; o **Grand Crafting** cria cadeias produtivas e qualidade de item; e o sistema de **Beast Taming & Breeding** exige criaturas reais próximas e gera animais persistentes com herança de atributos.
-
-Tudo atravessa o `OfficialActionGateway`, snapshots públicos filtrados e o estado persistente oficial. A interface de jogador usa intents do servidor para facção, doações, guerra, crafting e doma; o **Living Realm Director 9.16** oferece uma visão editorial separada sem transferir autoridade ao cliente.
-
-### Gameplay real — Mor'ia 9.16
-
-![Mor'ia 9.16 gameplay](docs/screenshots/moria-9-16-gameplay.png)
-
-### Living Nodes 9.11
-
-![Mor'ia 9.16 Living Nodes](docs/screenshots/moria-9-16-living-nodes.png)
-
-### Factions 9.12
-
-![Mor'ia 9.16 Factions](docs/screenshots/moria-9-16-factions.png)
-
-### Mor'ia Chronicle 9.14
-
-![Mor'ia 9.16 Chronicle](docs/screenshots/moria-9-16-chronicle.png)
-
-### Grand Crafting 9.15
-
-![Mor'ia 9.16 Grand Crafting](docs/screenshots/moria-9-16-grand-crafting.png)
-
-### Beast Taming & Breeding 9.16
-
-![Mor'ia 9.16 Taming and Breeding](docs/screenshots/moria-9-16-taming-breeding.png)
-
-Mais detalhes técnicos: **[Mor'ia 9.11–9.16 — The Living Realm](docs/MORIA_9_11_9_16_LIVING_REALM.md)**.
-
----
-
-"""
-          marker="## ⚡ Mor'ia 9.10 — Elemental Reactions"
-          if "## 🏰 Mor'ia 9.11–9.16 — The Living Realm" not in s:
-              s=s.replace(marker,section+marker)
-          readme.write_text(s)
-          Path('docs/MORIA_9_11_9_16_LIVING_REALM.md').write_text("""# Mor'ia 9.11–9.16 — The Living Realm
-
-## Objetivo
-
-Transformar o mundo em um organismo persistente no qual atividade de jogadores altera desenvolvimento regional, alianças, guerra, memória histórica, economia produtiva e criaturas domesticadas.
-
-## 9.11 — Living Nodes
-
-- Nodes regionais persistentes com XP, treasury, supply, morale e HP.
-- Estágios: Ruins, Camp, Settlement, Village, City, Fortress e Capital.
-- Progressão derivada de ações autoritativas como combate e contribuições.
-- Especializações e controle territorial permanecem data-driven.
-
-## 9.12 — Factions
-
-- Seis facções iniciais com identidade própria.
-- Escolha de facção feita durante gameplay.
-- Reputação/rank persistentes.
-- Defecção com perda de reputação e cooldown político de 24 horas.
-
-## 9.13 — Node Wars
-
-- Fluxo de estado: Peace → Declared/Preparation → Siege → Occupied → Recovery.
-- Declaração, ataque e claim passam pelo gateway autoritativo.
-- Ataques exigem contexto válido do Node e do jogador.
-- Siege Engineering e Battering Ram Kit participam do ecossistema de cerco.
-
-## 9.14 — Mor'ia Chronicle
-
-- Histórico server-side limitado e persistente.
-- Registra guerras, evolução dos Nodes, bosses, crafts excepcionais, política e criaturas relevantes.
-- O snapshot publica somente o histórico destinado ao cliente.
-
-## 9.15 — Grand Crafting
-
-- Cadeia: Gathering → Processing → Components → Master Craft.
-- Qualidade deriva de materiais, skill, dificuldade, estação/Node, controle de facção e variação server-side limitada.
-- Grades: Crude, Common, Fine, Masterwork, Epic e Relic.
-- Reagentes Living Realm foram separados da tabela regional legada para preservar compatibilidade.
-
-## 9.16 — Beast Taming & Breeding
-
-- Doma exige espécie configurada e monstro compatível realmente próximo.
-- Criaturas possuem temperament, strength, speed, endurance, intelligence, loyalty e wildness.
-- Stable persistente com limite de segurança.
-- Breeding herda atributos parentais dentro de limites e pode gerar mutações raras server-side.
-
-## Arquitetura e compatibilidade
-
-- `ContentDB.version` permanece em 3; Living Realm usa marcador aditivo próprio.
-- `OfficialStateSchema` continua compatível com saves anteriores e normaliza os novos campos.
-- Novas ações vivem no `OfficialActionRegistry`, evitando ampliar um handler monolítico.
-- `GameScreen.tsx` permanece abaixo do teto de 155.000 bytes.
-- O cliente envia intents; o servidor continua responsável por regras, proximidade, custos, progressão e persistência.
-
-## Gate 9.16
-
-O gate de produto executa audit de dependências, TypeScript, build Vite, syntax check server-side e toda a suíte Node. O gate visual adicional executa Chromium real, navega pelas superfícies Living Realm e falha em qualquer `console.error` ou `pageerror`.
-""")
-          PY
-          grep -q "moria-9-16-living-nodes.png" README.md
-          grep -q "moria-9-16-factions.png" README.md
-          grep -q "moria-9-16-chronicle.png" README.md
-          grep -q "moria-9-16-grand-crafting.png" README.md
-          grep -q "moria-9-16-taming-breeding.png" README.md
-      - uses: actions/upload-artifact@v4
+      - name: Upload browser review
+        uses: actions/upload-artifact@v4
         with:
           name: moria-9-16-living-realm-visual-review
           path: /tmp/moria916-capture
           retention-days: 7
+
       - name: Commit visual evidence
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
