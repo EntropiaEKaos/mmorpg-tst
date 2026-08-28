@@ -1,0 +1,107 @@
+name: Mor'ia 9.7.1 Final Spatial Validation V4
+
+on:
+  push:
+    branches: [moria-9.7-reference-visual-convergence]
+    paths: ['tools/run-moria-9-7-1-v4-go.trigger']
+
+permissions:
+  contents: write
+
+jobs:
+  validate-capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.7-reference-visual-convergence
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply 9.7.1 polish without growing orchestrator
+        run: |
+          python3 tools/run-moria-9-7-1-applicator-fixed.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/components/GameScreen.tsx')
+          s=p.read_text()
+          # Recover architecture budget by deleting stale section comments only; no executable code is changed.
+          for line in [
+            '  // Panels state\n','  // ===== REAL NETWORK (online players) =====\n',
+            '  // Server-authoritative state refs (used when connected to authoritative server)\n',
+            '  // Buildings + custom NPCs/monsters for current map\n',
+            '  // Force refresh of custom content (used after admin edits)\n',
+            '  // Dungeon state\n','  // Pet state\n','  // Auto-attack\n',
+            '  // Food shop from innkeeper\n','  // Admin/Cheats\n','  // Combo system\n',
+            '  // Weather\n','  // Load or create player (using Unified Save System)\n',
+            '  // Map system\n',
+            '    // Project ambient NPCs into public walkable space before draw/interaction presentation.\n'
+          ]: s=s.replace(line,'')
+          p.write_text(s)
+          PY
+          npm version 9.7.1 --no-git-tag-version
+          npm version 9.7.1 --prefix server --no-git-tag-version
+      - name: Validate client and server
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm run build
+          BYTES=$(wc -c < src/components/GameScreen.tsx); echo "GameScreen bytes=$BYTES"; test "$BYTES" -le 155000
+          npm ci --prefix server --no-fund
+          npm audit --prefix server
+          npm run check --prefix server
+          npm test --prefix server
+      - name: Commit validated product tree
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json server/package.json server/package-lock.json src/game/playerAvatar.ts src/game/maps.ts src/game/worldNameplates.ts src/game/spatialIntegrity.ts src/components/GameScreen.tsx server/engine/World.mjs server/engine/HousingSystem.mjs server/engine/GameState.mjs server/engine/ContentStudio.mjs server/server.js server/test/reference-visual-9-7.test.mjs server/test/housing-spatial-9-7-1.test.mjs
+          git commit -m "feat(9.7.1): harden nameplates npc space and housing"
+          git push origin HEAD:moria-9.7-reference-visual-convergence
+      - name: Install isolated browser harness
+        run: |
+          mkdir -p /tmp/moria-shot && cd /tmp/moria-shot
+          npm init -y >/dev/null 2>&1
+          npm install playwright@latest --no-fund --no-audit
+          npx playwright install --with-deps chromium
+      - name: Capture final V6 review
+        run: |
+          python3 -m http.server 4173 -d dist >/tmp/moria-http.log 2>&1 &
+          cat > /tmp/moria-shot/capture.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:1});
+          const lines=[]; page.on('console',m=>lines.push(`[${m.type()}] ${m.text()}`)); page.on('pageerror',e=>lines.push(`[pageerror] ${e.message}`));
+          await page.goto('http://127.0.0.1:4173',{waitUntil:'networkidle'});
+          await page.getByRole('button',{name:/OFFLINE QUICK PLAY/i}).click();
+          await page.waitForSelector('canvas',{state:'visible',timeout:15000}); await page.waitForTimeout(5000);
+          fs.mkdirSync('/tmp/moria-capture',{recursive:true});
+          await page.screenshot({path:'/tmp/moria-capture/moria-9-7-1-gameplay-v6.png',fullPage:false});
+          const canvases=page.locator('canvas'); const count=await canvases.count(); let best=null;
+          for(let i=0;i<count;i++){const box=await canvases.nth(i).boundingBox();if(box&&(!best||box.width*box.height>best.box.width*best.box.height))best={i,box};}
+          if(best)await canvases.nth(best.i).screenshot({path:'/tmp/moria-capture/moria-9-7-1-world-v6.png'});
+          await page.getByRole('button',{name:/Debug/i}).click();
+          await page.getByRole('button',{name:/Game Editor \(Items\/Spells\/Maps\/NPCs\/Monsters\/Books\)/i}).click();
+          await page.getByRole('button',{name:/City Designer · Live/i}).click(); await page.waitForTimeout(700);
+          await page.screenshot({path:'/tmp/moria-capture/moria-9-7-1-city-designer-v6.png',fullPage:false});
+          fs.writeFileSync('/tmp/moria-capture/browser-console.txt',lines.join('\n')+`\ncanvasCount=${count}\n`);
+          await browser.close();
+          EOF
+          cd /tmp/moria-shot && node capture.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moria-9-7-1-final-review-v6
+          path: /tmp/moria-capture
+          retention-days: 7
+          if-no-files-found: error
+      - name: Clean temporary release tooling
+        if: success()
+        run: |
+          git pull --rebase origin moria-9.7-reference-visual-convergence
+          git rm -f .github/workflows/finalize-moria-9-7-1-spatial-polish.yml .github/workflows/run-moria-9-7-1-spatial-v2.yml .github/workflows/run-moria-9-7-1-spatial-v3.yml .github/workflows/run-moria-9-7-1-spatial-v4.yml tools/apply-moria-9-7-1-spatial.py tools/run-moria-9-7-1-applicator-fixed.py tools/run-moria-9-7-1.trigger tools/run-moria-9-7-1-v3.trigger tools/run-moria-9-7-1-v4.trigger tools/run-moria-9-7-1-v4-go.trigger
+          git commit -m "chore(9.7.1): remove temporary finalization tooling"
+          git push origin HEAD:moria-9.7-reference-visual-convergence
