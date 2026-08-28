@@ -230,7 +230,7 @@ export class OfficialSystems {
   }
 
   buyAuction(player, listingId, findOnlinePlayer = null) {
-    return officialCommerceDomain.buyAuction(this, player, listingId, findOnlinePlayer);
+    const listing=this.global.auctions.find(a=>a.id===listingId);const result=officialCommerceDomain.buyAuction(this, player, listingId, findOnlinePlayer);if(result&&listing)roadToTenDomain.recordTrade(this,player,listing.price,'buy','auction');return result;
   }
 
   cancelAuction(player, listingId) {
@@ -254,7 +254,7 @@ export class OfficialSystems {
   }
 
   pvpAttack(player, target, getDerivedStats = null) {
-    return officialPvpDomain.attack(this, player, target, getDerivedStats);
+    const result=officialPvpDomain.attack(this, player, target, getDerivedStats);if(result?.killed)result.bounty=roadToTenDomain.claimBounties(this,player,target);return result;
   }
 
   publicPvp(player) {
@@ -271,7 +271,7 @@ export class OfficialSystems {
   attackNode(player,nodeId){ return livingRealmDomain.attackNode(this,player,nodeId); }
   claimNode(player,nodeId){ return livingRealmDomain.claimNeutralNode(this,player,nodeId); }
   advancedCraft(player,recipeId){ const result=livingRealmDomain.advancedCraft(this,player,recipeId); roadToTenDomain.onCraft(this,player,result,recipeId); return result; }
-  tameAnimal(player,speciesId,nearbyMonsters=[]){ return livingRealmDomain.tame(this,player,speciesId,nearbyMonsters); }
+  tameAnimal(player,speciesId,nearbyMonsters=[]){ const result=livingRealmDomain.tame(this,player,speciesId,nearbyMonsters);if(result?.ok)roadToTenDomain.progressFactionProgram(this,player,'taming',1);return result; }
   breedAnimals(player,parentAId,parentBId){ return livingRealmDomain.breed(this,player,parentAId,parentBId); }
   activateTamedAnimal(player,animalId){ return livingRealmDomain.activateAnimal(this,player,animalId); }
   livingRealmMonsterKill(player,monster){ const living=livingRealmDomain.onMonsterKill(this,player,monster); roadToTenDomain.onMonsterKill(this,player,monster); return living; }
@@ -295,6 +295,9 @@ export class OfficialSystems {
   useSiegeAsset(player,nodeId,builtAssetId){ return roadToTenDomain.useSiegeAsset(this,player,nodeId,builtAssetId); }
   startDungeonBlueprint(player,blueprintId){ return roadToTenDomain.startDungeonBlueprint(this,player,blueprintId); }
   chooseDungeonPath(player,path){ return roadToTenDomain.chooseDungeonPath(this,player,path); }
+  solveDungeonPuzzleStep(player,runeIndex){ return roadToTenDomain.solveDungeonPuzzleStep(this,player,runeIndex); }
+  isRoadDungeonPuzzlePending(player){ return roadToTenDomain.isDungeonPuzzlePending(this,player); }
+  getRoadDungeonPresentation(player){ return roadToTenDomain.dungeonPresentation(this,player); }
   applyQuestConsequence(player,consequenceId){ return roadToTenDomain.applyQuestConsequence(this,player,consequenceId); }
   buyHousingUpgrade(player,upgradeId,ownedHouseId=null){ return roadToTenDomain.buyHousingUpgrade(this,player,upgradeId,ownedHouseId); }
 

@@ -37,6 +37,7 @@ const ACTIONS = Object.freeze({
   siege_use: { run:(systems,player,payload)=>detailWithOk(systems.useSiegeAsset(player,payload.nodeId,payload.builtAssetId)) },
   dungeon_blueprint_start: { run:(systems,player,payload,ctx)=>{const result=systems.startDungeonBlueprint(player,payload.blueprintId);if(result?.ok)ctx.startDungeon?.(result.dungeon||result);return detailWithOk(result);} },
   dungeon_path: { run:(systems,player,payload)=>detailWithOk(systems.chooseDungeonPath(player,payload.path)) },
+  dungeon_puzzle: { run:(systems,player,payload,ctx)=>{const result=systems.solveDungeonPuzzleStep(player,payload.runeIndex);if(result?.ok&&result.solved)ctx.startDungeon?.();return detailWithOk(result);} },
   quest_consequence: { run:(systems,player,payload)=>detailWithOk(systems.applyQuestConsequence(player,payload.consequenceId)) },
   housing_upgrade: { run:(systems,player,payload,ctx)=>detailWithOk(systems.buyHousingUpgrade(player,payload.upgradeId,ctx.ownedHouseId||null)) },
   pet_buy: {

@@ -1140,6 +1140,8 @@ class GameEngine {
     if (!map) return false;
     this.clearOfficialDungeon(player);
     const wave = officialSystems.getDungeonWave(state.wave, player.level);
+    const roadDungeon = officialSystems.getRoadDungeonPresentation?.(player);
+    const finalBlueprintBoss = Boolean(wave.boss && roadDungeon?.boss);
     const monsters = this.monstersByMap.get(player.mapId) || [];
     const occupied = new Set(monsters.filter(m => !m.dead).map(m => `${m.x},${m.y}`));
     occupied.add(`${player.x},${player.y}`);
@@ -1155,7 +1157,7 @@ class GameEngine {
       occupied.add(`${pos.x},${pos.y}`);
       spawned.push({
         id: `${state.runId}_${state.wave}_${index}`, dungeonOwnerId: player.id, dungeonRunId: state.runId, noRespawn: true,
-        name: wave.name, emoji: wave.emoji, color: wave.color, x: pos.x, y: pos.y, spawnX: pos.x, spawnY: pos.y,
+        name: finalBlueprintBoss ? roadDungeon.boss : wave.name, emoji: finalBlueprintBoss ? (roadDungeon.icon || wave.emoji) : wave.emoji, color: wave.color, x: pos.x, y: pos.y, spawnX: pos.x, spawnY: pos.y,
         hp: wave.hp, maxHp: wave.hp, attack: wave.attack, defense: wave.defense, xp: wave.xp,
         level: Math.max(1, player.level + state.wave - 1), size: wave.boss ? 1.6 : 1, type: wave.boss ? 'boss' : state.wave >= 7 ? 'elite' : 'normal',
         dead: false, respawnAt: 0, lastMove: 0, lastAttack: 0, speed: 900,
