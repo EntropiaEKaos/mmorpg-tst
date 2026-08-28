@@ -34,7 +34,7 @@ game = replace_once(game,
     'compact world label import')
 game = replace_once(game,
     "    const worldLabelRequests: WorldLabelRequest[] = [];\n\n    // NPCs",
-    "    const worldLabels = createWorldLabelQueue(p.pos, p.targetId);\n\n    // NPCs",
+    "    const worldLabels=createWorldLabelQueue(p.pos,p.targetId);\n    // NPCs",
     'compact queue')
 game = replace_once(game,
     "      worldLabelRequests.push({ kind: 'npc', x: sx, y: sy, size: TILE_SIZE, distance: Math.hypot(n.pos.x - p.pos.x, n.pos.y - p.pos.y), entity: { name: n.name, role: n.role } });",
@@ -46,7 +46,7 @@ game = replace_once(game,
     'compact monster request')
 game = replace_once(game,
     "    // Nameplates are UI-over-world: draw after depth and atmosphere so labels remain\n    // readable, then globally resolve priority/collisions instead of overlapping blindly.\n    drawWorldNameplates(ctx, worldLabelRequests, MAPS[currentMapIdRef.current] || MAPS.eldoria);",
-    "    worldLabels.draw(ctx, MAPS[currentMapIdRef.current] || MAPS.eldoria);",
+    "    worldLabels.draw(ctx, MAPS[currentMapIdRef.current]||MAPS.eldoria);",
     'compact draw')
 write('src/components/GameScreen.tsx', game)
 
@@ -63,7 +63,7 @@ write('server/adminPanel.mjs', admin)
 test = read('server/test/reference-visual-9-7.test.mjs')
 test = replace_once(test,
     "  assert.match(screen, /drawWorldNameplates\\(ctx, worldLabelRequests/);",
-    "  assert.match(screen, /createWorldLabelQueue\\(p\\.pos, p\\.targetId\\)/);",
+    "  assert.match(screen, /createWorldLabelQueue\\(p\\.pos,p\\.targetId\\)/);",
     'world label regression assertion')
 write('server/test/reference-visual-9-7.test.mjs', test)
 
