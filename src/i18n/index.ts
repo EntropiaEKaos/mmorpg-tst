@@ -244,6 +244,10 @@ export function setLocale(locale: MoriaLocale) {
   window.location.reload();
 }
 
+function escapeRegExp(source: string) {
+  return source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function preserveWhitespace(source: string, translated: string) {
   const lead = source.match(/^\s*/)?.[0] || '';
   const tail = source.match(/\s*$/)?.[0] || '';
@@ -261,7 +265,13 @@ export function translateGameText(value: unknown, locale: MoriaLocale = getLocal
     if (pattern.test(core)) return preserveWhitespace(source, core.replace(pattern, replacement));
   }
   let translated = core;
-  for (const [from,to] of PT_BR_FRAGMENTS) translated = translated.split(from).join(to);
+  for (const [from,to] of PT_BR_FRAGMENTS) {
+    if (/^[A-Za-z0-9_]+$/.test(from)) {
+      translated = translated.replace(new RegExp(`\\b${escapeRegExp(from)}\\b`, 'g'), to);
+    } else {
+      translated = translated.split(from).join(to);
+    }
+  }
   for (const [pattern,replacement] of WORDS) translated = translated.replace(pattern,replacement);
   return preserveWhitespace(source, translated);
 }

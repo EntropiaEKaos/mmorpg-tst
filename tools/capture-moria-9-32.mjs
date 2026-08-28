@@ -14,7 +14,7 @@ for (const panel of ['library', 'mail', 'social']) {
   const forbiddenByPanel = {
     library: ['LIBRARY', 'Back to library', 'Previous', 'Next'],
     mail: ['MAILBOX', 'Compose', 'Refresh', 'Back to inbox', 'Claim Attachments'],
-    social: ["AUTHORITATIVE SOCIAL", "MOR'IA SOCIAL HALL", 'FRIENDS', 'NEARBY ADVENTURERS', 'IGNORED', 'Nobody ignored.'],
+    social: ["AUTHORITATIVE SOCIAL", "MOR'IA SOCIAL HALL", 'FRIENDS', 'NEARBY ADVENTURERS', 'IGNORED', 'Nobody ignored.', 'Guildaa', 'eldoria'],
   };
   const leaks = forbiddenByPanel[panel].filter((label) => bodyText.includes(label));
   if (leaks.length) {

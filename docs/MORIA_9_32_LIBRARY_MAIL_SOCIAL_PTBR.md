@@ -59,3 +59,17 @@ O gate visual da 9.32.1 foi mantido e deliberadamente não foi enfraquecido. Ele
 Também foi corrigido o assunto exibido na lista de correio, que ainda renderizava `m.subject` sem passar pelo catálogo. O objetivo é que cada painel seja corretamente localizado mesmo quando renderizado isoladamente em testes, Storybook futuro ou QA visual.
 
 A captura continua falhando se os marcadores ingleses críticos reaparecerem. Portanto, screenshots e localização agora fazem parte do critério de aceite da versão, não apenas da documentação.
+
+
+## 9.32.3 — Idempotência da tradução
+
+A revisão humana dos PNGs 9.32.2 detectou `Guildaaa` no Salão Social. A causa não estava no componente Social, mas no fallback global: fragmentos de uma palavra eram substituídos por `split/join`, fazendo `Guild` casar novamente dentro de `Guilda`.
+
+O motor de localização agora aplica limites de palavra aos fragmentos alfanuméricos de uma palavra. Isso torna traduções como `Guild → Guilda` idempotentes e evita corrupção progressiva quando o `LocaleBridge`, Strict Mode ou uma nova renderização processam texto já localizado.
+
+A mesma rodada:
+
+- corrige singular/plural do contador do Correio (`1 não lida · 1 mensagem`);
+- apresenta IDs de regiões com capitalização canônica em superfícies sociais;
+- faz o visual QA reprovar `Guildaa` e o ID cru `eldoria`;
+- mantém os três prints como critério obrigatório de aceite.

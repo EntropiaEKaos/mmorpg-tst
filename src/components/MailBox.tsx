@@ -53,7 +53,7 @@ export default function MailBox({ player, inventory, setInventory, onClose, addM
                 style={{ backgroundImage: 'linear-gradient(180deg, #f4e04d 0%, #8b6914 100%)' }}>
               📮 {tr('MAILBOX')}
             </h2>
-            <div className="text-xs text-amber-200/60">{unreadCount} {tr('unread')} · {mail.length} {tr('total')}</div>
+            <div className="text-xs text-amber-200/60">{unreadCount} {tr(unreadCount === 1 ? 'unread message' : 'unread messages')} · {mail.length} {tr(mail.length === 1 ? 'message' : 'messages')}</div>
           </div>
           <button onClick={onClose} className="text-amber-200/60 hover:text-amber-100 text-2xl" aria-label={tr('Close mailbox')}>✕</button>
         </div>
