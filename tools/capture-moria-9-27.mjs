@@ -12,7 +12,6 @@ try{
   await page.getByRole('button',{name:/OFFLINE QUICK PLAY/i}).click();
   await page.locator('canvas.moria-world-canvas').waitFor({state:'visible'});
   await page.waitForTimeout(900);
-
   await page.screenshot({path:'docs/screenshots/moria-9-33-visual-rebirth-day.png',fullPage:true,animations:'disabled'});
 
   await page.locator('button[title*="Offline Debug Admin"]').click();
@@ -22,14 +21,11 @@ try{
   await page.waitForTimeout(450);
   await page.screenshot({path:'docs/screenshots/moria-9-33-visual-rebirth-night.png',fullPage:true,animations:'disabled'});
 
-  await page.getByRole('button',{name:/Char/i}).click();
+  await page.keyboard.press('c');
   await page.waitForTimeout(250);
   await page.screenshot({path:'docs/screenshots/moria-9-33-visual-rebirth-character-ui.png',fullPage:true,animations:'disabled'});
 
   fs.writeFileSync('tmp/moria-9-33-review/browser-console.txt',errors.join('\n'));
-  fs.writeFileSync('tmp/moria-9-33-review/manifest.json',JSON.stringify({
-    capturedAt:new Date().toISOString(),viewport:{width:1600,height:1000},consoleErrors:errors.length,
-    screenshots:['moria-9-33-visual-rebirth-day.png','moria-9-33-visual-rebirth-night.png','moria-9-33-visual-rebirth-character-ui.png']
-  },null,2));
+  fs.writeFileSync('tmp/moria-9-33-review/manifest.json',JSON.stringify({capturedAt:new Date().toISOString(),viewport:{width:1600,height:1000},consoleErrors:errors.length,screenshots:['moria-9-33-visual-rebirth-day.png','moria-9-33-visual-rebirth-night.png','moria-9-33-visual-rebirth-character-ui.png']},null,2));
   if(errors.length) throw new Error(errors.join('\n'));
 }finally{await browser.close();}
