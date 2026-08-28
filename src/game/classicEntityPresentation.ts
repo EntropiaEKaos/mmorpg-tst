@@ -1,5 +1,5 @@
 // Mor'ia 9.27 — Visual Revolution entity presentation.
-// Original pixel-first silhouettes; no third-party game assets are used.
+// Preserves classic grid MMORPG readability with original pixel-first silhouettes; no third-party game assets are used.
 
 import { drawPixelHuman, type AvatarColors } from './playerAvatar';
 
