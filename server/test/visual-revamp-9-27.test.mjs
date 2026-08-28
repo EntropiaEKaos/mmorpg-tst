@@ -26,8 +26,14 @@ test('9.27 CSS includes cinematic canvas and respects reduced motion', () => {
   assert.match(css, /prefers-reduced-motion: no-preference/);
 });
 
-
 test('9.27 second pass preserves architecture contracts while extracting richer VFX', () => {
-  const render=read('src/game/render.ts'),game=read('src/components/GameScreen.tsx'),avatar=read('src/game/playerAvatar.ts'),vfx=read('src/game/combatVfx927.ts');
-  assert.match(render,/worldX = 0, worldY = 0, time = 0/); assert.match(game,/TILE_SIZE,tx,ty,now/); assert.match(avatar,/PIXEL_SPRITE_SCALE = 1\.30/); assert.match(avatar,/size \* 1\.08/); assert.match(vfx,/globalCompositeOperation='lighter'/);
+  const render = read('src/game/render.ts');
+  const game = read('src/components/GameScreen.tsx');
+  const avatar = read('src/game/playerAvatar.ts');
+  const vfx = read('src/game/combatVfx927.ts');
+  assert.match(render, /worldX = 0, worldY = 0, time = 0/);
+  assert.match(game, /TILE_SIZE,tx,ty,now/);
+  assert.match(avatar, /PIXEL_SPRITE_SCALE = 1\.30/);
+  assert.match(avatar, /size \* 1\.08/);
+  assert.match(vfx, /globalCompositeOperation\s*=\s*'lighter'/);
 });
