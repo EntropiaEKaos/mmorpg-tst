@@ -38,15 +38,15 @@ game = replace_once(game,
     'compact queue')
 game = replace_once(game,
     "      worldLabelRequests.push({ kind: 'npc', x: sx, y: sy, size: TILE_SIZE, distance: Math.hypot(n.pos.x - p.pos.x, n.pos.y - p.pos.y), entity: { name: n.name, role: n.role } });",
-    "      worldLabels.npc(n, sx, sy, TILE_SIZE);",
+    "      worldLabels.npc(n,sx,sy,TILE_SIZE);",
     'compact npc request')
 game = replace_once(game,
     "      worldLabelRequests.push({ kind: 'monster', x: sx, y: sy, size: TILE_SIZE, distance: Math.hypot(mx - p.pos.x, my - p.pos.y), targeted: p.targetId === m.id, entity: { name: m.name, hp: m.hp, maxHp: m.maxHp, level: m.level, type: m.type } });",
-    "      worldLabels.monster(m, mx, my, sx, sy, TILE_SIZE);",
+    "      worldLabels.monster(m,mx,my,sx,sy,TILE_SIZE);",
     'compact monster request')
 game = replace_once(game,
     "    // Nameplates are UI-over-world: draw after depth and atmosphere so labels remain\n    // readable, then globally resolve priority/collisions instead of overlapping blindly.\n    drawWorldNameplates(ctx, worldLabelRequests, MAPS[currentMapIdRef.current] || MAPS.eldoria);",
-    "    worldLabels.draw(ctx, MAPS[currentMapIdRef.current]||MAPS.eldoria);",
+    "    worldLabels.draw(ctx,MAPS[currentMapIdRef.current]||MAPS.eldoria);",
     'compact draw')
 write('src/components/GameScreen.tsx', game)
 
