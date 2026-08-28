@@ -46,6 +46,7 @@ if new_bus not in text:
     if old_bus not in text:
         raise SystemExit('Tooltip singleton bus anchor not found')
     text = text.replace(old_bus, new_bus, 1)
+
 old_effect = """  useEffect(() => {
     tooltipListeners.push(setData);
     return () => {
@@ -68,6 +69,7 @@ if new_effect not in text:
     if old_effect not in text:
         raise SystemExit('Tooltip renderer effect anchor not found')
     text = text.replace(old_effect, new_effect, 1)
+
 old_enter = """  const handleEnter = useCallback(() => {
     if (disabled) return;
     timerRef.current = setTimeout(() => {
@@ -81,21 +83,63 @@ if new_enter not in text:
     if old_enter not in text:
         raise SystemExit('Tooltip enter anchor not found')
     text = text.replace(old_enter, new_enter, 1)
+
+leave_anchor = """  const handleLeave = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    hideGlobalTooltip();
+  }, []);
+
+"""
+native_effect = """  const handleLeave = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    hideGlobalTooltip();
+  }, []);
+
+  // Native wrapper listeners deliberately use focusin/focusout because focus is
+  // owned by child controls. This is robust for mouse, pen, keyboard, HMR and
+  // isolated visual-QA entrypoints without changing any gameplay authority.
+  useEffect(() => {
+    const node = triggerRef.current;
+    if (!node) return;
+    node.addEventListener('pointerenter', handleEnter);
+    node.addEventListener('pointerleave', handleLeave);
+    node.addEventListener('focusin', handleEnter);
+    node.addEventListener('focusout', handleLeave);
+    return () => {
+      node.removeEventListener('pointerenter', handleEnter);
+      node.removeEventListener('pointerleave', handleLeave);
+      node.removeEventListener('focusin', handleEnter);
+      node.removeEventListener('focusout', handleLeave);
+    };
+  }, [handleEnter, handleLeave]);
+
+"""
+if native_effect not in text:
+    if leave_anchor not in text:
+        raise SystemExit('Tooltip native listener anchor not found')
+    text = text.replace(leave_anchor, native_effect, 1)
+
 old_events = """      onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
       className=\"inline-flex\"
 """
-new_events = """      onPointerEnter={handleEnter}
+old_events_2 = """      onPointerEnter={handleEnter}
       onPointerLeave={handleLeave}
       onFocusCapture={handleEnter}
       onBlurCapture={handleLeave}
       data-tooltip-trigger=\"true\"
       className=\"inline-flex\"
 """
+new_events = """      data-tooltip-trigger=\"true\"
+      className=\"inline-flex\"
+"""
 if new_events not in text:
-    if old_events not in text:
+    if old_events in text:
+        text = text.replace(old_events, new_events, 1)
+    elif old_events_2 in text:
+        text = text.replace(old_events_2, new_events, 1)
+    else:
         raise SystemExit('Tooltip event anchor not found')
-    text = text.replace(old_events, new_events, 1)
 tooltip.write_text(text, encoding='utf-8')
 
 capture = Path('tools/capture-moria-9-34.mjs')
@@ -124,12 +168,22 @@ new_action = """  if (panel === 'actionbar') {
     const triggerClass = await tooltipTrigger.getAttribute('class');
     const triggerQa = await tooltipTrigger.getAttribute('data-tooltip-trigger');
     if (!triggerClass?.includes('inline-flex') || triggerQa !== 'true') throw new Error(`Mor'ia 9.34 tooltip trigger wrapper not found: ${triggerClass} / ${triggerQa}`);
-    if (await spellSlot.isDisabled()) throw new Error("Mor'ia 9.34 spell proof slot is unexpectedly disabled");
+    if (await spellSlot.isDisabled()) throw new Error(\"Mor'ia 9.34 spell proof slot is unexpectedly disabled\");
+    await page.evaluate(() => {
+      window.__moriaTooltipShowCount = 0;
+      window.addEventListener('moria-tooltip-show', () => { window.__moriaTooltipShowCount += 1; }, { once: false });
+    });
     await spellSlot.focus();
     const focused = await spellSlot.evaluate((node) => node === document.activeElement);
-    if (!focused) throw new Error("Mor'ia 9.34 spell proof slot did not receive focus");
+    if (!focused) throw new Error(\"Mor'ia 9.34 spell proof slot did not receive focus\");
+    await page.waitForTimeout(260);
+    const diagnostics = await page.evaluate(() => ({
+      showCount: window.__moriaTooltipShowCount || 0,
+      activeClass: document.activeElement?.getAttribute?.('class') || '',
+      rootExists: Boolean(document.getElementById('__global_tooltip_root__')),
+    }));
+    if (diagnostics.showCount < 1) throw new Error(`Mor'ia 9.34 tooltip trigger did not dispatch: ${JSON.stringify(diagnostics)}`);
     await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });
-    await page.waitForTimeout(180);
     const tooltipText = await page.locator('#__global_tooltip_root__').innerText();
     for (const required of ['Fúria', 'Atalho:', 'Custo de Mana:', 'Recarga:', 'Combos reativos']) {
       if (!tooltipText.includes(required)) throw new Error(`Mor'ia 9.34 Action Bar tooltip missing ${required}: ${tooltipText}`);
@@ -138,41 +192,63 @@ new_action = """  if (panel === 'actionbar') {
 """
 if new_action not in text:
     if old_action not in text:
-        raise SystemExit('capture Action Bar anchor not found')
-    text = text.replace(old_action, new_action, 1)
+        # Preserve already-hardened capture code from previous reruns, but add diagnostics if absent.
+        marker = "    await spellSlot.focus();\n"
+        diagnostic_block = """    await page.evaluate(() => {
+      window.__moriaTooltipShowCount = 0;
+      window.addEventListener('moria-tooltip-show', () => { window.__moriaTooltipShowCount += 1; }, { once: false });
+    });
+    await spellSlot.focus();
+"""
+        if diagnostic_block not in text:
+            if marker not in text:
+                raise SystemExit('capture Action Bar hardened anchor not found')
+            text = text.replace(marker, diagnostic_block, 1)
+        wait_marker = "    await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });\n"
+        diagnostic_wait = """    await page.waitForTimeout(260);
+    const diagnostics = await page.evaluate(() => ({
+      showCount: window.__moriaTooltipShowCount || 0,
+      activeClass: document.activeElement?.getAttribute?.('class') || '',
+      rootExists: Boolean(document.getElementById('__global_tooltip_root__')),
+    }));
+    if (diagnostics.showCount < 1) throw new Error(`Mor'ia 9.34 tooltip trigger did not dispatch: ${JSON.stringify(diagnostics)}`);
+    await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });
+"""
+        if diagnostic_wait not in text:
+            if wait_marker not in text:
+                raise SystemExit('capture tooltip wait anchor not found')
+            text = text.replace(wait_marker, diagnostic_wait, 1)
+    else:
+        text = text.replace(old_action, new_action, 1)
 capture.write_text(text, encoding='utf-8')
 
 Path('docs/MORIA_9_34_1_VISUAL_PROOF.md').write_text("""# Mor'ia 9.34.1 — Visual Proof Hardening
 
 ## Motivo
 
-A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate textual não detectou:
-
-1. a Árvore de Talentos ainda exibia `You have` em inglês;
-2. `actionbar.png` podia ser aceito mesmo com a barra fora do enquadramento visível.
-
-Durante o endurecimento do gate, a automação confirmou que o slot estava habilitado e recebia foco, mas o antigo barramento singleton não entregava o estado ao renderer no entrypoint isolado de QA. Isso revelou acoplamento desnecessário à identidade da instância do módulo.
+A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate textual não detectou: a Árvore de Talentos ainda exibia `You have` em inglês e `actionbar.png` podia ser aceito mesmo com a barra fora do enquadramento. O endurecimento posterior confirmou que o slot estava habilitado e recebia foco, isolando a fragilidade na ativação do tooltip sob o entrypoint de QA.
 
 ## Correções
 
 - adiciona `You have -> Você tem` ao catálogo PT-BR;
 - fixa uma posição determinística da Action Bar apenas no `visual-qa.html`;
-- o capturador exige que a janela `action-bar` tenha dimensões reais e esteja completamente dentro da viewport 1440x1000;
-- o capturador valida o título `Barra de Ações` sem depender da capitalização visual aplicada pelo CSS;
-- substitui o array singleton de listeners por um barramento de eventos do navegador (`moria-tooltip-show` / `moria-tooltip-hide`), reduzindo fragilidade com HMR, chunks e entrypoints isolados sem alterar dados de jogo;
-- o Tooltip real usa `pointerenter/pointerleave` e `focus/blur` em fase de captura, garantindo a ativação quando o foco está no botão filho e melhorando suporte a teclado/pen;
-- agendamentos de tooltip anteriores são cancelados antes de um novo timer, evitando timers concorrentes;
-- wrappers reais recebem `data-tooltip-trigger=\"true\"` para QA estrutural sem alterar regras de jogo;
-- a prova visual confirma que o slot está habilitado, recebe foco real, aguarda o portal visível e exige: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
-- adiciona `You have` à lista de vazamentos proibidos do print de Talentos.
+- exige geometria real e enquadramento completo da Action Bar em 1440x1000;
+- valida o título em PT-BR sem depender da capitalização CSS;
+- substitui o singleton de listeners por eventos do navegador (`moria-tooltip-show` / `moria-tooltip-hide`);
+- o trigger real usa listeners nativos `pointerenter/pointerleave` e `focusin/focusout` no wrapper, incluindo foco de controles filhos;
+- cancela timers concorrentes antes de agendar nova abertura;
+- mantém `data-tooltip-trigger=\"true\"` como contrato estrutural de QA;
+- a captura prova que o slot está habilitado, recebe foco, dispara o evento real e abre o portal real;
+- o tooltip deve conter `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
+- `You have` passa a ser vazamento proibido no print de Talentos.
 
 ## Escopo
 
-Nenhuma regra de combate, cooldown, dano, progressão, talento, item ou autoridade do servidor é alterada. A mudança é de apresentação, acessibilidade de interação e robustez da infraestrutura de tooltip/QA.
+Nenhuma regra de combate, cooldown, dano, progressão, talento, item ou autoridade do servidor é alterada. A mudança é exclusivamente de apresentação, acessibilidade de interação e robustez da infraestrutura de tooltip/QA.
 
 ## Gate
 
-A 9.34.1 só pode ser considerada aprovada com auditoria PT-BR, typecheck/build, auditoria de dependências, testes do servidor e quatro PNGs não vazios, seguidos de inspeção humana.
+A 9.34.1 só pode ser aprovada com auditoria PT-BR, typecheck/build, auditoria de dependências, 323 testes do servidor e quatro PNGs não vazios, seguidos de inspeção humana.
 """, encoding='utf-8')
 
 print("Mor'ia 9.34.1 visual proof hardening prepared")
