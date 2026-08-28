@@ -14,7 +14,7 @@ const openAdmin = async () => {
   await page.getByText('ADMIN PANEL', { exact: false }).waitFor({ state: 'visible' });
 };
 const closeAdmin = async () => {
-  await page.getByRole('button', { name: '✕' }).click();
+  await page.getByRole('button', { name: '✕', exact: true }).click();
   await page.getByText('ADMIN PANEL', { exact: false }).waitFor({ state: 'hidden' });
   await page.waitForTimeout(350);
 };
@@ -27,27 +27,27 @@ await page.waitForTimeout(900);
 
 // Deterministic presentation review through the existing offline-only admin controls.
 await openAdmin();
-await page.getByRole('button', { name: /Day/ }).click();
-await page.getByRole('button', { name: /Clear/ }).click();
+await page.getByRole('button', { name: '☀ Day', exact: true }).click();
+await page.getByRole('button', { name: '☀ Clear', exact: true }).click();
 await closeAdmin();
 await shot('moria-9-27-world-day.png');
 
 await openAdmin();
-await page.getByRole('button', { name: /Night/ }).click();
-await page.getByRole('button', { name: /Clear/ }).click();
+await page.getByRole('button', { name: '🌙 Night', exact: true }).click();
+await page.getByRole('button', { name: '☀ Clear', exact: true }).click();
 await closeAdmin();
 await shot('moria-9-27-world-night.png');
 
 await openAdmin();
-await page.getByRole('button', { name: /Day/ }).click();
-await page.getByRole('button', { name: /Storm/ }).click();
+await page.getByRole('button', { name: '☀ Day', exact: true }).click();
+await page.getByRole('button', { name: '⛈ Storm', exact: true }).click();
 await closeAdmin();
 await page.waitForTimeout(700);
 await shot('moria-9-27-world-storm.png');
 
 await openAdmin();
-await page.getByRole('button', { name: /Day/ }).click();
-await page.getByRole('button', { name: /Clear/ }).click();
+await page.getByRole('button', { name: '☀ Day', exact: true }).click();
+await page.getByRole('button', { name: '☀ Clear', exact: true }).click();
 await closeAdmin();
 await page.keyboard.press('i');
 await page.waitForTimeout(350);
