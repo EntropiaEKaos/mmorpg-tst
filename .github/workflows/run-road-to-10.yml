@@ -26,6 +26,8 @@ jobs:
         run: python tools/apply-road-to-10-integration.py
       - name: Close Road to 10 runtime loops
         run: python tools/harden-road-to-10-runtime.py
+      - name: Apply 9.26.1 pre-10 closure
+        run: python tools/close-road-to-10-pre10.py
       - name: Install client
         run: npm ci
       - name: Audit client
@@ -54,7 +56,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add server/engine/ContentDB.mjs server/engine/ContentStudio.mjs server/engine/OfficialStateSchema.mjs server/engine/OfficialSystems.mjs server/engine/OfficialInventoryEconomyDomain.mjs server/engine/OfficialActionRegistry.mjs server/engine/OfficialSnapshotReadModel.mjs server/engine/GameState.mjs server/engine/LivingRealmDomain.mjs server/engine/RoadToTenDomain.mjs server/test/official-action-registry.test.mjs server/test/official-state-schema.test.mjs server/test/official-systems.test.mjs server/test/road-to-ten-9-17-26.test.mjs src/components/GameEditor.tsx src/components/CharacterPanel.tsx package.json package-lock.json server/package.json server/package-lock.json
+          git add server/engine/ContentDB.mjs server/engine/ContentStudio.mjs server/engine/OfficialStateSchema.mjs server/engine/OfficialSystems.mjs server/engine/OfficialInventoryEconomyDomain.mjs server/engine/OfficialActionRegistry.mjs server/engine/OfficialSnapshotReadModel.mjs server/engine/OfficialDungeonDomain.mjs server/engine/GameState.mjs server/engine/LivingRealmDomain.mjs server/engine/RoadToTenDomain.mjs server/test/official-action-registry.test.mjs server/test/official-state-schema.test.mjs server/test/official-systems.test.mjs server/test/road-to-ten-9-17-26.test.mjs src/components/GameEditor.tsx src/components/CharacterPanel.tsx src/components/RoadToTenPlayerPanel926.tsx package.json package-lock.json server/package.json server/package-lock.json
           if git diff --cached --quiet; then echo 'No integration changes to commit'; exit 0; fi
-          git commit -m 'feat(9.17-9.26): integrate Road to 10 systems'
+          git commit -m 'feat(9.26.1): close pre-10 runtime loops'
           git push origin HEAD:moria-9.17-9.26-road-to-10
