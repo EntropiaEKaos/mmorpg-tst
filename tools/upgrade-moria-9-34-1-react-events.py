@@ -48,13 +48,35 @@ if old_wrapper not in text:
 text = text.replace(old_wrapper, new_wrapper, 1)
 TOOLTIP.write_text(text, encoding='utf-8')
 
+CAPTURE = Path('tools/capture-moria-9-34.mjs')
+capture = CAPTURE.read_text(encoding='utf-8')
+old_focus = """    await spellSlot.focus();
+    const focused = await spellSlot.evaluate((node) => node === document.activeElement);
+    if (!focused) throw new Error(\"Mor'ia 9.34 spell proof slot did not receive focus\");
+    const portal = page.locator('#__global_tooltip_root__ [data-tooltip-portal=\"true\"]');
+    await portal.waitFor({ state: 'visible', timeout: 3000 });
+"""
+new_hover = """    await tooltipTrigger.hover();
+    await page.waitForTimeout(240);
+    const portal = page.locator('#__global_tooltip_root__ [data-tooltip-portal=\"true\"]');
+    await portal.waitFor({ state: 'visible', timeout: 3000 });
+"""
+if old_focus not in capture:
+    raise SystemExit('Action Bar focus proof anchor not found')
+capture = capture.replace(old_focus, new_hover, 1)
+CAPTURE.write_text(capture, encoding='utf-8')
+
 DOC = Path('docs/MORIA_9_34_1_VISUAL_PROOF.md')
 doc = DOC.read_text(encoding='utf-8')
 doc = doc.replace(
     '- trigger usa listeners nativos `pointerenter/pointerleave` e `focusin/focusout`, incluindo foco de controles filhos;\n',
     '- o trigger usa `onPointerEnter/onPointerLeave` e `onFocusCapture/onBlurCapture` diretamente no wrapper React, incluindo foco de controles filhos e eliminando a corrida entre render e `useEffect`;\n',
 )
-if 'corrida entre render e `useEffect`' not in doc:
+doc = doc.replace(
+    '- a captura prova slot habilitado, foco real, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
+    '- a captura prova slot habilitado, `hover` real sobre o wrapper de produção, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
+)
+if 'corrida entre render e `useEffect`' not in doc or '`hover` real' not in doc:
     raise SystemExit('9.34.1 documentation anchor not found')
 DOC.write_text(doc, encoding='utf-8')
 
