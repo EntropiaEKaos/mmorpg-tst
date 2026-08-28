@@ -34,8 +34,8 @@ jobs:
           grep -Fq "urbanPlan:'terraced-bastion'" server/engine/GrandFrostpeak.mjs
           grep -Fq "terracedBastionTile" server/engine/World.mjs
           grep -Fq "terracedBastionTile" src/game/maps.ts
-          grep -Fq "type:'snow'" server/engine/World.mjs
-          grep -Fq "type:'snow'" src/game/maps.ts
+          grep -Fq "type = 'snow';" server/engine/World.mjs
+          grep -Fq "type = 'snow';" src/game/maps.ts
           grep -Fq "| 'snow'" src/game/types.ts
           grep -Fq 'tileCache.set(`snow_' src/game/render.ts
           grep -Fq "frostpeak_glacier_golem:{from:[42,62]" server/engine/GrandFrostpeak.mjs
