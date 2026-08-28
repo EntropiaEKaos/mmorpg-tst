@@ -35,7 +35,8 @@ new_action = """  if (panel === 'actionbar') {
       throw new Error(`Mor'ia 9.34 Action Bar is not visibly framed: ${JSON.stringify(box)}`);
     }
     const hudText = await hud.innerText();
-    if (!hudText.includes('Barra de Ações')) throw new Error(`Mor'ia 9.34 Action Bar title missing: ${hudText}`);
+    const normalizedHudText = hudText.toLocaleUpperCase('pt-BR');
+    if (!normalizedHudText.includes('BARRA DE AÇÕES')) throw new Error(`Mor'ia 9.34 Action Bar title missing: ${hudText}`);
     await page.locator('[data-qa-actionbar] .moria-hotbar-slot').first().hover();
     await page.waitForTimeout(320);
     const tooltipText = await page.locator('#__global_tooltip_root__').innerText();
@@ -64,7 +65,7 @@ A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate
 - adiciona `You have -> Você tem` ao catálogo PT-BR;
 - fixa uma posição determinística da Action Bar apenas no `visual-qa.html`;
 - o capturador agora exige que a janela `action-bar` tenha dimensões reais e esteja completamente dentro da viewport 1440x1000;
-- o capturador exige o título `Barra de Ações`;
+- o capturador valida o título `Barra de Ações` sem depender da capitalização visual aplicada pelo CSS;
 - abre o primeiro slot por hover real e exige no portal do tooltip: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
 - adiciona `You have` à lista de vazamentos proibidos do print de Talentos.
 
