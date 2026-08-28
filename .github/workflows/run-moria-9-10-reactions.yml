@@ -18,7 +18,9 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply Mor'ia 9.10 reactions
-        run: python3 tools/apply-moria-9-10-reactions.py
+        run: |
+          python3 tools/apply-moria-9-10-reactions.py
+          python3 tools/fix-moria-9-10-test-precision.py
       - name: Validate client and server
         run: |
           npm ci
@@ -76,7 +78,7 @@ jobs:
           marker="## 🏙️ Mor'ia 9.6 — World Identity & City Designer"
           section="""## ⚡ Mor'ia 9.10 — Elemental Reactions\n\nA 9.10 transforma as escolas de dano da 9.9 em um sistema de estados e reações autoritativas. Água pode aplicar **Wet**; Raio sobre Wet dispara **Conductive Burst**; Gelo sobre Wet causa **Flash Freeze**; Físico quebra Frozen com **Shatter**; Terra cria **Fractured**; Arcano aplica **Unstable**; Morte aplica **Cursed**; Sagrado purifica Cursed e recebe bônus contra inimigos alinhados à Morte; Natureza e Veneno formam **Toxic/Venom Bloom**.\n\nOs multiplicadores são resolvidos no servidor antes da defesa final, os estados têm duração limitada e o tooltip da spell mostra as combinações possíveis em **Reactive combos**, junto da cadeia de atributos/equipamentos da 9.9.\n\n### Tooltip real — reações elementais\n\n![Mor'ia 9.10 Elemental Reactions tooltip](docs/screenshots/moria-9-10-elemental-reactions-tooltip.png)\n\n---\n\n"""
           if marker not in s: raise SystemExit('README marker missing')
-          if '## ⚡ Mor\'ia 9.10 — Elemental Reactions' not in s: s=s.replace(marker,section+marker,1)
+          if "## ⚡ Mor'ia 9.10 — Elemental Reactions" not in s: s=s.replace(marker,section+marker,1)
           docs="- ⚡ **[Mor'ia 9.10 — Elemental Reactions](docs/screenshots/moria-9-10-elemental-reactions-tooltip.png)** — Reações elementais autoritativas e screenshot real do tooltip de combos.\n"
           doc_marker="## 📜 Licença"
           if docs not in s and doc_marker in s: s=s.replace(doc_marker,docs+'\n---\n\n'+doc_marker,1)
@@ -94,6 +96,6 @@ jobs:
       - name: Remove temporary release tooling
         run: |
           git pull --rebase origin moria-9.9-elemental-scaling-tooltips
-          git rm -f .github/workflows/run-moria-9-10-reactions.yml tools/apply-moria-9-10-reactions.py tools/moria-9-10.trigger
+          git rm -f .github/workflows/run-moria-9-10-reactions.yml tools/apply-moria-9-10-reactions.py tools/fix-moria-9-10-test-precision.py tools/moria-9-10.trigger
           git commit -m "chore(9.10): remove temporary reaction release tooling"
           git push origin HEAD:moria-9.9-elemental-scaling-tooltips
