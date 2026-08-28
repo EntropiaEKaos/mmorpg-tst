@@ -102,11 +102,21 @@ old_focus = """    await spellSlot.focus();
     await portal.waitFor({ state: 'visible', timeout: 3000 });
 """
 new_hover = """    await tooltipTrigger.hover();
-    await page.waitForTimeout(260);
-    const openState = await tooltipTrigger.getAttribute('data-tooltip-open');
-    if (openState !== 'true') {
-      const triggerBox = await tooltipTrigger.boundingBox();
-      throw new Error(`Mor'ia 9.34 Tooltip local state did not open after real hover: ${JSON.stringify({ openState, triggerBox })}`);
+    await page.waitForTimeout(320);
+    const tooltipState = await page.evaluate(() => {
+      const hudNode = document.querySelector('[data-hud-window=\"action-bar\"]');
+      const trigger = hudNode?.querySelector('[data-tooltip-trigger=\"true\"]');
+      const portal = document.querySelector('body > [data-tooltip-portal=\"true\"]');
+      return {
+        triggerFound: Boolean(trigger),
+        openState: trigger?.getAttribute('data-tooltip-open') || null,
+        portalFound: Boolean(portal),
+        tooltipText: portal?.textContent || '',
+        hudText: hudNode?.textContent || '',
+      };
+    });
+    if (!tooltipState.triggerFound || tooltipState.openState !== 'true') {
+      throw new Error(`Mor'ia 9.34 Tooltip local state did not open after real hover: ${JSON.stringify(tooltipState)}`);
     }
     const portal = page.locator('body > [data-tooltip-portal=\"true\"]');
     await portal.waitFor({ state: 'visible', timeout: 3000 });
@@ -130,9 +140,9 @@ doc = doc.replace(
     '- a captura prova slot habilitado, foco real, portal real e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
     '- a captura prova slot habilitado, `hover` real, estado local aberto, portal real no `document.body` e conteúdo real: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;\n',
 )
-doc += '\n- O harness ancora a prova no wrapper real `[data-tooltip-trigger]` dentro da ActionBar e só então resolve o slot filho, removendo dependência de seletores de pai.\n'
-if 'data-tooltip-open' not in doc or '`document.body`' not in doc or 'wrapper real `[data-tooltip-trigger]`' not in doc:
+doc += '\n- O harness ancora a prova no wrapper real `[data-tooltip-trigger]` dentro da ActionBar e usa uma leitura DOM instantânea após o hover para evitar que o auto-wait do Playwright confunda reconciliação React com ausência do trigger.\n'
+if 'data-tooltip-open' not in doc or '`document.body`' not in doc or 'leitura DOM instantânea' not in doc:
     raise SystemExit('9.34.1 documentation instrumentation anchor not found')
 DOC.write_text(doc, encoding='utf-8')
 
-print("Mor'ia 9.34.1 local tooltip state/body portal hardening prepared")
+print("Mor'ia 9.34.1 race-free tooltip state/body portal hardening prepared")
