@@ -3,7 +3,7 @@
 <div align="center">
   <img src="public/images/logo.png" alt="Mor'ia Logo" width="280" />
   <p><b>Um MMORPG completo com combate autoritativo, inspiração em Tibia & WoW, 100% no navegador.</b></p>
-  <p><b>Versão atual: Mor'ia 9.5 — Movable HUD & Classic World Polish</b></p>
+  <p><b>Versão atual: Mor'ia 9.6 — World Identity & City Designer</b></p>
 </div>
 
 ---
@@ -12,7 +12,7 @@
 
 **Mor'ia** é um MMORPG moderno baseado em web que combina a progressão hardcore clássica do **Tibia** (skills por uso, sistema de bênçãos, perda de XP, Caveiras PvP, Depot) com mecânicas modernas do **World of Warcraft** (Cast Bar, Auto-Attack, Talent Trees, Dungeons em Ondas, Raid Warnings e Companions/Pets).
 
-O jogo foi arquitetado de forma **Data-Driven** com um servidor autoritativo em **Node.js + WebSockets** (anti-cheat real), painéis administrativos na web (`/admin`) e ferramentas ingame para criação de itens, feitiços, monstros, NPCs e missões em tempo real!
+O jogo foi arquitetado de forma **Data-Driven** com um servidor autoritativo em **Node.js + WebSockets** (anti-cheat real), painéis administrativos na web (`/admin`) e ferramentas ingame para criação de itens, feitiços, monstros, NPCs, missões e identidade urbana em tempo real.
 
 ---
 
@@ -32,11 +32,39 @@ Todo esse conteúdo é materializado no ContentDB e pode ser criado/editado/remo
 
 ---
 
+## 🏙️ Mor'ia 9.6 — World Identity & City Designer
+
+A 9.6 transforma cidades e regiões em espaços reconhecíveis pela própria composição do mundo. Os **11 mapas** passam a ter identidade urbana data-driven própria — incluindo **Royal Capital, Harbor City, Alpine Fortress, Forge Citadel, Void Necropolis e Astral Sanctum** — com paletas, distritos, landmarks, ruas e props específicos.
+
+O minimapa deixou de representar uma Eldoria fixa: agora usa o `mapId` atual, terreno/bioma reais, distritos, landmarks, portais, monstros, elites, bosses e a posição do jogador. A malha do terreno é memoizada por mapa para evitar regeneração 80×80 a cada atualização da HUD.
+
+### Gameplay real — Eldoria 9.6
+
+![Mor'ia 9.6 Eldoria gameplay](docs/screenshots/moria-9-6-eldoria-gameplay.png)
+
+### City Designer — Eldoria / Royal Capital
+
+![Mor'ia 9.6 City Designer Eldoria](docs/screenshots/moria-9-6-city-designer-eldoria.png)
+
+### City Designer — Frostpeak / Alpine Fortress
+
+![Mor'ia 9.6 City Designer Frostpeak](docs/screenshots/moria-9-6-city-designer-frostpeak.png)
+
+### 🛠️ Ferramenta de idição urbana
+
+No **Quick Play**, abra `Ctrl + Shift + A` → **Game Editor** → **City Designer · Live**. A ferramenta permite selecionar qualquer mapa, aplicar presets de identidade urbana, editar cores de paredes/telhados/vias/accent, ajustar centro e raio urbano, clicar no preview para escolher coordenadas e criar/remover **landmarks**, **distritos** e **props**. No modo offline a alteração pode ser aplicada imediatamente ao mundo e o draft é persistido localmente.
+
+No servidor conectado, os mesmos campos (`cityStyle`, `cityAccent`, `roofColor`, `wallColor`, `roadColor`, `districts`, `landmarks` e `props`) fazem parte do **Content Studio autoritativo**, com limites e validação antes da publicação. A camada visual não transfere autoridade de movimento, colisão, teleporte ou acesso ao cliente.
+
+Mais detalhes técnicos: **[Mor'ia 9.6 — World Identity & City Designer](docs/MORIA_9_6_WORLD_IDENTITY_CITY_EDITOR.md)**.
+
+---
+
 ## 🎨 Mor'ia 9.5 — Movable HUD & Classic World Polish
 
-A 9.5 é a linha atual do `master`. Ela amplia o viewport para **31×19 tiles**, remove a sidebar que consumia largura do mundo, transforma HUD, chat e hotbar em janelas sobrepostas/movíveis com posição persistente e melhora a leitura 2D dos personagens e NPCs. O nameplate do jogador agora mostra **nome, HP e mana acima do avatar**, mantendo a autoridade de gameplay no servidor.
+A 9.5 é a base visual imediatamente anterior à 9.6. Ela amplia o viewport para **31×19 tiles**, remove a sidebar que consumia largura do mundo, transforma HUD, chat e hotbar em janelas sobrepostas/movíveis com posição persistente e melhora a leitura 2D dos personagens e NPCs. O nameplate do jogador agora mostra **nome, HP e mana acima do avatar**, mantendo a autoridade de gameplay no servidor.
 
-### Gameplay atual — 9.5
+### Gameplay — 9.5
 
 ![Mor'ia 9.5 gameplay](docs/screenshots/moria-9-5-gameplay-after.png)
 
@@ -145,6 +173,7 @@ Para instruções completas de deploy, publicação de servidor e como criar nov
 
 - 📖 **[Manual Completo e Lore de Mor'ia](docs/MORIA_DOCUMENTATION.md)** — Explicação detalhada sobre cada feitiço, classe, monstro, bênção, sistema de reputação e economia.
 - 🛠️ **[Guia do Servidor & Arquitetura](server/README.md)** — Detalhes sobre o protocolo WebSocket, Heartbeat, Rate-Limiting e estrutura de persistência.
+- 🏙️ **[Mor'ia 9.6 — World Identity & City Designer](docs/MORIA_9_6_WORLD_IDENTITY_CITY_EDITOR.md)** — Identidades urbanas data-driven, minimapa real, editor visual e screenshots validados.
 - 🎨 **[Mor'ia 9.5 — HUD World Polish](docs/MORIA_9_5_HUD_WORLD_POLISH.md)** — Reforma visual, janelas móveis, viewport e screenshots reais.
 
 ---
