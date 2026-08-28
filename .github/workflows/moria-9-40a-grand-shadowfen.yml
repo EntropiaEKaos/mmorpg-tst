@@ -5,6 +5,7 @@ on:
     paths:
       - 'tools/upgrade-moria-9-40a-grand-shadowfen.py'
       - 'tools/fix-moria-9-40a-fresh-shadowfen.py'
+      - 'tools/fix-moria-9-40a-east-gate.py'
       - '.github/workflows/moria-9-40a-grand-shadowfen.yml'
 permissions:
   contents: write
@@ -23,9 +24,10 @@ jobs:
           cache: npm
       - name: Apply Mor'ia 9.40A Grand Shadowfen
         run: |
-          python -m py_compile tools/upgrade-moria-9-40a-grand-shadowfen.py tools/fix-moria-9-40a-fresh-shadowfen.py
+          python -m py_compile tools/upgrade-moria-9-40a-grand-shadowfen.py tools/fix-moria-9-40a-fresh-shadowfen.py tools/fix-moria-9-40a-east-gate.py
           python tools/upgrade-moria-9-40a-grand-shadowfen.py
           python tools/fix-moria-9-40a-fresh-shadowfen.py
+          python tools/fix-moria-9-40a-east-gate.py
       - name: Verify Grand Shadowfen source contract
         run: |
           set -euxo pipefail
@@ -38,6 +40,8 @@ jobs:
           grep -Fq "westCanal" server/engine/World.mjs
           grep -Fq "eastCanal" server/engine/World.mjs
           grep -Fq "crossCanal" server/engine/World.mjs
+          grep -Fq "eastGate" server/engine/World.mjs
+          grep -Fq "eastGate" src/game/maps.ts
           grep -Fq "urbanPlans" server/engine/ContentStudio.mjs
           grep -Fq "migrateGrandShadowfenData" server/engine/ContentDB.mjs
           test "$(grep -Fc 'migrateGrandShadowfenData(this.data);' server/engine/ContentDB.mjs)" -ge 2
