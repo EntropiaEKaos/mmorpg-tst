@@ -34,6 +34,30 @@ export interface GameMap {
   districts: CityDistrict[];
   landmarks: CityLandmark[];
   props: CityProp[];
+  nameplateOffsetY?: number;
+  nameplateScale?: number;
+  nameplateBarWidth?: number;
+  nameplateBarHeight?: number;
+  nameplateFontSize?: number;
+  nameplateShowValues?: boolean;
+  nameplateHeadClearance?: number;
+  nameplateStackGap?: number;
+  residentialRingEnabled?: boolean;
+  residentialRingDensity?: number;
+  npcNameplateMode?: 'nearby' | 'always' | 'hidden';
+  npcNameplateDistance?: number;
+  monsterNameplateMode?: 'nearby' | 'always' | 'hidden';
+  monsterNameplateDistance?: number;
+  monsterBarDistance?: number;
+  monsterNameplateFontSize?: number;
+  monsterNameplateBarWidth?: number;
+  monsterNameplateBarHeight?: number;
+  monsterNameplateShowLevel?: boolean;
+  monsterNameplateShowValues?: boolean;
+  bossNameplateScale?: number;
+  bossNameplateAlwaysVisible?: boolean;
+  nameplateCollisionPadding?: number;
+  nameplateFadeStart?: number;
 }
 
 const BIOME_SEEDS: Record<BiomeType, number> = { plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 };
@@ -54,7 +78,7 @@ function normalizeDistricts(raw: unknown): CityDistrict[] {
   }));
 }
 function normalizeLandmarks(raw: unknown): CityLandmark[] {
-  const kinds = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower']);
+  const kinds = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower','house']);
   if (!Array.isArray(raw)) return [];
   return raw.filter((entry: any) => entry && typeof entry === 'object').slice(0, 12).map((entry: any, index) => ({
     id: String(entry.id || `landmark_${index + 1}`).slice(0, 60), name: String(entry.name || `Landmark ${index + 1}`).slice(0, 60),
@@ -195,6 +219,30 @@ export function syncServerMaps(rawMaps: unknown): void {
       districts: Array.isArray(raw.districts) ? normalizeDistricts(raw.districts) : (base?.districts || []),
       landmarks: Array.isArray(raw.landmarks) ? normalizeLandmarks(raw.landmarks) : (base?.landmarks || []),
       props: Array.isArray(raw.props) ? normalizeProps(raw.props) : (base?.props || []),
+      nameplateOffsetY: Number.isFinite(Number(raw.nameplateOffsetY)) ? Math.max(-32, Math.min(12, Number(raw.nameplateOffsetY))) : base?.nameplateOffsetY,
+      nameplateScale: Number.isFinite(Number(raw.nameplateScale)) ? Math.max(.55, Math.min(1.5, Number(raw.nameplateScale))) : base?.nameplateScale,
+      nameplateBarWidth: Number.isFinite(Number(raw.nameplateBarWidth)) ? Math.max(18, Math.min(64, Number(raw.nameplateBarWidth))) : base?.nameplateBarWidth,
+      nameplateBarHeight: Number.isFinite(Number(raw.nameplateBarHeight)) ? Math.max(2, Math.min(8, Number(raw.nameplateBarHeight))) : base?.nameplateBarHeight,
+      nameplateFontSize: Number.isFinite(Number(raw.nameplateFontSize)) ? Math.max(7, Math.min(14, Number(raw.nameplateFontSize))) : base?.nameplateFontSize,
+      nameplateShowValues: typeof raw.nameplateShowValues === 'boolean' ? raw.nameplateShowValues : base?.nameplateShowValues,
+      nameplateHeadClearance: Number.isFinite(Number(raw.nameplateHeadClearance)) ? Math.max(4, Math.min(24, Number(raw.nameplateHeadClearance))) : base?.nameplateHeadClearance,
+      nameplateStackGap: Number.isFinite(Number(raw.nameplateStackGap)) ? Math.max(1, Math.min(8, Number(raw.nameplateStackGap))) : base?.nameplateStackGap,
+      residentialRingEnabled: typeof raw.residentialRingEnabled === 'boolean' ? raw.residentialRingEnabled : (base?.residentialRingEnabled ?? false),
+      residentialRingDensity: integer(raw.residentialRingDensity, 0, 10, base?.residentialRingDensity ?? 0),
+      npcNameplateMode: ['nearby','always','hidden'].includes(String(raw.npcNameplateMode)) ? raw.npcNameplateMode : (base?.npcNameplateMode ?? 'nearby'),
+      npcNameplateDistance: Number.isFinite(Number(raw.npcNameplateDistance)) ? Math.max(2, Math.min(20, Number(raw.npcNameplateDistance))) : base?.npcNameplateDistance,
+      monsterNameplateMode: ['nearby','always','hidden'].includes(String(raw.monsterNameplateMode)) ? raw.monsterNameplateMode : (base?.monsterNameplateMode ?? 'nearby'),
+      monsterNameplateDistance: Number.isFinite(Number(raw.monsterNameplateDistance)) ? Math.max(2, Math.min(24, Number(raw.monsterNameplateDistance))) : base?.monsterNameplateDistance,
+      monsterBarDistance: Number.isFinite(Number(raw.monsterBarDistance)) ? Math.max(1, Math.min(20, Number(raw.monsterBarDistance))) : base?.monsterBarDistance,
+      monsterNameplateFontSize: Number.isFinite(Number(raw.monsterNameplateFontSize)) ? Math.max(7, Math.min(14, Number(raw.monsterNameplateFontSize))) : base?.monsterNameplateFontSize,
+      monsterNameplateBarWidth: Number.isFinite(Number(raw.monsterNameplateBarWidth)) ? Math.max(18, Math.min(72, Number(raw.monsterNameplateBarWidth))) : base?.monsterNameplateBarWidth,
+      monsterNameplateBarHeight: Number.isFinite(Number(raw.monsterNameplateBarHeight)) ? Math.max(2, Math.min(8, Number(raw.monsterNameplateBarHeight))) : base?.monsterNameplateBarHeight,
+      monsterNameplateShowLevel: typeof raw.monsterNameplateShowLevel === 'boolean' ? raw.monsterNameplateShowLevel : base?.monsterNameplateShowLevel,
+      monsterNameplateShowValues: typeof raw.monsterNameplateShowValues === 'boolean' ? raw.monsterNameplateShowValues : base?.monsterNameplateShowValues,
+      bossNameplateScale: Number.isFinite(Number(raw.bossNameplateScale)) ? Math.max(.8, Math.min(1.8, Number(raw.bossNameplateScale))) : base?.bossNameplateScale,
+      bossNameplateAlwaysVisible: typeof raw.bossNameplateAlwaysVisible === 'boolean' ? raw.bossNameplateAlwaysVisible : base?.bossNameplateAlwaysVisible,
+      nameplateCollisionPadding: Number.isFinite(Number(raw.nameplateCollisionPadding)) ? Math.max(0, Math.min(10, Number(raw.nameplateCollisionPadding))) : base?.nameplateCollisionPadding,
+      nameplateFadeStart: Number.isFinite(Number(raw.nameplateFadeStart)) ? Math.max(.2, Math.min(.95, Number(raw.nameplateFadeStart))) : base?.nameplateFadeStart,
       portals,
     });
   }
@@ -219,6 +267,13 @@ function seededRandom(seed: number) {
   return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
 }
 
+function blocksByLandmark(map: GameMap, x: number, y: number): boolean {
+  return map.landmarks.some((landmark) =>
+    x >= landmark.x && x < landmark.x + landmark.w &&
+    y >= landmark.y && y < landmark.y + landmark.h
+  );
+}
+
 function isInboundTarget(mapId: string, x: number, y: number): boolean {
   return Object.values(MAPS).some(map => map.portals.some(portal => portal.targetMap === mapId && portal.targetSpawn.x === x && portal.targetSpawn.y === y));
 }
@@ -236,10 +291,13 @@ export function generateMap(mapId: string): Tile[][] {
       let type: Tile['type'] = 'grass'; let walkable = true; let blocksSight = false;
       if (x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1) {
         type = 'wall'; walkable = false; blocksSight = true;
-      } else if (Math.abs(x - tc.x) <= mapData.townRange && Math.abs(y - tc.y) <= mapData.townRange) {
-        type = 'floor';
       } else if ((mapData.spawnPoint.x === x && mapData.spawnPoint.y === y) || mapData.portals.some(portal => portal.pos.x === x && portal.pos.y === y) || isInboundTarget(mapId, x, y)) {
         type = 'path';
+      } else if (blocksByLandmark(mapData, x, y)) {
+        // Client prediction mirrors authoritative landmark footprints exactly.
+        type = 'wall'; walkable = false; blocksSight = true;
+      } else if (Math.abs(x - tc.x) <= mapData.townRange && Math.abs(y - tc.y) <= mapData.townRange) {
+        type = 'floor';
       } else {
         const r = rand();
         if (biome === 'snow') {

@@ -31,10 +31,10 @@ export function localWorldClock(now = Date.now(), dayLengthMs = DEFAULT_DAY_LENG
   if (minuteOfDay >= 300 && minuteOfDay < 420) phase = 'dawn';
   else if (minuteOfDay >= 420 && minuteOfDay < 1080) phase = 'day';
   else if (minuteOfDay >= 1080 && minuteOfDay < 1200) phase = 'dusk';
-  let darkness = 0.55;
+  let darkness = 0.38;
   if (phase === 'day') darkness = 0;
-  else if (phase === 'dawn') darkness = 0.55 * (1 - smoothstep(300, 420, minuteOfDay));
-  else if (phase === 'dusk') darkness = 0.55 * smoothstep(1080, 1200, minuteOfDay);
+  else if (phase === 'dawn') darkness = 0.38 * (1 - smoothstep(300, 420, minuteOfDay));
+  else if (phase === 'dusk') darkness = 0.38 * smoothstep(1080, 1200, minuteOfDay);
   return {
     serverNow: now,
     dayLengthMs: length,
@@ -46,7 +46,7 @@ export function localWorldClock(now = Date.now(), dayLengthMs = DEFAULT_DAY_LENG
     phase,
     isNight: phase === 'night',
     darkness,
-    daylight: Math.max(0, Math.min(1, 1 - darkness / 0.55)),
+    daylight: Math.max(0, Math.min(1, 1 - darkness / 0.38)),
   };
 }
 
@@ -66,15 +66,15 @@ export function sanitizeWorldClock(raw: unknown, now = Date.now()): WorldClockSn
     minute: Math.max(0, Math.min(59, Math.floor(Number(clock.minute) || 0))),
     phase,
     isNight: Boolean(clock.isNight),
-    darkness: Math.max(0, Math.min(0.65, Number(clock.darkness) || 0)),
+    darkness: Math.max(0, Math.min(0.38, Number(clock.darkness) || 0)),
     daylight: Math.max(0, Math.min(1, Number(clock.daylight) || 0)),
   };
 }
 
 export function legacyOverrideDarkness(dayTime: number | null, fallback: number): number {
   if (dayTime === null || !Number.isFinite(dayTime)) return fallback;
-  if (dayTime > 120) return Math.min(0.55, ((dayTime - 120) / 30) * 0.55);
-  if (dayTime < 30) return Math.max(0, 0.55 - (dayTime / 30) * 0.55);
+  if (dayTime > 120) return Math.min(0.38, ((dayTime - 120) / 30) * 0.38);
+  if (dayTime < 30) return Math.max(0, 0.38 - (dayTime / 30) * 0.38);
   return 0;
 }
 

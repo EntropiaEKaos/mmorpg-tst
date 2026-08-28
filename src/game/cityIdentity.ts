@@ -11,7 +11,7 @@ export type CityStyle =
   | 'nightfall'
   | 'sanctum';
 
-export type CityLandmarkKind = 'keep' | 'market' | 'temple' | 'depot' | 'gate' | 'forge' | 'dock' | 'arena' | 'obelisk' | 'library' | 'graveyard' | 'lodge' | 'tower';
+export type CityLandmarkKind = 'keep' | 'market' | 'temple' | 'depot' | 'gate' | 'forge' | 'dock' | 'arena' | 'obelisk' | 'library' | 'graveyard' | 'lodge' | 'tower' | 'house';
 export type CityPropKind = 'banner' | 'lamp' | 'statue' | 'brazier' | 'crystal' | 'grave' | 'tent' | 'sign' | 'barrel' | 'cart' | 'pine' | 'mushroom' | 'anchor' | 'rune';
 
 export interface CityDistrict {

@@ -85,6 +85,11 @@ function integer(value, min, max, fallback) {
   return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.floor(n))) : fallback;
 }
 
+function boundedNumber(value, min, max, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+}
+
 function seedFor(id, biome) {
   let hash = 0;
   for (const char of String(id || 'map')) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
@@ -155,6 +160,30 @@ function normalizeConfig(record, base = null) {
     townCenter,
     ...cityIdentity,
     townRange: integer(record?.townRange, 0, 20, base?.townRange ?? 8),
+    nameplateOffsetY: boundedNumber(record?.nameplateOffsetY, -32, 12, base?.nameplateOffsetY ?? 0),
+    nameplateScale: boundedNumber(record?.nameplateScale, .55, 1.5, base?.nameplateScale ?? .82),
+    nameplateBarWidth: boundedNumber(record?.nameplateBarWidth, 18, 64, base?.nameplateBarWidth ?? 30),
+    nameplateBarHeight: boundedNumber(record?.nameplateBarHeight, 2, 8, base?.nameplateBarHeight ?? 3),
+    nameplateFontSize: boundedNumber(record?.nameplateFontSize, 7, 14, base?.nameplateFontSize ?? 8),
+    nameplateShowValues: typeof record?.nameplateShowValues === 'boolean' ? record.nameplateShowValues : (base?.nameplateShowValues ?? false),
+    nameplateHeadClearance: boundedNumber(record?.nameplateHeadClearance, 4, 24, base?.nameplateHeadClearance ?? 7),
+    nameplateStackGap: boundedNumber(record?.nameplateStackGap, 1, 8, base?.nameplateStackGap ?? 2),
+    residentialRingEnabled: typeof record?.residentialRingEnabled === 'boolean' ? record.residentialRingEnabled : (base?.residentialRingEnabled ?? false),
+    residentialRingDensity: integer(record?.residentialRingDensity, 0, 10, base?.residentialRingDensity ?? 0),
+    npcNameplateMode: ['nearby','always','hidden'].includes(String(record?.npcNameplateMode)) ? String(record.npcNameplateMode) : (base?.npcNameplateMode ?? 'nearby'),
+    npcNameplateDistance: boundedNumber(record?.npcNameplateDistance, 2, 20, base?.npcNameplateDistance ?? 7),
+    monsterNameplateMode: ['nearby','always','hidden'].includes(String(record?.monsterNameplateMode)) ? String(record.monsterNameplateMode) : (base?.monsterNameplateMode ?? 'nearby'),
+    monsterNameplateDistance: boundedNumber(record?.monsterNameplateDistance, 2, 24, base?.monsterNameplateDistance ?? 9),
+    monsterBarDistance: boundedNumber(record?.monsterBarDistance, 1, 20, base?.monsterBarDistance ?? 7),
+    monsterNameplateFontSize: boundedNumber(record?.monsterNameplateFontSize, 7, 14, base?.monsterNameplateFontSize ?? 8),
+    monsterNameplateBarWidth: boundedNumber(record?.monsterNameplateBarWidth, 18, 72, base?.monsterNameplateBarWidth ?? 30),
+    monsterNameplateBarHeight: boundedNumber(record?.monsterNameplateBarHeight, 2, 8, base?.monsterNameplateBarHeight ?? 3),
+    monsterNameplateShowLevel: typeof record?.monsterNameplateShowLevel === 'boolean' ? record.monsterNameplateShowLevel : (base?.monsterNameplateShowLevel ?? true),
+    monsterNameplateShowValues: typeof record?.monsterNameplateShowValues === 'boolean' ? record.monsterNameplateShowValues : (base?.monsterNameplateShowValues ?? false),
+    bossNameplateScale: boundedNumber(record?.bossNameplateScale, .8, 1.8, base?.bossNameplateScale ?? 1.18),
+    bossNameplateAlwaysVisible: typeof record?.bossNameplateAlwaysVisible === 'boolean' ? record.bossNameplateAlwaysVisible : (base?.bossNameplateAlwaysVisible ?? true),
+    nameplateCollisionPadding: boundedNumber(record?.nameplateCollisionPadding, 0, 10, base?.nameplateCollisionPadding ?? 3),
+    nameplateFadeStart: boundedNumber(record?.nameplateFadeStart, .2, .95, base?.nameplateFadeStart ?? .68),
     levelRequired: integer(record?.levelRequired, 1, 100_000, base?.levelRequired ?? 1),
     access: record?.access === 'gm' ? 'gm' : (base?.access === 'gm' ? 'gm' : 'public'),
     portals,
@@ -231,6 +260,16 @@ class WorldManager {
       spawnX: config.spawnPoint.x, spawnY: config.spawnPoint.y,
       townX: config.townCenter.x, townY: config.townCenter.y, townRange: config.townRange,
       cityStyle: config.cityStyle, cityAccent: config.cityAccent, roofColor: config.roofColor, wallColor: config.wallColor, roadColor: config.roadColor,
+      nameplateOffsetY: config.nameplateOffsetY, nameplateScale: config.nameplateScale, nameplateBarWidth: config.nameplateBarWidth,
+      nameplateBarHeight: config.nameplateBarHeight, nameplateFontSize: config.nameplateFontSize, nameplateShowValues: config.nameplateShowValues,
+      nameplateHeadClearance: config.nameplateHeadClearance, nameplateStackGap: config.nameplateStackGap,
+      residentialRingEnabled: config.residentialRingEnabled, residentialRingDensity: config.residentialRingDensity,
+      npcNameplateMode: config.npcNameplateMode, npcNameplateDistance: config.npcNameplateDistance,
+      monsterNameplateMode: config.monsterNameplateMode, monsterNameplateDistance: config.monsterNameplateDistance, monsterBarDistance: config.monsterBarDistance,
+      monsterNameplateFontSize: config.monsterNameplateFontSize, monsterNameplateBarWidth: config.monsterNameplateBarWidth, monsterNameplateBarHeight: config.monsterNameplateBarHeight,
+      monsterNameplateShowLevel: config.monsterNameplateShowLevel, monsterNameplateShowValues: config.monsterNameplateShowValues,
+      bossNameplateScale: config.bossNameplateScale, bossNameplateAlwaysVisible: config.bossNameplateAlwaysVisible,
+      nameplateCollisionPadding: config.nameplateCollisionPadding, nameplateFadeStart: config.nameplateFadeStart,
       districts: config.districts.map(entry => ({ ...entry })), landmarks: config.landmarks.map(entry => ({ ...entry })), props: config.props.map(entry => ({ ...entry })),
       portals: config.portals.map(portal => ({
         x: portal.pos.x, y: portal.pos.y, targetMap: portal.targetMap,
@@ -253,10 +292,14 @@ class WorldManager {
         let type = 'grass'; let walkable = true; let blocksSight = false;
         if (x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1) {
           type = 'wall'; walkable = false; blocksSight = true;
-        } else if (Math.abs(x - config.townCenter.x) <= config.townRange && Math.abs(y - config.townCenter.y) <= config.townRange) {
-          type = 'floor';
         } else if ((config.spawnPoint.x === x && config.spawnPoint.y === y) || config.portals.some(portal => portal.pos.x === x && portal.pos.y === y)) {
           type = 'path';
+        } else if (config.landmarks.some(landmark => x >= landmark.x && x < landmark.x + landmark.w && y >= landmark.y && y < landmark.y + landmark.h)) {
+          // Content Studio landmark geometry is authoritative: visual buildings and
+          // movement collision now share the exact same authored rectangle.
+          type = 'wall'; walkable = false; blocksSight = true;
+        } else if (Math.abs(x - config.townCenter.x) <= config.townRange && Math.abs(y - config.townCenter.y) <= config.townRange) {
+          type = 'floor';
         } else {
           const r = rand();
           if (config.biome === 'snow') {
@@ -293,8 +336,23 @@ class WorldManager {
     };
   }
 
+  findNearestWalkable(map, preferred, maxRadius = 14, reject = null) {
+    const ox = Math.round(Number(preferred?.x) || 0), oy = Math.round(Number(preferred?.y) || 0);
+    const ok = (x, y) => Boolean(map?.tiles?.[y]?.[x]?.walkable) && !(typeof reject === 'function' && reject(x, y));
+    if (ok(ox, oy)) return { x: ox, y: oy };
+    for (let radius = 1; radius <= maxRadius; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        const dx = radius - Math.abs(dy);
+        const xs = dx === 0 ? [ox] : [ox - dx, ox + dx];
+        for (const x of xs) { const y = oy + dy; if (ok(x, y)) return { x, y }; }
+      }
+    }
+    return null;
+  }
+
   findWalkableSpawn(map, preferred) {
-    if (preferred && map?.tiles?.[preferred.y]?.[preferred.x]?.walkable) return { ...preferred };
+    const nearest = preferred ? this.findNearestWalkable(map, preferred, 14) : null;
+    if (nearest) return nearest;
     for (let attempt = 0; attempt < 300; attempt++) {
       const x = 5 + Math.floor(Math.random() * 70);
       const y = 5 + Math.floor(Math.random() * 70);

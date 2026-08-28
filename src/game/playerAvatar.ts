@@ -1,6 +1,6 @@
 // ===================================================================
-// MOR'IA 9.2 — PROCEDURAL PLAYER AVATAR
-// Layered, content-driven presentation. No gameplay authority lives here.
+// MOR'IA 9.7 — DETAILED PIXEL-FIRST HUMANOIDS
+// Original procedural sprite art. Gameplay authority remains server-side.
 // ===================================================================
 
 export interface AvatarColors {
@@ -24,6 +24,9 @@ export interface AvatarMount {
   speedBonus?: number;
 }
 
+// Public architecture contract used by the 9.7 visual regression tests.
+export const PIXEL_SPRITE_SCALE = 1.30;
+
 const DEFAULT_COLORS: AvatarColors = {
   head: '#d7a06b',
   primary: '#506aa6',
@@ -33,196 +36,315 @@ const DEFAULT_COLORS: AvatarColors = {
 
 const safeColor = (value: unknown, fallback: string) => /^#[0-9a-fA-F]{6}$/.test(String(value || '')) ? String(value) : fallback;
 
-function mountPalette(id: string, color: string) {
-  const accent = id.includes('nightmare') ? '#9a6ee8'
-    : id.includes('astral') ? '#f0d579'
-    : id.includes('tiger') ? '#33241c'
-    : id.includes('drake') || id.includes('raptor') ? '#f0a05b'
-    : id.includes('unicorn') ? '#f1d5ff'
-    : '#d6c19c';
-  return { body: color, accent };
+function shade(hex: string, factor: number) {
+  const clean = safeColor(hex, '#667080').slice(1);
+  const value = Number.parseInt(clean, 16);
+  const channel = (shift: number) => Math.max(0, Math.min(255, Math.round(((value >> shift) & 255) * factor)));
+  return `rgb(${channel(16)},${channel(8)},${channel(0)})`;
+}
+
+type SpritePalette = Record<string, string>;
+type SpriteFrame = readonly string[];
+
+// 18 × 24 native-pixel frames. They are intentionally authored as sprite
+// matrices rather than large vector rectangles so silhouettes, face pixels,
+// armor seams, boots and equipment remain readable at classic MMO scale.
+const KNIGHT_FRAME: SpriteFrame = [
+  '       dd         ',
+  '      dddd        ',
+  '     mmmmmmm      ',
+  '    mmhhhhmmm     ',
+  '    mhssssshm     ',
+  '    mssesssem     ',
+  '    mssstsssm     ',
+  '     ssstsss      ',
+  '      ssss        ',
+  '   mmppppppmm     ',
+  '  mhpppllppphm  h ',
+  '  mppppldppppm  h ',
+  ' rmpqppldppqpm mh ',
+  ' rrqqppppppqqm mh ',
+  ' rrqqppddppqqm mh ',
+  ' rrrqppppppqm  wh ',
+  ' rrrqqppppqqm  wh ',
+  '  rrqqqppqqqm  ww ',
+  '    qq    qq      ',
+  '   qqq    qqq     ',
+  '   qkk    kkq     ',
+  '  kkbb    bbkk    ',
+  '  kbbb    bbbk    ',
+  '                  ',
+];
+
+const CASTER_FRAME: SpriteFrame = [
+  '       dd         ',
+  '      dddd     d  ',
+  '     qqqqqq   ddd ',
+  '    qqqqqqqq   d  ',
+  '    qqssssqq   w  ',
+  '    qssesssq   w  ',
+  '    qssstssq   w  ',
+  '     ssstss    w  ',
+  '      ssss     w  ',
+  '    qppppppq   w  ',
+  '   qqpllllpqq  w  ',
+  '   qpplddlppq  w  ',
+  '  qqpplddlppqq w  ',
+  '  qqppppppppqq w  ',
+  '   qppddddppq  w  ',
+  '   qqppppppqq  w  ',
+  '   qqqppppqqq  w  ',
+  '  qqqqppppqqqq w  ',
+  '  qqqqqppqqqqq w  ',
+  '  qqqqqppqqqqq    ',
+  '   qqqqppqqqq     ',
+  '   qkk    kkq     ',
+  '  kkbb    bbkk    ',
+  '                  ',
+];
+
+const RANGER_FRAME: SpriteFrame = [
+  '      qqqq        ',
+  '     qqqqqq       ',
+  '    qqqqqqqq      ',
+  '    qqssssqq   www',
+  '    qssesssq  w  w',
+  '    qssstssq w   w',
+  '     ssstss  w   w',
+  '      ssss   w   w',
+  '   qqppppppqqw   w',
+  '  qqppllllppqw   w',
+  '  qpppddddppqw   w',
+  '  qppdppppdpqw   w',
+  '  qpppppppppqw   w',
+  '  qqppddddppqw   w',
+  '   qppppppppq w  w',
+  '   qqppppppqq  www',
+  '    qqppppqq      ',
+  '    qqppppqq      ',
+  '    qq    qq      ',
+  '   qqq    qqq     ',
+  '   qkk    kkq     ',
+  '  kkbb    bbkk    ',
+  '  kbbb    bbbk    ',
+  '                  ',
+];
+
+const ROGUE_FRAME: SpriteFrame = [
+  '      qqqq        ',
+  '     qqqqqq       ',
+  '    qqqqqqqq      ',
+  '    qqssssqq      ',
+  '    qssesssq      ',
+  '    qssstssq      ',
+  '     ssstss       ',
+  '      ssss        ',
+  '    qqppppqq      ',
+  '   qqpllllpqq  hh ',
+  '   qppddddppq  hm ',
+  '  qqppdppdppqq hm ',
+  '  qqppppppppqq mw ',
+  '   qppddddppq  mw ',
+  '   qqppppppqq  ww ',
+  '    qppppppq      ',
+  '    qqppppqq      ',
+  '    qqqppqqq      ',
+  '    qq    qq      ',
+  '   qqq    qqq     ',
+  '   qkk    kkq     ',
+  '  kkbb    bbkk    ',
+  '  kbbb    bbbk    ',
+  '                  ',
+];
+
+const CITIZEN_FRAME: SpriteFrame = [
+  '      bbbb        ',
+  '     bbbbbb       ',
+  '    bbssssbb      ',
+  '    bssssssb      ',
+  '    bssesssb      ',
+  '    bssstssb      ',
+  '     ssstss       ',
+  '      ssss        ',
+  '    qqppppqq      ',
+  '   qqpllllpqq     ',
+  '   qppddddppq     ',
+  '   qppdppdppq     ',
+  '   qppppppppq     ',
+  '   qqppddppqq     ',
+  '    qppppppq      ',
+  '    qqppppqq      ',
+  '    qqppppqq      ',
+  '    qq    qq      ',
+  '   qqq    qqq     ',
+  '   qkk    kkq     ',
+  '  kkbb    bbkk    ',
+  '  kbbb    bbbk    ',
+  '                  ',
+  '                  ',
+];
+
+function drawSpriteMatrix(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  feetY: number,
+  sourceSize: number,
+  frame: SpriteFrame,
+  palette: SpritePalette,
+  mirror = false,
+) {
+  const cell = Math.max(1, Math.round(sourceSize * PIXEL_SPRITE_SCALE / 24));
+  const width = Math.max(...frame.map(row => row.length));
+  const height = frame.length;
+  const drawWidth = width * cell;
+  const drawHeight = height * cell;
+  const left = Math.round(cx - drawWidth / 2);
+  const top = Math.round(feetY - drawHeight);
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (mirror) {
+    ctx.translate(Math.round(cx * 2), 0);
+    ctx.scale(-1, 1);
+  }
+  // Native-pixel silhouette drop shadow: a single offset pass keeps the
+  // authored frame readable over cobbles without turning it into a vector glow.
+  const shadowOffset = Math.max(1, Math.floor(cell / 2));
+  ctx.fillStyle = '#15120f';
+  for (let row = 0; row < frame.length; row++) {
+    const line = frame[row];
+    for (let col = 0; col < line.length; col++) {
+      const key = line[col];
+      if (key === ' ' || !palette[key]) continue;
+      ctx.fillRect(left + col * cell + shadowOffset, top + row * cell + shadowOffset, cell, cell);
+    }
+  }
+
+  for (let row = 0; row < frame.length; row++) {
+    const line = frame[row];
+    for (let col = 0; col < line.length; col++) {
+      const key = line[col];
+      if (key === ' ') continue;
+      const color = palette[key];
+      if (!color) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(left + col * cell, top + row * cell, cell, cell);
+    }
+  }
+  ctx.restore();
+}
+
+function inferVocationStyle(vocationColor: string) {
+  const color = String(vocationColor || '').toLowerCase();
+  if (['#c13030', '#4a0e0e', '#7c5030'].includes(color)) return 'knight';
+  if (['#4a7c3a', '#3e8066'].includes(color)) return 'ranger';
+  if (['#555555', '#404048'].includes(color)) return 'rogue';
+  if (['#9b59ff', '#2ecc71', '#8b1a8b', '#f4e04d', '#4a90e2'].includes(color)) return 'caster';
+  return 'citizen';
+}
+
+function frameForStyle(style: string) {
+  if (/knight|templar|guardian|deathknight|paladin|barbarian|berserk/.test(style)) return KNIGHT_FRAME;
+  if (/mage|sorcerer|warlock|shaman|necromancer|druid|priest|wizard/.test(style)) return CASTER_FRAME;
+  if (/ranger|archer|hunter/.test(style)) return RANGER_FRAME;
+  if (/assassin|rogue/.test(style)) return ROGUE_FRAME;
+  return CITIZEN_FRAME;
+}
+
+export function drawPixelHuman(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  feetY: number,
+  size: number,
+  direction: string,
+  style: string,
+  colors: AvatarColors,
+  addonMask: number,
+  time: number,
+) {
+  const primary = safeColor(colors.primary, DEFAULT_COLORS.primary);
+  const secondary = safeColor(colors.secondary, DEFAULT_COLORS.secondary);
+  const detail = safeColor(colors.detail, DEFAULT_COLORS.detail);
+  const skin = safeColor(colors.head, DEFAULT_COLORS.head);
+  const upFacing = direction === 'up';
+  const palette: SpritePalette = {
+    k: '#181513',
+    b: upFacing ? shade(secondary, 0.56) : '#3a281f',
+    s: upFacing ? '#3a281f' : skin,
+    t: upFacing ? '#3a281f' : shade(skin, 0.72),
+    e: upFacing ? '#3a281f' : '#17191b',
+    p: primary,
+    l: shade(primary, 1.30),
+    q: secondary,
+    d: detail,
+    m: '#737c82',
+    h: '#c7d0d5',
+    w: '#6a4528',
+    r: shade(secondary, 0.82),
+  };
+  const frame = frameForStyle(style);
+  const idle = Math.round(Math.sin(time / 300) * 0.35);
+  drawSpriteMatrix(ctx, cx, feetY + idle, size, frame, palette, direction === 'left');
+
+  // Tiny addon pixels sit on top of the authored frame instead of changing its
+  // bounding box, so outfit addons remain crisp and do not become UI glyphs.
+  const cell = Math.max(1, Math.round(size * PIXEL_SPRITE_SCALE / 24));
+  if (addonMask & 1) {
+    ctx.fillStyle = detail;
+    ctx.fillRect(Math.round(cx - cell), Math.round(feetY - frame.length * cell - cell * 2), cell * 2, cell * 2);
+  }
+  if (addonMask & 2) {
+    ctx.fillStyle = shade(detail, 1.18);
+    ctx.fillRect(Math.round(cx - cell * 2), Math.round(feetY - frame.length * cell - cell), cell * 4, cell);
+  }
 }
 
 function drawMount(
   ctx: CanvasRenderingContext2D,
   cx: number,
-  cy: number,
+  feetY: number,
   size: number,
   mount: AvatarMount,
   direction: string,
   time: number,
 ) {
-  const id = String(mount.id || 'horse');
-  const color = safeColor(mount.color, '#8b6f47');
-  const { body, accent } = mountPalette(id, color);
-  const stride = Math.sin(time / 120) * size * 0.025;
-  const face = direction === 'left' ? -1 : 1;
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.scale(face, 1);
-
-  // Body and hindquarters.
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.ellipse(0, size * 0.13, size * 0.34, size * 0.18, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Neck / head adapt to quadruped vs drake/raptor silhouette.
-  const reptile = /raptor|drake/.test(id);
-  const bulky = /boar|bear|lion/.test(id);
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.ellipse(size * 0.28, reptile ? -size * 0.01 : size * 0.02, size * (bulky ? 0.18 : 0.14), size * 0.12, -0.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillRect(size * 0.18, -size * 0.01, size * 0.12, size * 0.17);
-
-  // Legs — deliberately chunky to read at the game's pixel scale.
-  ctx.fillStyle = body;
-  for (const lx of [-0.22, -0.08, 0.12, 0.24]) {
-    ctx.fillRect(size * lx, size * 0.22, size * 0.07, size * 0.20 + stride * (lx > 0 ? 1 : -1));
-  }
-
-  // Tail / special silhouettes.
-  ctx.strokeStyle = body;
-  ctx.lineWidth = Math.max(2, size * 0.05);
-  ctx.beginPath();
-  ctx.moveTo(-size * 0.28, size * 0.08);
-  ctx.quadraticCurveTo(-size * 0.48, -size * 0.02, -size * 0.43, -size * 0.18);
-  ctx.stroke();
-
-  ctx.fillStyle = accent;
-  if (/wolf|tiger|lion/.test(id)) {
-    ctx.beginPath(); ctx.moveTo(size * 0.22, -size * 0.09); ctx.lineTo(size * 0.25, -size * 0.23); ctx.lineTo(size * 0.31, -size * 0.10); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(size * 0.32, -size * 0.08); ctx.lineTo(size * 0.36, -size * 0.22); ctx.lineTo(size * 0.40, -size * 0.06); ctx.fill();
-  } else if (/unicorn/.test(id)) {
-    ctx.beginPath(); ctx.moveTo(size * 0.32, -size * 0.12); ctx.lineTo(size * 0.42, -size * 0.36); ctx.lineTo(size * 0.37, -size * 0.10); ctx.fill();
-  } else if (/boar/.test(id)) {
-    ctx.fillRect(size * 0.35, size * 0.02, size * 0.13, size * 0.035);
-  } else if (/raptor|drake/.test(id)) {
-    for (let i = 0; i < 4; i++) {
-      ctx.beginPath(); ctx.moveTo((-0.12 + i * 0.08) * size, -size * 0.06); ctx.lineTo((-0.08 + i * 0.08) * size, -size * 0.18); ctx.lineTo((-0.03 + i * 0.08) * size, -size * 0.05); ctx.fill();
-    }
-    if (/drake/.test(id)) {
-      ctx.globalAlpha = 0.65;
-      ctx.beginPath(); ctx.moveTo(-size * 0.05, size * 0.04); ctx.lineTo(-size * 0.35, -size * 0.22); ctx.lineTo(size * 0.03, -size * 0.05); ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-  } else {
-    // Horse/nightmare/bear readable ears.
-    ctx.beginPath(); ctx.moveTo(size * 0.23, -size * 0.09); ctx.lineTo(size * 0.25, -size * 0.22); ctx.lineTo(size * 0.30, -size * 0.09); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(size * 0.31, -size * 0.09); ctx.lineTo(size * 0.35, -size * 0.21); ctx.lineTo(size * 0.38, -size * 0.07); ctx.fill();
-  }
-
-  // Saddle and reins.
-  ctx.fillStyle = '#3d2b22';
-  ctx.fillRect(-size * 0.10, -size * 0.03, size * 0.24, size * 0.07);
-  ctx.strokeStyle = '#d1b06e';
-  ctx.lineWidth = Math.max(1, size * 0.018);
-  ctx.beginPath(); ctx.moveTo(size * 0.10, 0); ctx.quadraticCurveTo(size * 0.30, -size * 0.02, size * 0.36, size * 0.04); ctx.stroke();
-
-  // Eye / magical accent.
-  ctx.fillStyle = /nightmare|astral/.test(id) ? accent : '#11151b';
-  ctx.fillRect(size * 0.34, -size * 0.035, Math.max(1.5, size * 0.025), Math.max(1.5, size * 0.025));
-  ctx.restore();
+  const cell = Math.max(1, Math.round(size / 17));
+  const body = safeColor(mount.color, '#8b6f47');
+  const dark = shade(body, 0.55);
+  const light = shade(body, 1.25);
+  const mirror = direction === 'left';
+  const frame: SpriteFrame = [
+    '          bb      ',
+    '         bbbb     ',
+    '      bbbbbbbb    ',
+    '  bbbbbbbllbbb    ',
+    ' bbbbbbbbbbbbb    ',
+    'bbbbddddbbbbbbb   ',
+    'bbbddddddbbbbbbb  ',
+    ' bbbbbbbbbbbbbbb  ',
+    '  bbbbbbbbbbbbbb  ',
+    '   bb  bb  bb     ',
+    '   bb  bb  bb     ',
+    '   kk  kk  kk     ',
+  ];
+  const bob = Math.round(Math.sin(time / 140) * 0.5 * cell);
+  drawSpriteMatrix(ctx, cx, feetY + bob, size * 0.92, frame, { b: body, d: dark, l: light, k: '#211b17' }, mirror);
 }
 
-function drawStyleLayers(
-  ctx: CanvasRenderingContext2D,
-  style: string,
-  cx: number,
-  cy: number,
-  size: number,
-  scale: number,
-  offsetY: number,
-  colors: AvatarColors,
-  addonMask: number,
-) {
-  const s = size * scale;
-  const y = cy + offsetY;
+export interface AvatarNameplateOptions {
+  nameplateOffsetY?: number;
+  nameplateScale?: number;
+  nameplateBarWidth?: number;
+  nameplateBarHeight?: number;
+  nameplateFontSize?: number;
+  nameplateShowValues?: boolean;
+  nameplateHeadClearance?: number;
+  nameplateStackGap?: number;
+}
 
-  // Legs and boots.
-  ctx.fillStyle = colors.secondary;
-  ctx.fillRect(cx - s * 0.16, y + s * 0.12, s * 0.12, s * 0.24);
-  ctx.fillRect(cx + s * 0.04, y + s * 0.12, s * 0.12, s * 0.24);
-  ctx.fillStyle = '#2a2525';
-  ctx.fillRect(cx - s * 0.17, y + s * 0.31, s * 0.14, s * 0.08);
-  ctx.fillRect(cx + s * 0.03, y + s * 0.31, s * 0.14, s * 0.08);
-
-  // Cape/back addon. Addon #1 intentionally reads behind the body.
-  if (addonMask & 1) {
-    ctx.fillStyle = colors.detail;
-    ctx.beginPath();
-    ctx.moveTo(cx - s * 0.22, y - s * 0.04);
-    ctx.lineTo(cx + s * 0.22, y - s * 0.04);
-    ctx.lineTo(cx + s * 0.27, y + s * 0.35);
-    ctx.lineTo(cx - s * 0.27, y + s * 0.35);
-    ctx.closePath(); ctx.fill();
-  }
-
-  // Torso silhouette.
-  ctx.fillStyle = colors.primary;
-  if (/mage|warlock|shaman|necromancer/.test(style)) {
-    ctx.beginPath();
-    ctx.moveTo(cx - s * 0.20, y - s * 0.06); ctx.lineTo(cx + s * 0.20, y - s * 0.06);
-    ctx.lineTo(cx + s * 0.29, y + s * 0.32); ctx.lineTo(cx - s * 0.29, y + s * 0.32); ctx.closePath(); ctx.fill();
-  } else {
-    ctx.fillRect(cx - s * 0.22, y - s * 0.07, s * 0.44, s * 0.25);
-  }
-
-  // Arms.
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(cx - s * 0.31, y - s * 0.02, s * 0.10, s * 0.24);
-  ctx.fillRect(cx + s * 0.21, y - s * 0.02, s * 0.10, s * 0.24);
-  ctx.fillStyle = colors.head;
-  ctx.fillRect(cx - s * 0.31, y + s * 0.16, s * 0.10, s * 0.07);
-  ctx.fillRect(cx + s * 0.21, y + s * 0.16, s * 0.10, s * 0.07);
-
-  // Style details.
-  ctx.fillStyle = colors.detail;
-  if (/knight|templar/.test(style)) {
-    ctx.fillRect(cx - s * 0.29, y - s * 0.08, s * 0.13, s * 0.10);
-    ctx.fillRect(cx + s * 0.16, y - s * 0.08, s * 0.13, s * 0.10);
-    ctx.fillRect(cx - s * 0.04, y - s * 0.07, s * 0.08, s * 0.24);
-  } else if (/ranger/.test(style)) {
-    ctx.strokeStyle = colors.detail; ctx.lineWidth = Math.max(2, s * 0.04);
-    ctx.beginPath(); ctx.moveTo(cx - s * 0.20, y - s * 0.05); ctx.lineTo(cx + s * 0.20, y + s * 0.18); ctx.stroke();
-  } else if (/assassin/.test(style)) {
-    ctx.fillRect(cx - s * 0.22, y + s * 0.08, s * 0.44, s * 0.05);
-  } else if (/noble/.test(style)) {
-    ctx.fillRect(cx - s * 0.22, y - s * 0.02, s * 0.44, s * 0.05);
-  } else if (/barbarian/.test(style)) {
-    for (const dx of [-0.22, -0.12, 0.12, 0.22]) {
-      ctx.beginPath(); ctx.arc(cx + s * dx, y - s * 0.05, s * 0.07, 0, Math.PI * 2); ctx.fill();
-    }
-  } else if (/shaman/.test(style)) {
-    ctx.fillRect(cx - s * 0.04, y - s * 0.06, s * 0.08, s * 0.28);
-  }
-
-  // Head / hair / hood.
-  ctx.fillStyle = colors.head;
-  ctx.beginPath(); ctx.arc(cx, y - s * 0.22, s * 0.15, 0, Math.PI * 2); ctx.fill();
-  const hooded = /mage|warlock|necromancer|assassin|ranger/.test(style);
-  ctx.fillStyle = hooded ? colors.secondary : '#33261f';
-  ctx.beginPath(); ctx.arc(cx, y - s * 0.25, s * 0.16, Math.PI, Math.PI * 2); ctx.fill();
-  if (hooded) {
-    ctx.strokeStyle = colors.detail; ctx.lineWidth = Math.max(1, s * 0.025);
-    ctx.beginPath(); ctx.arc(cx, y - s * 0.20, s * 0.18, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
-  }
-
-  // Addon #2 is the head/crest layer.
-  if (addonMask & 2) {
-    ctx.fillStyle = colors.detail;
-    if (/warlock|necromancer|barbarian|shaman/.test(style)) {
-      ctx.beginPath(); ctx.moveTo(cx - s * 0.10, y - s * 0.34); ctx.lineTo(cx - s * 0.21, y - s * 0.48); ctx.lineTo(cx - s * 0.04, y - s * 0.36); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(cx + s * 0.10, y - s * 0.34); ctx.lineTo(cx + s * 0.21, y - s * 0.48); ctx.lineTo(cx + s * 0.04, y - s * 0.36); ctx.fill();
-    } else if (/noble/.test(style)) {
-      ctx.fillRect(cx - s * 0.15, y - s * 0.37, s * 0.30, s * 0.06);
-      for (const dx of [-0.11, 0, 0.11]) { ctx.beginPath(); ctx.moveTo(cx + s * dx - s * 0.035, y - s * 0.37); ctx.lineTo(cx + s * dx, y - s * 0.49); ctx.lineTo(cx + s * dx + s * 0.035, y - s * 0.37); ctx.fill(); }
-    } else {
-      ctx.fillRect(cx - s * 0.03, y - s * 0.44, s * 0.06, s * 0.18);
-    }
-  }
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
 }
 
 export function drawAvatar(
@@ -242,6 +364,7 @@ export function drawAvatar(
   mount?: AvatarMount | null,
   mana = 0,
   maxMana = 0,
+  nameplate?: AvatarNameplateOptions | null,
 ) {
   const colors: AvatarColors = {
     head: safeColor(appearance?.colors?.head, DEFAULT_COLORS.head),
@@ -249,75 +372,81 @@ export function drawAvatar(
     secondary: safeColor(appearance?.colors?.secondary, DEFAULT_COLORS.secondary),
     detail: safeColor(appearance?.colors?.detail, DEFAULT_COLORS.detail),
   };
-  const style = String(appearance?.outfit?.style || 'citizen').toLowerCase();
+  const authoredStyle = String(appearance?.outfit?.style || '').toLowerCase();
+  const style = authoredStyle || inferVocationStyle(vocationColor);
   const addonMask = Math.max(0, Math.min(3, Math.floor(Number(appearance?.addonMask) || 0)));
+  const cell = Math.max(1, Math.round(size * PIXEL_SPRITE_SCALE / 24));
 
   ctx.save();
-  const cx = x + size / 2;
-  const bob = Math.sin(time / 200) * (mounted ? 1.4 : 1.0);
-  const cy = y + size / 2 + bob;
-
-  const glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, size * 0.68);
-  glow.addColorStop(0, colors.primary + '26'); glow.addColorStop(1, 'transparent');
-  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, size * 0.68, 0, Math.PI * 2); ctx.fill();
+  ctx.imageSmoothingEnabled = false;
+  const cx = Math.round(x + size / 2);
+  const feetY = Math.round(y + size - 1);
 
   ctx.fillStyle = 'rgba(0,0,0,0.42)';
-  ctx.beginPath(); ctx.ellipse(cx, y + size - 3, size * (mounted ? 0.43 : 0.34), size * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx, y + size - 1, size * (mounted ? 0.42 : 0.32), Math.max(2, size * 0.065), 0, 0, Math.PI * 2);
+  ctx.fill();
 
   if (mounted) {
-    const effectiveMount: AvatarMount = mount || { id:'legacy', icon:fallbackMountIcon, color:vocationColor };
-    drawMount(ctx, cx, cy + size * 0.15, size, effectiveMount, direction, time);
+    drawMount(ctx, cx, feetY + cell * 2, size, mount || { id: 'legacy', icon: fallbackMountIcon, color: vocationColor }, direction, time);
+    drawPixelHuman(ctx, cx, feetY - cell * 6, size * 0.84, direction, style, colors, addonMask, time);
+  } else {
+    drawPixelHuman(ctx, cx, feetY, size, direction, style, colors, addonMask, time);
   }
 
-  const scale = mounted ? 0.73 : 1;
-  const offsetY = mounted ? -size * 0.28 : 0;
-  drawStyleLayers(ctx, style, cx, cy, size, scale, offsetY, colors, addonMask);
-
-  // Face direction cue and small eye highlights.
-  const eyeShiftX = direction === 'left' ? -1.2 : direction === 'right' ? 1.2 : 0;
-  const eyeShiftY = direction === 'up' ? -0.8 : direction === 'down' ? 0.8 : 0;
-  const faceY = cy - size * 0.22 * scale + offsetY;
-  ctx.fillStyle = '#151515';
-  ctx.fillRect(cx - 3 + eyeShiftX, faceY + eyeShiftY, 1.5, 1.5);
-  ctx.fillRect(cx + 1.5 + eyeShiftX, faceY + eyeShiftY, 1.5, 1.5);
-
-  // Classic overhead status stack: name, health and mana all stay above the sprite.
+  // 9.7.1 safe-stack policy: anchor to the authored sprite top, never the tile center.
   const hpPct = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
   const manaPct = Math.max(0, Math.min(1, mana / Math.max(1, maxMana)));
-  const barW = Math.max(30, size * 1.05);
-  const barH = 5;
+  const scale = clampNumber(nameplate?.nameplateScale, 0.55, 1.5, 0.82);
+  const offsetY = clampNumber(nameplate?.nameplateOffsetY, -32, 12, 0);
+  const barW = Math.round(clampNumber(nameplate?.nameplateBarWidth, 18, 64, 30) * scale);
+  const barH = Math.max(2, Math.round(clampNumber(nameplate?.nameplateBarHeight, 2, 8, 3) * scale));
+  const fontSize = Math.max(7, Math.round(clampNumber(nameplate?.nameplateFontSize, 7, 14, 8) * scale));
+  const headClearance = Math.round(clampNumber(nameplate?.nameplateHeadClearance, 4, 24, 7) * scale);
+  const stackGap = Math.max(1, Math.round(clampNumber(nameplate?.nameplateStackGap, 1, 8, 2) * scale));
+  const showValues = nameplate?.nameplateShowValues === true;
   const barX = Math.round(cx - barW / 2);
-  const hpBarY = Math.round(y - 14);
-  const manaBarY = Math.round(y - 8);
+  const humanCell = Math.max(1, Math.round((mounted ? size * 0.84 : size) * PIXEL_SPRITE_SCALE / 24));
+  const spriteTop = mounted
+    ? Math.round(feetY - cell * 6 - CITIZEN_FRAME.length * humanCell)
+    : Math.round(feetY - CITIZEN_FRAME.length * humanCell);
+  const nameLineH = fontSize + 2;
+  const stackH = nameLineH + stackGap + barH + 1 + barH;
+  // Positive legacy offsets cannot lower the plate into the protected head zone.
+  const safeBottom = spriteTop - headClearance + Math.min(0, Math.round(offsetY));
+  const stackTop = safeBottom - stackH;
+  const nameY = stackTop + fontSize;
+  const hpBarY = stackTop + nameLineH + stackGap;
+  const manaBarY = hpBarY + barH + 1;
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.font = 'bold 10px monospace';
+  ctx.font = `bold ${fontSize}px monospace`;
   ctx.strokeStyle = 'rgba(0,0,0,0.95)';
-  ctx.lineWidth = 3;
-  ctx.strokeText(name, cx, y - 18);
+  ctx.lineWidth = Math.max(2, Math.round(scale * 2));
+  ctx.strokeText(name, cx, nameY);
   ctx.fillStyle = '#f4e6bd';
-  ctx.fillText(name, cx, y - 18);
+  ctx.fillText(name, cx, nameY);
 
-  ctx.fillStyle = '#080808';
+  ctx.fillStyle = '#090a0b';
   ctx.fillRect(barX - 1, hpBarY - 1, barW + 2, barH + 2);
   ctx.fillRect(barX - 1, manaBarY - 1, barW + 2, barH + 2);
-  ctx.fillStyle = '#4b1115';
+  ctx.fillStyle = '#4b171b';
   ctx.fillRect(barX, hpBarY, barW, barH);
-  ctx.fillStyle = '#b91f32';
+  ctx.fillStyle = '#d93643';
   ctx.fillRect(barX, hpBarY, Math.round(barW * hpPct), barH);
-  ctx.fillStyle = '#10274d';
+  ctx.fillStyle = '#122949';
   ctx.fillRect(barX, manaBarY, barW, barH);
-  ctx.fillStyle = '#226bc5';
+  ctx.fillStyle = '#3781d8';
   ctx.fillRect(barX, manaBarY, Math.round(barW * manaPct), barH);
 
-  if (size >= 30) {
-    ctx.font = 'bold 6px monospace';
+  if (showValues && barW >= 32) {
+    ctx.font = `bold ${Math.max(6, fontSize - 2)}px monospace`;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff7ef';
-    ctx.fillText(`${Math.max(0, Math.round(hp))}/${Math.max(0, Math.round(maxHp))}`, cx, hpBarY + 2.5);
-    ctx.fillStyle = '#dbeeff';
-    ctx.fillText(`${Math.max(0, Math.round(mana))}/${Math.max(0, Math.round(maxMana))}`, cx, manaBarY + 2.5);
+    ctx.fillStyle = '#fff8ef';
+    ctx.fillText(`${Math.max(0, Math.round(hp))}/${Math.max(0, Math.round(maxHp))}`, cx, hpBarY + barH / 2);
+    ctx.fillStyle = '#e0efff';
+    ctx.fillText(`${Math.max(0, Math.round(mana))}/${Math.max(0, Math.round(maxMana))}`, cx, manaBarY + barH / 2);
   }
   ctx.restore();
 }

@@ -21,8 +21,9 @@ const SPELL_TARGET_MODES = Object.freeze(['smart', 'self', 'target', 'area']);
 const ALLY_EFFECTS = Object.freeze(['none', 'heal', 'buff']);
 const ENEMY_EFFECTS = Object.freeze(['none', 'damage', 'drain']);
 const CITY_STYLES = Object.freeze(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
-const CITY_LANDMARK_KINDS = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower']);
+const CITY_LANDMARK_KINDS = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower','house']);
 const CITY_PROP_KINDS = new Set(['banner','lamp','statue','brazier','crystal','grave','tent','sign','barrel','cart','pine','mushroom','anchor','rune']);
+const NAMEPLATE_MODES = Object.freeze(['nearby','always','hidden']);
 
 const field = (id, label = id, kind = 'text', extra = {}) => Object.freeze({ id, label, kind, ...extra });
 
@@ -73,6 +74,15 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('levelRequired', 'Required level', 'number'), field('seed', 'Seed', 'number'), field('spawnX', 'Spawn X', 'number'), field('spawnY', 'Spawn Y', 'number'),
     field('townX', 'Town X', 'number'), field('townY', 'Town Y', 'number'), field('townRange', 'Town range', 'number'),
     field('cityStyle', 'City style', 'select', { optionKey: 'cityStyles' }), field('cityAccent', 'City accent'), field('roofColor', 'Roof color'), field('wallColor', 'Wall color'), field('roadColor', 'Road color'),
+    field('nameplateOffsetY', 'Nameplate Y offset', 'number'), field('nameplateScale', 'Nameplate scale', 'number'),
+    field('nameplateBarWidth', 'Nameplate bar width', 'number'), field('nameplateBarHeight', 'Nameplate bar height', 'number'), field('nameplateFontSize', 'Name font size', 'number'),
+    field('nameplateShowValues', 'Show HP/Mana values', 'boolean'), field('nameplateHeadClearance', 'Head clearance px', 'number'), field('nameplateStackGap', 'Name/bar gap px', 'number'), field('residentialRingEnabled', 'Decorative residential ring', 'boolean'), field('residentialRingDensity', 'Residential density', 'number'),
+    field('npcNameplateMode', 'NPC labels', 'select', { optionKey: 'nameplateModes' }), field('npcNameplateDistance', 'NPC label distance', 'number'),
+    field('monsterNameplateMode', 'Monster labels', 'select', { optionKey: 'nameplateModes' }), field('monsterNameplateDistance', 'Monster label distance', 'number'), field('monsterBarDistance', 'Monster HP bar distance', 'number'),
+    field('monsterNameplateFontSize', 'Monster name font', 'number'), field('monsterNameplateBarWidth', 'Monster HP width', 'number'), field('monsterNameplateBarHeight', 'Monster HP height', 'number'),
+    field('monsterNameplateShowLevel', 'Show monster level', 'boolean'), field('monsterNameplateShowValues', 'Show monster HP values', 'boolean'),
+    field('bossNameplateScale', 'Boss plate scale', 'number'), field('bossNameplateAlwaysVisible', 'Boss labels always visible', 'boolean'),
+    field('nameplateCollisionPadding', 'Label collision padding', 'number'), field('nameplateFadeStart', 'Label fade start ratio', 'number'),
     field('districts', 'Districts', 'json'), field('landmarks', 'Landmarks', 'json'), field('props', 'Street props', 'json'),
     field('access', 'Access', 'select', { optionKey: 'mapAccess' }), field('portals', 'Portals', 'json'),
   ]),
@@ -223,6 +233,8 @@ export function validateStudioRecord(type, record) {
     for (const key of ['x','y','entranceX','entranceY']) { const error=playableCoord(record,key); if(error)return error; }
     for (const [key,min,max] of [['width',2,12],['height',2,12],['price',0,100000000],['weeklyRent',0,10000000],['levelRequired',1,100000]]) { const error=numberIn(record,key,min,max,{required:true,integer:true}); if(error)return error; }
     if (Number(record.x)+Number(record.width)>MAP_WIDTH-1 || Number(record.y)+Number(record.height)>MAP_HEIGHT-1) return 'house interior exceeds map bounds';
+    const nearBox=Number(record.entranceX)>=Number(record.x)-2&&Number(record.entranceX)<=Number(record.x)+Number(record.width)+1&&Number(record.entranceY)>=Number(record.y)-2&&Number(record.entranceY)<=Number(record.y)+Number(record.height)+1;
+    if(!nearBox)return 'house entrance must stay beside its footprint';
     return null;
   }
 
@@ -249,6 +261,12 @@ export function validateStudioRecord(type, record) {
     if (record.portals !== undefined && !Array.isArray(record.portals)) return 'portals must be a JSON array';
     if (record.cityStyle !== undefined && record.cityStyle !== '' && !CITY_STYLES.includes(String(record.cityStyle))) return 'cityStyle is not supported';
     for (const key of ['cityAccent','roofColor','wallColor','roadColor']) if (record[key] !== undefined && record[key] !== '' && !COLOR_RE.test(String(record[key]))) return `${key} must be a CSS hex color`;
+    for (const [key,min,max] of [['nameplateOffsetY',-32,12],['nameplateScale',0.55,1.5],['nameplateBarWidth',18,64],['nameplateBarHeight',2,8],['nameplateFontSize',7,14],['nameplateHeadClearance',4,24],['nameplateStackGap',1,8],['residentialRingDensity',0,10],['npcNameplateDistance',2,20],['monsterNameplateDistance',2,24],['monsterBarDistance',1,20],['monsterNameplateFontSize',7,14],['monsterNameplateBarWidth',18,72],['monsterNameplateBarHeight',2,8],['bossNameplateScale',0.8,1.8],['nameplateCollisionPadding',0,10],['nameplateFadeStart',0.2,0.95]]) { const e=numberIn(record,key,min,max,{required:false}); if(e)return e; }
+    if (record.npcNameplateMode !== undefined && !NAMEPLATE_MODES.includes(String(record.npcNameplateMode))) return 'npcNameplateMode is not supported';
+    if (record.monsterNameplateMode !== undefined && !NAMEPLATE_MODES.includes(String(record.monsterNameplateMode))) return 'monsterNameplateMode is not supported';
+    if (record.nameplateShowValues !== undefined && typeof record.nameplateShowValues !== 'boolean') return 'nameplateShowValues must be boolean';
+    if (record.residentialRingEnabled !== undefined && typeof record.residentialRingEnabled !== 'boolean') return 'residentialRingEnabled must be boolean';
+    for (const key of ['monsterNameplateShowLevel','monsterNameplateShowValues','bossNameplateAlwaysVisible']) if (record[key] !== undefined && typeof record[key] !== 'boolean') return `${key} must be boolean`;
     if (record.districts !== undefined) {
       if (!Array.isArray(record.districts) || record.districts.length > 8) return 'districts must be a JSON array with at most 8 entries';
       for (const entry of record.districts) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'district entries must be objects'; for (const key of ['x','y']) { const e=playableCoord(entry,key); if(e)return `district ${e}`; } const e=numberIn(entry,'radius',1,12,{required:true,integer:true}); if(e)return `district ${e}`; if(entry.color && !COLOR_RE.test(String(entry.color))) return 'district color must be a CSS hex color'; }
@@ -318,7 +336,7 @@ export function getContentStudioSchema(type, contentDB) {
   const options = {
     rarities: [...RARITIES], slots: [...ITEM_SLOTS], monsterTypes: [...MONSTER_TYPES], npcRoles: [...NPC_ROLES],
     spellTypes: [...SPELL_TYPES], buffTypes: [...BUFF_TYPES], spellTargetModes: [...SPELL_TARGET_MODES], allyEffects: [...ALLY_EFFECTS], enemyEffects: [...ENEMY_EFFECTS], vocations: Object.keys(VOCATIONS).sort(),
-    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], cityStyles: [...CITY_STYLES], eventTypes: [...EVENT_TYPES],
+    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], cityStyles: [...CITY_STYLES], eventTypes: [...EVENT_TYPES], nameplateModes: [...NAMEPLATE_MODES],
     npcs: contentDB.get('npcs').map(entry => entry.id).filter(Boolean).sort(),
     quests: contentDB.get('quests').map(entry => entry.id).filter(Boolean).sort(),
     items: contentDB.get('items').map(entry => entry.id).filter(Boolean).sort(),
@@ -330,7 +348,7 @@ export function getContentStudioSchema(type, contentDB) {
     npcs: 'NPCs are synchronized to online clients and gate linked quests/services by server proximity.',
     spells: 'Published spells merge into vocation spell slots and execute server-side.',
     quests: 'Quest NPCs, prerequisites and kill targets are checked before publish.',
-    maps: 'Map edits rebuild deterministic terrain and live portal travel. City style, palette, districts, landmarks and street props drive the 9.6 runtime presentation and minimap. Built-in maps cannot be deleted.',
+    maps: 'Map edits rebuild deterministic terrain and live portal travel. City style, palette, districts, landmarks, street props, nameplates and residential presentation controls drive the runtime presentation and minimap. Built-in maps cannot be deleted.',
     events: 'World events rotate and reward participants from authoritative server state.',
     shops: 'Content shops extend the authoritative alpha merchant catalog and can be edited without a client rebuild.',
     lootTables: 'Loot tables are rolled server-side by monsters that reference them.',

@@ -134,10 +134,12 @@ class GameEngine {
   isNearContentNpc(player, idOrRole, range = 2) {
     const wanted = typeof idOrRole === 'string' ? idOrRole.trim() : '';
     if (!wanted) return false;
-    return contentDB.get('npcs').some(npc => npc && npc.mapId === player.mapId
-      && (npc.id === wanted || npc.role === wanted)
-      && Number.isFinite(Number(npc.posX)) && Number.isFinite(Number(npc.posY))
-      && Math.abs(Number(npc.posX) - player.x) + Math.abs(Number(npc.posY) - player.y) <= range);
+    return contentDB.get('npcs').some(npc => {
+      if (!npc || npc.mapId !== player.mapId || (npc.id !== wanted && npc.role !== wanted)) return false;
+      if (!Number.isFinite(Number(npc.posX)) || !Number.isFinite(Number(npc.posY))) return false;
+      const safe = housingSystem.resolvePublicPosition(player.mapId, { x: Number(npc.posX), y: Number(npc.posY) }, contentDB);
+      return Boolean(safe) && Math.abs(safe.x - player.x) + Math.abs(safe.y - player.y) <= range;
+    });
   }
 
   enforcePlayerMapAccess(player) {

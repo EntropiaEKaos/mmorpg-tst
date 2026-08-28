@@ -52,11 +52,13 @@ import { loadLocal, saveLocal, applySave, persistSubSystems } from '../game/Save
 import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, getUILayout, saveUILayout, DEFAULT_UI_PANEL_ORDER, type UILayout, type CustomNPC, type CustomMonster } from '../game/content';
 import { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeServerSpells, serverNpcToClient, serverQuestToClient, spellContentSlug } from '../game/serverContentAdapters';
 import { getCityBuildings, drawCityDecor, drawCityTileOverlay } from '../game/cityPresentation';
-import { drawBuilding, type Building } from '../game/render';
+import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/render';
 import Weather from './Weather';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawHousing } from '../game/housingPresentation';
+import { createWorldLabelQueue } from '../game/worldNameplates';
+import { enforceNpcSpatialIntegrity } from '../game/spatialIntegrity';
 import CastBar from './CastBar';
 import RaidWarning from './RaidWarning';
 import { triggerCast } from './CastBar';
@@ -97,7 +99,6 @@ export default function GameScreen({ account, onLogout }: Props) {
   const onlineAccount = Boolean(account.sessionToken && !account.offline);
   const allowLocalAdmin = account.offline === true;
 
-  // Panels state
   const [showInventory, setShowInventory] = useState(false);
   const [showCharacter, setShowCharacter] = useState(false);
   const [showQuestLog, setShowQuestLog] = useState(false);
@@ -138,7 +139,6 @@ export default function GameScreen({ account, onLogout }: Props) {
   const lastSimChatRef = useRef(0);
   const lastEventCheckRef = useRef(0);
 
-  // ===== REAL NETWORK (online players) =====
   const onlinePlayersRef = useRef<Map<string, NetPlayer>>(new Map());
   const [netMode, setNetMode] = useState<'offline' | 'local' | 'online'>('offline');
   const [serverUrl, setServerUrl] = useState('');
@@ -149,7 +149,6 @@ export default function GameScreen({ account, onLogout }: Props) {
   const lastStaminaDrainRef = useRef(0);
   const [onlineCount, setOnlineCount] = useState(1);
   const [muted, setMuted] = useState(false);
-  // Server-authoritative state refs (used when connected to authoritative server)
   const serverMonstersRef = useRef<any[]>([]);
   const serverPlayersRef = useRef<any[]>([]);
   const serverGroundRef = useRef<any[]>([]);
@@ -157,11 +156,9 @@ export default function GameScreen({ account, onLogout }: Props) {
   const zoomRef = useRef(1);
   const [activeDialog, setActiveDialog] = useState<NPC | null>(null);
 
-  // Buildings + custom NPCs/monsters for current map
   const buildingsRef = useRef<Building[]>(getCityBuildings(MAPS.eldoria));
   const customNpcsRef = useRef<CustomNPC[]>(getCustomNPCs());
   const customMonstersRef = useRef<CustomMonster[]>(getCustomMonsters());
-  // Force refresh of custom content (used after admin edits)
   const refreshCustomContent = () => {
     const previousNpcIds = new Set(customNpcsRef.current.map((npc) => npc.id));
     const previousMonsterIds = new Set(customMonstersRef.current.map((monster) => monster.id));
@@ -178,7 +175,6 @@ export default function GameScreen({ account, onLogout }: Props) {
     ];
   };
 
-  // Dungeon state
   const [inDungeon, setInDungeon] = useState(false);
   const [dungeonWave, setDungeonWave] = useState(0);
   const dungeonTotalWavesRef = useRef(0);
@@ -188,17 +184,13 @@ export default function GameScreen({ account, onLogout }: Props) {
     return parseInt(localStorage.getItem(`tibia_dungeon_high_${account.characterName}`) || '0');
   });
 
-  // Pet state
   const petStateRef = useRef<ActivePetState | null>(null);
 
-  // Auto-attack
   const autoAttackRef = useRef(true);
   const [_autoAttack, setAutoAttack] = useState(true);
 
-  // Food shop from innkeeper
   const [showFoodShop, setShowFoodShop] = useState(false);
 
-  // Admin/Cheats
   const [godMode, setGodMode] = useState(false);
   const [noClip, setNoClip] = useState(false);
   const [oneHitKill, setOneHitKill] = useState(false);
@@ -219,14 +211,11 @@ export default function GameScreen({ account, onLogout }: Props) {
   useEffect(() => { damageMultiplierRef.current = damageMultiplier; }, [damageMultiplier]);
   useEffect(() => { dayTimeOverrideRef.current = dayTimeOverride; }, [dayTimeOverride]);
 
-  // Combo system
   const comboRef = useRef({ count: 0, lastHit: 0 });
   const [comboDisplay, setComboDisplay] = useState<{ count: number; mult: number } | null>(null);
 
-  // Weather
   const [weather, setWeather] = useState<WorldWeather>('clear');
 
-  // Load or create player (using Unified Save System)
   const [player, setPlayer] = useState<Player>(() => {
     const basePlayer = createPlayer(account.characterName, account.vocation.toLowerCase());
     const loadedSave = loadLocal(account.characterName);
@@ -244,7 +233,6 @@ export default function GameScreen({ account, onLogout }: Props) {
   const playerRef = useRef(player);
   playerRef.current = player;
 
-  // Map system
   const [currentMapId, setCurrentMapId] = useState('eldoria');
   const currentMapIdRef = useRef('eldoria');
   const worldRef = useRef(generateMap('eldoria'));
@@ -1198,8 +1186,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     if (now - p.lastAttack < 700) return;
     p.lastAttack = now;
 
-    // Combo system
-    if (now - comboRef.current.lastHit < 3000) {
+      if (now - comboRef.current.lastHit < 3000) {
       comboRef.current.count++;
     } else {
       comboRef.current.count = 1;
@@ -2205,12 +2192,15 @@ export default function GameScreen({ account, onLogout }: Props) {
     // Houses and decoration are presentation-only projections of global server state.
     if (serverSync.isActive()) drawHousing(ctx, p.housing, cam, TILE_SIZE, now);
 
+    enforceNpcSpatialIntegrity(npcsRef.current, world, Array.isArray(p.housing?.houses) ? p.housing.houses : []);
+    const worldLabels=createWorldLabelQueue(p.pos,p.targetId);
     // NPCs
     for (const n of npcsRef.current) {
       const sx = (n.pos.x - cam.x) * TILE_SIZE;
       const sy = (n.pos.y - cam.y) * TILE_SIZE;
       if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
       drawNPC(ctx, sx, sy, TILE_SIZE, n, now);
+      worldLabels.npc(n,sx,sy,TILE_SIZE);
     }
 
     // Portals (map transitions)
@@ -2283,6 +2273,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         color: m.color, emoji: m.emoji, msSize: m.size,
         level: m.level, type: m.type,
       }, now);
+      worldLabels.monster(m,mx,my,sx,sy,TILE_SIZE);
     }
 
     // Player
@@ -2293,7 +2284,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     const isInvisible = p.buffs.some((b) => b.type === 'invisible');
     if (isInvisible) ctx.globalAlpha = 0.4;
     drawPlayer(ctx, px, py, TILE_SIZE, p.direction, p.name, p.hp, p.maxHp, now,
-      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount, p.mana, p.maxMana);
+      vocation?.color ?? '#8b2e2e', p.mounted, mount?.icon, p.appearance?.public, mount, p.mana, p.maxMana, MAPS[currentMapIdRef.current] || MAPS.eldoria);
     ctx.globalAlpha = 1;
 
     // Draw other players — authoritative server data takes priority
@@ -2304,7 +2295,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         const sy = (op.y - cam.y) * TILE_SIZE;
         if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
         const voc = VOCATIONS[op.vocation];
-        drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction || 'down', `${op.name} [Lv${op.level}]`, op.hp, op.maxHp, now, voc?.color || '#8b2e2e', op.mounted, op.mount?.icon, op.appearance, op.mount, Number(op.mana) || 0, Number(op.maxMana) || 0);
+        drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction || 'down', `${op.name} [Lv${op.level}]`, op.hp, op.maxHp, now, voc?.color || '#8b2e2e', op.mounted, op.mount?.icon, op.appearance, op.mount, Number(op.mana) || 0, Number(op.maxMana) || 0, MAPS[currentMapIdRef.current] || MAPS.eldoria);
       }
     } else {
       // LOCAL/RELAY: draw BroadcastChannel players or simulated bots
@@ -2315,14 +2306,14 @@ export default function GameScreen({ account, onLogout }: Props) {
           const sx = (op.x - cam.x) * TILE_SIZE;
           const sy = (op.y - cam.y) * TILE_SIZE;
           if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
-          drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction, `${op.name} [${op.level}]`, op.hp, op.maxHp, now, op.color, op.mounted, op.mountIcon);
+          drawPlayer(ctx, sx, sy, TILE_SIZE, op.direction, `${op.name} [${op.level}]`, op.hp, op.maxHp, now, op.color, op.mounted, op.mountIcon, undefined, undefined, 0, 0, MAPS[currentMapIdRef.current] || MAPS.eldoria);
         }
       } else {
         for (const sim of simPlayersRef.current) {
           const sx = (sim.pos.x - cam.x) * TILE_SIZE;
           const sy = (sim.pos.y - cam.y) * TILE_SIZE;
           if (sx < -TILE_SIZE || sx > canvas.width || sy < -TILE_SIZE || sy > canvas.height) continue;
-          drawPlayer(ctx, sx, sy, TILE_SIZE, 'down', `${sim.name} [${sim.level}]`, 100, 100, now, sim.color, false, undefined);
+          drawPlayer(ctx, sx, sy, TILE_SIZE, 'down', `${sim.name} [${sim.level}]`, 100, 100, now, sim.color, false, undefined, undefined, undefined, 0, 0, MAPS[currentMapIdRef.current] || MAPS.eldoria);
         }
       }
     }
@@ -2376,6 +2367,15 @@ export default function GameScreen({ account, onLogout }: Props) {
         ctx.fill();
         ctx.restore();
       }
+    }
+
+    // Foreground architecture occlusion pass. Roofs are re-composited after
+    // players/pets so characters cannot visually stand on top of real houses.
+    for (const b of buildingsRef.current) {
+      const sx = (b.x - cam.x) * TILE_SIZE;
+      const sy = (b.y - cam.y) * TILE_SIZE;
+      if (sx > canvas.width || sy > canvas.height || sx + b.w * TILE_SIZE < 0 || sy + b.h * TILE_SIZE < 0) continue;
+      drawBuildingOcclusion(ctx, sx, sy, b, TILE_SIZE);
     }
 
     // Projectiles
@@ -2473,6 +2473,8 @@ export default function GameScreen({ account, onLogout }: Props) {
       TILE_SIZE,
       now,
     );
+
+    worldLabels.draw(ctx,MAPS[currentMapIdRef.current]||MAPS.eldoria);
 
     ctx.restore();
   };
