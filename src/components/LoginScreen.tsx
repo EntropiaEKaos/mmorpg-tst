@@ -206,9 +206,12 @@ export default function LoginScreen({ onLogin }: Props) {
 
         <section className="moria-panel moria-fade-up w-full rounded-3xl p-5 sm:p-7" style={{ animationDelay: '80ms' }}>
           <div className="mb-6 text-center">
-            <div className="relative mx-auto mb-2 w-full max-w-[260px]">
-              <div className="absolute inset-6 rounded-full bg-amber-200/10 blur-3xl" />
-              <img src="/images/logo.png" alt="Mor'ia" className="relative mx-auto w-full drop-shadow-[0_10px_30px_rgba(0,0,0,0.75)]" />
+            <div className="relative mx-auto mb-4 flex min-h-[150px] w-full max-w-[300px] items-center justify-center overflow-hidden rounded-2xl border border-amber-200/10 bg-[radial-gradient(circle_at_50%_45%,rgba(229,196,119,0.11),transparent_56%)] px-5">
+              <div className="absolute inset-x-8 top-1/2 h-px bg-gradient-to-r from-transparent via-amber-200/25 to-transparent" />
+              <div className="relative text-center drop-shadow-[0_12px_28px_rgba(0,0,0,0.75)]">
+                <div className="moria-title bg-gradient-to-b from-amber-100 via-amber-300 to-amber-700 bg-clip-text text-5xl font-black tracking-[0.08em] text-transparent sm:text-6xl">MOR'IA</div>
+                <div className="mx-auto mt-3 h-px w-32 bg-gradient-to-r from-transparent via-amber-300/60 to-transparent" />
+              </div>
             </div>
             <p className="moria-eyebrow">{tr('Realm of Shadows')}</p>
             <p className="mt-2 text-[11px] tracking-[0.16em] text-slate-400">{tr('SECURE ACCOUNT · AUTHORITATIVE WORLD')}</p>
