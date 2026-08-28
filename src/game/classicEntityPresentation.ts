@@ -1,5 +1,5 @@
-// Mor'ia 9.7 — original pixel-first 2D entity presentation.
-// Inspired by classic grid MMORPG readability; no third-party game assets are used.
+// Mor'ia 9.27 — Visual Revolution entity presentation.
+// Original pixel-first silhouettes; no third-party game assets are used.
 
 import { drawPixelHuman, type AvatarColors } from './playerAvatar';
 
@@ -14,10 +14,39 @@ function shade(hex: string, factor: number) {
 
 function drawPixelOutline(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fill: string) {
   const e = Math.max(1, Math.round(Math.min(w, h) * 0.08));
-  ctx.fillStyle = '#171412';
+  ctx.fillStyle = '#120f0e';
   ctx.fillRect(Math.round(x - e), Math.round(y - e), Math.round(w + e * 2), Math.round(h + e * 2));
   ctx.fillStyle = fill;
   ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
+}
+
+function drawGroundShadow(ctx: CanvasRenderingContext2D, cx: number, feetY: number, size: number, alpha = 0.34) {
+  ctx.save();
+  const shadow = ctx.createRadialGradient(cx, feetY, 1, cx, feetY, size * 0.48);
+  shadow.addColorStop(0, `rgba(0,0,0,${alpha})`);
+  shadow.addColorStop(0.6, `rgba(0,0,0,${alpha * 0.55})`);
+  shadow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.scale(1, 0.34);
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.arc(cx, feetY / 0.34, size * 0.48, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawThreatAura(ctx: CanvasRenderingContext2D, cx: number, feetY: number, size: number, color: string, time: number, boss = false) {
+  const pulse = 0.72 + Math.sin(time / (boss ? 310 : 440)) * 0.12;
+  const radius = size * (boss ? 0.74 : 0.57);
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const aura = ctx.createRadialGradient(cx, feetY - size * 0.5, size * 0.08, cx, feetY - size * 0.5, radius);
+  aura.addColorStop(0, `${color}${boss ? '35' : '24'}`);
+  aura.addColorStop(0.48, `${color}${boss ? '18' : '12'}`);
+  aura.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = aura;
+  ctx.fillRect(cx - radius, feetY - size * 0.5 - radius, radius * 2, radius * 2);
+  ctx.restore();
 }
 
 function npcStyle(role: string) {
@@ -50,23 +79,24 @@ export function drawClassicNpcSprite(
   const feetY = Math.round(cy + size * 0.46);
   const u = Math.max(1, Math.round(size / 24));
 
-  // NPCs share the same authored humanoid sprite grammar as the player so a
-  // populated square reads as one coherent pixel-art world instead of mixed UI shapes.
+  drawGroundShadow(ctx, cx, feetY + u, size * 0.75, 0.27);
   drawPixelHuman(ctx, cx, feetY, size * 0.96, 'down', npcStyle(role), npcColors(role, body), 0, time + cx * 7);
 
-  // Profession details are only a few native pixels; no emoji is used on-world.
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   if (role === 'quest') {
-    ctx.fillStyle = '#1b1710';
-    ctx.fillRect(Math.round(cx - u * 2), Math.round(feetY - size * 1.38), u * 4, u * 6);
+    const glow = 0.55 + Math.sin(time / 420) * 0.18;
+    ctx.globalAlpha = glow;
     ctx.fillStyle = '#f4d95d';
-    ctx.fillRect(Math.round(cx - u), Math.round(feetY - size * 1.36), u * 2, u * 4);
-    ctx.fillRect(Math.round(cx - u), Math.round(feetY - size * 1.27), u * 2, u * 2);
+    ctx.shadowColor = '#f4d95d';
+    ctx.shadowBlur = u * 5;
+    ctx.fillRect(Math.round(cx - u), Math.round(feetY - size * 1.38), u * 2, u * 5);
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
   } else if (role === 'merchant') {
     ctx.fillStyle = '#51321f';
     ctx.fillRect(Math.round(cx + size * .28), Math.round(feetY - size * .46), u * 5, u * 5);
-    ctx.fillStyle = '#a8783d';
+    ctx.fillStyle = '#b8894c';
     ctx.fillRect(Math.round(cx + size * .30), Math.round(feetY - size * .44), u * 3, u * 2);
   } else if (role === 'banker') {
     ctx.fillStyle = '#d4b659';
@@ -87,13 +117,17 @@ export function drawClassicMonsterSprite(
 ) {
   const u = Math.max(1, Math.round(size / 18));
   const body = safeColor(monster.color, '#8b4550');
-  const dark = shade(body, 0.5);
-  const light = shade(body, 1.32);
+  const dark = shade(body, 0.48);
+  const light = shade(body, 1.34);
   const id = String(monster.name || '').toLowerCase();
   const bob = Math.round(Math.sin(time / 340 + cx) * 0.4 * u);
   const feetY = Math.round(cy + size * 0.45 + bob);
   const left = Math.round(cx - 6 * u);
   const top = feetY - 18 * u;
+
+  drawGroundShadow(ctx, cx, feetY + u, size * (monster.type === 'boss' ? 0.95 : 0.72), monster.type === 'boss' ? 0.48 : 0.34);
+  if (monster.type === 'boss') drawThreatAura(ctx, cx, feetY, size, '#d9a84d', time, true);
+  else if (monster.type === 'elite') drawThreatAura(ctx, cx, feetY, size, '#a86ad1', time, false);
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -103,12 +137,14 @@ export function drawClassicMonsterSprite(
     drawPixelOutline(ctx, left + 8 * u, top + 6 * u, 5 * u, 5 * u, body);
     ctx.fillStyle = light;
     ctx.fillRect(left + 9 * u, top + 7 * u, 2 * u, u);
-    ctx.fillStyle = '#151515';
+    ctx.fillStyle = '#100e0d';
     ctx.fillRect(left + 11 * u, top + 8 * u, u, u);
     ctx.fillStyle = dark;
     ctx.fillRect(left + 2 * u, top + 14 * u, 2 * u, 3 * u);
     ctx.fillRect(left + 7 * u, top + 14 * u, 2 * u, 3 * u);
     ctx.fillRect(left, top + 10 * u, 2 * u, u);
+    ctx.fillStyle = shade(body, 1.52);
+    ctx.fillRect(left + 10 * u, top + 7 * u, u, u);
   } else if (/spider/.test(id)) {
     drawPixelOutline(ctx, left + 3 * u, top + 7 * u, 7 * u, 7 * u, body);
     ctx.strokeStyle = dark;
@@ -121,13 +157,18 @@ export function drawClassicMonsterSprite(
       ctx.lineTo(left + 13 * u, top + (dy - 2) * u);
       ctx.stroke();
     }
-    ctx.fillStyle = '#f13a3a';
+    ctx.fillStyle = '#f34a42';
+    ctx.shadowColor = '#f34a42';
+    ctx.shadowBlur = u * 2;
     ctx.fillRect(left + 5 * u, top + 9 * u, u, u);
     ctx.fillRect(left + 8 * u, top + 9 * u, u, u);
+    ctx.shadowBlur = 0;
   } else if (/slime|ooze|blob/.test(id)) {
     drawPixelOutline(ctx, left + 2 * u, top + 8 * u, 10 * u, 8 * u, body);
     ctx.fillStyle = light;
     ctx.fillRect(left + 4 * u, top + 8 * u, 4 * u, u);
+    ctx.fillStyle = 'rgba(255,255,255,.32)';
+    ctx.fillRect(left + 4 * u, top + 9 * u, 2 * u, u);
     ctx.fillStyle = '#111';
     ctx.fillRect(left + 4 * u, top + 11 * u, u, u);
     ctx.fillRect(left + 8 * u, top + 11 * u, u, u);
@@ -147,13 +188,19 @@ export function drawClassicMonsterSprite(
   }
 
   if (monster.type === 'boss') {
-    ctx.fillStyle = '#e2b64f';
+    ctx.fillStyle = '#e4ba55';
+    ctx.shadowColor = '#e4ba55';
+    ctx.shadowBlur = u * 3;
     ctx.fillRect(left + 2 * u, top - u, 2 * u, 3 * u);
     ctx.fillRect(left + 5 * u, top - 2 * u, 3 * u, 4 * u);
     ctx.fillRect(left + 9 * u, top - u, 2 * u, 3 * u);
+    ctx.shadowBlur = 0;
   } else if (monster.type === 'elite') {
-    ctx.fillStyle = '#c265ef';
+    ctx.fillStyle = '#bd78e9';
+    ctx.shadowColor = '#bd78e9';
+    ctx.shadowBlur = u * 2;
     ctx.fillRect(left + 5 * u, top, 3 * u, u);
+    ctx.shadowBlur = 0;
   }
   ctx.restore();
 }
