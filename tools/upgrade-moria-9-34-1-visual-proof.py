@@ -1,0 +1,80 @@
+from pathlib import Path
+import json
+
+CATALOG = Path('src/i18n/pt-BR.928.json')
+catalog = json.loads(CATALOG.read_text(encoding='utf-8'))
+catalog['You have'] = 'Você tem'
+CATALOG.write_text(json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+
+visual = Path('src/visualQa.tsx')
+text = visual.read_text(encoding='utf-8')
+anchor = "  localStorage.removeItem('moria_mail_Aurora');\n"
+addition = "  localStorage.removeItem('moria_mail_Aurora');\n  // Deterministic HUD position for screenshot proof. This only affects visual-qa.html.\n  localStorage.setItem('moria:hud:action-bar:position', JSON.stringify({ x: 220, y: 820 }));\n"
+if addition not in text:
+    if anchor not in text:
+        raise SystemExit('visual QA seed anchor not found')
+    text = text.replace(anchor, addition, 1)
+visual.write_text(text, encoding='utf-8')
+
+capture = Path('tools/capture-moria-9-34.mjs')
+text = capture.read_text(encoding='utf-8')
+text = text.replace(
+    "talents: ['TALENT TREE', 'Points:', 'Reset (500', 'Requires:', 'MAXED', 'TIER 1', 'talent point(s)'],",
+    "talents: ['TALENT TREE', 'Points:', 'Reset (500', 'Requires:', 'MAXED', 'TIER 1', 'talent point(s)', 'You have'],",
+)
+old_action = """  if (panel === 'actionbar') {
+    await page.locator('[data-qa-actionbar] .moria-hotbar-slot').first().hover();
+    await page.waitForTimeout(260);
+  } else if (panel === 'castbar') {
+"""
+new_action = """  if (panel === 'actionbar') {
+    const hud = page.locator('[data-hud-window=\"action-bar\"]');
+    await hud.waitFor({ state: 'visible' });
+    const box = await hud.boundingBox();
+    if (!box || box.width < 500 || box.height < 60 || box.x < 0 || box.y < 0 || box.x + box.width > 1440 || box.y + box.height > 1000) {
+      throw new Error(`Mor'ia 9.34 Action Bar is not visibly framed: ${JSON.stringify(box)}`);
+    }
+    const hudText = await hud.innerText();
+    if (!hudText.includes('Barra de Ações')) throw new Error(`Mor'ia 9.34 Action Bar title missing: ${hudText}`);
+    await page.locator('[data-qa-actionbar] .moria-hotbar-slot').first().hover();
+    await page.waitForTimeout(320);
+    const tooltipText = await page.locator('#__global_tooltip_root__').innerText();
+    for (const required of ['Fúria', 'Atalho:', 'Custo de Mana:', 'Recarga:', 'Combos reativos']) {
+      if (!tooltipText.includes(required)) throw new Error(`Mor'ia 9.34 Action Bar tooltip missing ${required}: ${tooltipText}`);
+    }
+  } else if (panel === 'castbar') {
+"""
+if new_action not in text:
+    if old_action not in text:
+        raise SystemExit('capture Action Bar anchor not found')
+    text = text.replace(old_action, new_action, 1)
+capture.write_text(text, encoding='utf-8')
+
+Path('docs/MORIA_9_34_1_VISUAL_PROOF.md').write_text("""# Mor'ia 9.34.1 — Visual Proof Hardening
+
+## Motivo
+
+A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate textual não detectou:
+
+1. a Árvore de Talentos ainda exibia `You have` em inglês;
+2. `actionbar.png` podia ser aceito mesmo com a barra fora do enquadramento visível.
+
+## Correções
+
+- adiciona `You have -> Você tem` ao catálogo PT-BR;
+- fixa uma posição determinística da Action Bar apenas no `visual-qa.html`;
+- o capturador agora exige que a janela `action-bar` tenha dimensões reais e esteja completamente dentro da viewport 1440x1000;
+- o capturador exige o título `Barra de Ações`;
+- abre o primeiro slot por hover real e exige no portal do tooltip: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
+- adiciona `You have` à lista de vazamentos proibidos do print de Talentos.
+
+## Escopo
+
+Nenhuma regra de combate, cooldown, dano, progressão, talento, item ou autoridade do servidor é alterada. A mudança é de apresentação e qualidade da prova visual.
+
+## Gate
+
+A 9.34.1 só pode ser considerada aprovada com auditoria PT-BR, typecheck/build, auditoria de dependências, testes do servidor e quatro PNGs não vazios, seguidos de inspeção humana.
+""", encoding='utf-8')
+
+print("Mor'ia 9.34.1 visual proof hardening prepared")
