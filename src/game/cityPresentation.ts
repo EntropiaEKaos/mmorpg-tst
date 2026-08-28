@@ -88,24 +88,32 @@ export function drawCityTileOverlay(
   const palette = getCityPalette({ id: map.id, style: map.cityStyle, biome: map.biome, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor });
   const dx = Math.abs(tileX - map.townCenter.x);
   const dy = Math.abs(tileY - map.townCenter.y);
-  const inTown = dx <= map.townRange + 2 && dy <= map.townRange + 2;
-  if (!inTown) return;
+  if (dx > map.townRange + 2 || dy > map.townRange + 2) return;
 
   ctx.save();
-  ctx.globalAlpha = tileType === 'path' ? 0.28 : 0.14;
-  ctx.fillStyle = tileType === 'path' ? palette.road : palette.wall;
-  ctx.fillRect(screenX, screenY, size, size);
-  ctx.globalAlpha = 0.28;
-  ctx.strokeStyle = palette.road;
-  ctx.lineWidth = 1;
-  // Classic top-down map grammar: clear avenue seams and a stronger central plaza.
+  ctx.imageSmoothingEnabled = false;
+  // Keep the textured base visible; city identity now accents edges and avenues
+  // instead of flattening every tile under a translucent rectangle.
+  if (tileType === 'path') {
+    ctx.globalAlpha = .16;
+    ctx.fillStyle = palette.road;
+    ctx.fillRect(screenX, screenY, size, size);
+  }
   if (tileX === map.townCenter.x || tileY === map.townCenter.y) {
-    ctx.strokeRect(screenX + 1.5, screenY + 1.5, size - 3, size - 3);
+    ctx.globalAlpha = .30;
+    ctx.strokeStyle = palette.road;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(screenX + 1, screenY + 1, size - 2, size - 2);
   }
   if (dx <= 2 && dy <= 2) {
-    ctx.globalAlpha = 0.2;
+    const p = Math.max(2, Math.round(size / 12));
+    ctx.globalAlpha = .34;
     ctx.fillStyle = palette.accent;
-    ctx.fillRect(screenX + 3, screenY + 3, size - 6, size - 6);
+    // Small plaza mosaic corners preserve cobble detail while making center unique.
+    ctx.fillRect(screenX + p, screenY + p, p, p);
+    ctx.fillRect(screenX + size - p * 2, screenY + p, p, p);
+    ctx.fillRect(screenX + p, screenY + size - p * 2, p, p);
+    ctx.fillRect(screenX + size - p * 2, screenY + size - p * 2, p, p);
   }
   ctx.restore();
 }

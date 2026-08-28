@@ -1,6 +1,6 @@
 // ===================================================================
-// MOR'IA 9.2 — PROCEDURAL PLAYER AVATAR
-// Layered, content-driven presentation. No gameplay authority lives here.
+// MOR'IA 9.7 — PIXEL-FIRST PLAYER AVATAR
+// Original procedural pixel presentation. Gameplay authority remains server-side.
 // ===================================================================
 
 export interface AvatarColors {
@@ -24,6 +24,8 @@ export interface AvatarMount {
   speedBonus?: number;
 }
 
+export const PIXEL_SPRITE_SCALE = 1.30;
+
 const DEFAULT_COLORS: AvatarColors = {
   head: '#d7a06b',
   primary: '#506aa6',
@@ -33,196 +35,235 @@ const DEFAULT_COLORS: AvatarColors = {
 
 const safeColor = (value: unknown, fallback: string) => /^#[0-9a-fA-F]{6}$/.test(String(value || '')) ? String(value) : fallback;
 
-function mountPalette(id: string, color: string) {
-  const accent = id.includes('nightmare') ? '#9a6ee8'
-    : id.includes('astral') ? '#f0d579'
-    : id.includes('tiger') ? '#33241c'
-    : id.includes('drake') || id.includes('raptor') ? '#f0a05b'
-    : id.includes('unicorn') ? '#f1d5ff'
-    : '#d6c19c';
-  return { body: color, accent };
+function shade(hex: string, factor: number) {
+  const clean = safeColor(hex, '#667080').slice(1);
+  const value = Number.parseInt(clean, 16);
+  const channel = (shift: number) => Math.max(0, Math.min(255, Math.round(((value >> shift) & 255) * factor)));
+  return `rgb(${channel(16)},${channel(8)},${channel(0)})`;
+}
+
+function block(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fill: string, outline = '#171412') {
+  const edge = Math.max(1, Math.round(Math.min(w, h) * 0.08));
+  ctx.fillStyle = outline;
+  ctx.fillRect(Math.round(x - edge), Math.round(y - edge), Math.round(w + edge * 2), Math.round(h + edge * 2));
+  ctx.fillStyle = fill;
+  ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
 }
 
 function drawMount(
   ctx: CanvasRenderingContext2D,
   cx: number,
-  cy: number,
+  feetY: number,
   size: number,
   mount: AvatarMount,
   direction: string,
   time: number,
 ) {
-  const id = String(mount.id || 'horse');
-  const color = safeColor(mount.color, '#8b6f47');
-  const { body, accent } = mountPalette(id, color);
-  const stride = Math.sin(time / 120) * size * 0.025;
+  const u = Math.max(1, Math.round(size / 18));
+  const id = String(mount.id || 'horse').toLowerCase();
+  const body = safeColor(mount.color, '#8b6f47');
+  const dark = shade(body, 0.55);
+  const light = shade(body, 1.25);
   const face = direction === 'left' ? -1 : 1;
+  const stride = Math.round(Math.sin(time / 120) * u);
 
   ctx.save();
-  ctx.translate(cx, cy);
+  ctx.translate(Math.round(cx), Math.round(feetY));
   ctx.scale(face, 1);
-
-  // Body and hindquarters.
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.ellipse(0, size * 0.13, size * 0.34, size * 0.18, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Neck / head adapt to quadruped vs drake/raptor silhouette.
-  const reptile = /raptor|drake/.test(id);
-  const bulky = /boar|bear|lion/.test(id);
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.ellipse(size * 0.28, reptile ? -size * 0.01 : size * 0.02, size * (bulky ? 0.18 : 0.14), size * 0.12, -0.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillRect(size * 0.18, -size * 0.01, size * 0.12, size * 0.17);
-
-  // Legs — deliberately chunky to read at the game's pixel scale.
-  ctx.fillStyle = body;
-  for (const lx of [-0.22, -0.08, 0.12, 0.24]) {
-    ctx.fillRect(size * lx, size * 0.22, size * 0.07, size * 0.20 + stride * (lx > 0 ? 1 : -1));
+  // Legs and hooves.
+  for (const [x, phase] of [[-5, 1], [-2, -1], [2, -1], [5, 1]] as const) {
+    block(ctx, x * u, (-4 * u), 2 * u, (4 + phase * stride / Math.max(1, u)) * u, dark);
+    ctx.fillStyle = '#201b18';
+    ctx.fillRect(x * u, -u, 2 * u, u);
   }
-
-  // Tail / special silhouettes.
-  ctx.strokeStyle = body;
-  ctx.lineWidth = Math.max(2, size * 0.05);
-  ctx.beginPath();
-  ctx.moveTo(-size * 0.28, size * 0.08);
-  ctx.quadraticCurveTo(-size * 0.48, -size * 0.02, -size * 0.43, -size * 0.18);
-  ctx.stroke();
-
-  ctx.fillStyle = accent;
-  if (/wolf|tiger|lion/.test(id)) {
-    ctx.beginPath(); ctx.moveTo(size * 0.22, -size * 0.09); ctx.lineTo(size * 0.25, -size * 0.23); ctx.lineTo(size * 0.31, -size * 0.10); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(size * 0.32, -size * 0.08); ctx.lineTo(size * 0.36, -size * 0.22); ctx.lineTo(size * 0.40, -size * 0.06); ctx.fill();
-  } else if (/unicorn/.test(id)) {
-    ctx.beginPath(); ctx.moveTo(size * 0.32, -size * 0.12); ctx.lineTo(size * 0.42, -size * 0.36); ctx.lineTo(size * 0.37, -size * 0.10); ctx.fill();
-  } else if (/boar/.test(id)) {
-    ctx.fillRect(size * 0.35, size * 0.02, size * 0.13, size * 0.035);
-  } else if (/raptor|drake/.test(id)) {
-    for (let i = 0; i < 4; i++) {
-      ctx.beginPath(); ctx.moveTo((-0.12 + i * 0.08) * size, -size * 0.06); ctx.lineTo((-0.08 + i * 0.08) * size, -size * 0.18); ctx.lineTo((-0.03 + i * 0.08) * size, -size * 0.05); ctx.fill();
-    }
-    if (/drake/.test(id)) {
-      ctx.globalAlpha = 0.65;
-      ctx.beginPath(); ctx.moveTo(-size * 0.05, size * 0.04); ctx.lineTo(-size * 0.35, -size * 0.22); ctx.lineTo(size * 0.03, -size * 0.05); ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-  } else {
-    // Horse/nightmare/bear readable ears.
-    ctx.beginPath(); ctx.moveTo(size * 0.23, -size * 0.09); ctx.lineTo(size * 0.25, -size * 0.22); ctx.lineTo(size * 0.30, -size * 0.09); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(size * 0.31, -size * 0.09); ctx.lineTo(size * 0.35, -size * 0.21); ctx.lineTo(size * 0.38, -size * 0.07); ctx.fill();
-  }
-
-  // Saddle and reins.
-  ctx.fillStyle = '#3d2b22';
-  ctx.fillRect(-size * 0.10, -size * 0.03, size * 0.24, size * 0.07);
-  ctx.strokeStyle = '#d1b06e';
-  ctx.lineWidth = Math.max(1, size * 0.018);
-  ctx.beginPath(); ctx.moveTo(size * 0.10, 0); ctx.quadraticCurveTo(size * 0.30, -size * 0.02, size * 0.36, size * 0.04); ctx.stroke();
-
-  // Eye / magical accent.
-  ctx.fillStyle = /nightmare|astral/.test(id) ? accent : '#11151b';
-  ctx.fillRect(size * 0.34, -size * 0.035, Math.max(1.5, size * 0.025), Math.max(1.5, size * 0.025));
+  // Body, neck and head in chunky pixel masses.
+  block(ctx, -7 * u, -9 * u, 12 * u, 6 * u, body);
+  block(ctx, 3 * u, -12 * u, 4 * u, 7 * u, body);
+  block(ctx, 5 * u, -14 * u, 5 * u, 4 * u, body);
+  ctx.fillStyle = light;
+  ctx.fillRect(-5 * u, -8 * u, 7 * u, u);
+  ctx.fillRect(6 * u, -13 * u, 2 * u, u);
+  // Ears / horns.
+  ctx.fillStyle = /drake|raptor/.test(id) ? '#d7b45d' : dark;
+  ctx.fillRect(6 * u, -16 * u, u, 3 * u);
+  ctx.fillRect(9 * u, -16 * u, u, 3 * u);
+  // Eye.
+  ctx.fillStyle = /nightmare|astral/.test(id) ? '#c896ff' : '#0d0d0d';
+  ctx.fillRect(8 * u, -12 * u, u, u);
+  // Saddle.
+  block(ctx, -2 * u, -11 * u, 6 * u, 3 * u, '#5b3824');
+  ctx.fillStyle = '#d8b95f';
+  ctx.fillRect(-u, -11 * u, 4 * u, u);
+  // Tail.
+  ctx.fillStyle = dark;
+  ctx.fillRect(-9 * u, -9 * u, 3 * u, u);
+  ctx.fillRect(-10 * u, -8 * u, 2 * u, 3 * u);
   ctx.restore();
 }
 
-function drawStyleLayers(
+function drawPixelHuman(
   ctx: CanvasRenderingContext2D,
-  style: string,
   cx: number,
-  cy: number,
+  feetY: number,
   size: number,
-  scale: number,
-  offsetY: number,
+  direction: string,
+  style: string,
   colors: AvatarColors,
   addonMask: number,
+  time: number,
 ) {
-  const s = size * scale;
-  const y = cy + offsetY;
+  const u = Math.max(1, Math.round(size / 18));
+  const left = Math.round(cx - 6 * u);
+  const top = Math.round(feetY - 20 * u);
+  const darkPrimary = shade(colors.primary, 0.58);
+  const lightPrimary = shade(colors.primary, 1.28);
+  const darkSecondary = shade(colors.secondary, 0.58);
+  const skinDark = shade(colors.head, 0.72);
+  const metal = /knight|templar|paladin|guardian/.test(style);
+  const caster = /mage|warlock|shaman|necromancer|druid/.test(style);
+  const ranger = /ranger|archer|hunter/.test(style);
+  const rogue = /assassin|rogue/.test(style);
+  const barbarian = /barbarian|berserk/.test(style);
 
-  // Legs and boots.
-  ctx.fillStyle = colors.secondary;
-  ctx.fillRect(cx - s * 0.16, y + s * 0.12, s * 0.12, s * 0.24);
-  ctx.fillRect(cx + s * 0.04, y + s * 0.12, s * 0.12, s * 0.24);
-  ctx.fillStyle = '#2a2525';
-  ctx.fillRect(cx - s * 0.17, y + s * 0.31, s * 0.14, s * 0.08);
-  ctx.fillRect(cx + s * 0.03, y + s * 0.31, s * 0.14, s * 0.08);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
 
-  // Cape/back addon. Addon #1 intentionally reads behind the body.
-  if (addonMask & 1) {
+  // Back cape / robe creates a stronger readable silhouette.
+  if ((addonMask & 1) || caster) {
+    block(ctx, left + 2 * u, top + 8 * u, 8 * u, 9 * u, darkSecondary);
     ctx.fillStyle = colors.detail;
-    ctx.beginPath();
-    ctx.moveTo(cx - s * 0.22, y - s * 0.04);
-    ctx.lineTo(cx + s * 0.22, y - s * 0.04);
-    ctx.lineTo(cx + s * 0.27, y + s * 0.35);
-    ctx.lineTo(cx - s * 0.27, y + s * 0.35);
-    ctx.closePath(); ctx.fill();
+    ctx.fillRect(left + 2 * u, top + 8 * u, u, 7 * u);
   }
 
-  // Torso silhouette.
-  ctx.fillStyle = colors.primary;
-  if (/mage|warlock|shaman|necromancer/.test(style)) {
-    ctx.beginPath();
-    ctx.moveTo(cx - s * 0.20, y - s * 0.06); ctx.lineTo(cx + s * 0.20, y - s * 0.06);
-    ctx.lineTo(cx + s * 0.29, y + s * 0.32); ctx.lineTo(cx - s * 0.29, y + s * 0.32); ctx.closePath(); ctx.fill();
+  // Boots and legs.
+  block(ctx, left + 2 * u, top + 15 * u, 3 * u, 4 * u, colors.secondary);
+  block(ctx, left + 7 * u, top + 15 * u, 3 * u, 4 * u, colors.secondary);
+  ctx.fillStyle = '#211c19';
+  ctx.fillRect(left + u, top + 18 * u, 4 * u, 2 * u);
+  ctx.fillRect(left + 7 * u, top + 18 * u, 4 * u, 2 * u);
+  ctx.fillStyle = shade(colors.secondary, 1.18);
+  ctx.fillRect(left + 3 * u, top + 15 * u, u, 2 * u);
+  ctx.fillRect(left + 8 * u, top + 15 * u, u, 2 * u);
+
+  // Torso / robe.
+  if (caster) {
+    block(ctx, left + 2 * u, top + 8 * u, 8 * u, 8 * u, colors.primary);
+    ctx.fillStyle = darkPrimary;
+    ctx.fillRect(left + 2 * u, top + 13 * u, 8 * u, 3 * u);
   } else {
-    ctx.fillRect(cx - s * 0.22, y - s * 0.07, s * 0.44, s * 0.25);
+    block(ctx, left + 2 * u, top + 8 * u, 8 * u, 7 * u, colors.primary);
   }
-
-  // Arms.
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(cx - s * 0.31, y - s * 0.02, s * 0.10, s * 0.24);
-  ctx.fillRect(cx + s * 0.21, y - s * 0.02, s * 0.10, s * 0.24);
-  ctx.fillStyle = colors.head;
-  ctx.fillRect(cx - s * 0.31, y + s * 0.16, s * 0.10, s * 0.07);
-  ctx.fillRect(cx + s * 0.21, y + s * 0.16, s * 0.10, s * 0.07);
-
-  // Style details.
+  ctx.fillStyle = lightPrimary;
+  ctx.fillRect(left + 3 * u, top + 9 * u, u, 5 * u);
   ctx.fillStyle = colors.detail;
-  if (/knight|templar/.test(style)) {
-    ctx.fillRect(cx - s * 0.29, y - s * 0.08, s * 0.13, s * 0.10);
-    ctx.fillRect(cx + s * 0.16, y - s * 0.08, s * 0.13, s * 0.10);
-    ctx.fillRect(cx - s * 0.04, y - s * 0.07, s * 0.08, s * 0.24);
-  } else if (/ranger/.test(style)) {
-    ctx.strokeStyle = colors.detail; ctx.lineWidth = Math.max(2, s * 0.04);
-    ctx.beginPath(); ctx.moveTo(cx - s * 0.20, y - s * 0.05); ctx.lineTo(cx + s * 0.20, y + s * 0.18); ctx.stroke();
-  } else if (/assassin/.test(style)) {
-    ctx.fillRect(cx - s * 0.22, y + s * 0.08, s * 0.44, s * 0.05);
-  } else if (/noble/.test(style)) {
-    ctx.fillRect(cx - s * 0.22, y - s * 0.02, s * 0.44, s * 0.05);
-  } else if (/barbarian/.test(style)) {
-    for (const dx of [-0.22, -0.12, 0.12, 0.22]) {
-      ctx.beginPath(); ctx.arc(cx + s * dx, y - s * 0.05, s * 0.07, 0, Math.PI * 2); ctx.fill();
-    }
-  } else if (/shaman/.test(style)) {
-    ctx.fillRect(cx - s * 0.04, y - s * 0.06, s * 0.08, s * 0.28);
-  }
+  ctx.fillRect(left + 5 * u, top + 8 * u, 2 * u, 7 * u);
+  ctx.fillStyle = darkPrimary;
+  ctx.fillRect(left + 2 * u, top + 14 * u, 8 * u, u);
 
-  // Head / hair / hood.
+  // Arms, with a tiny idle offset only on the hand pixel.
+  const handBob = Math.round(Math.sin(time / 240) * 0.5 * u);
+  block(ctx, left, top + 9 * u, 2 * u, 6 * u, darkPrimary);
+  block(ctx, left + 10 * u, top + 9 * u, 2 * u, 6 * u, darkPrimary);
   ctx.fillStyle = colors.head;
-  ctx.beginPath(); ctx.arc(cx, y - s * 0.22, s * 0.15, 0, Math.PI * 2); ctx.fill();
-  const hooded = /mage|warlock|necromancer|assassin|ranger/.test(style);
-  ctx.fillStyle = hooded ? colors.secondary : '#33261f';
-  ctx.beginPath(); ctx.arc(cx, y - s * 0.25, s * 0.16, Math.PI, Math.PI * 2); ctx.fill();
-  if (hooded) {
-    ctx.strokeStyle = colors.detail; ctx.lineWidth = Math.max(1, s * 0.025);
-    ctx.beginPath(); ctx.arc(cx, y - s * 0.20, s * 0.18, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+  ctx.fillRect(left, top + 14 * u + handBob, 2 * u, 2 * u);
+  ctx.fillRect(left + 10 * u, top + 14 * u - handBob, 2 * u, 2 * u);
+
+  // Shoulder / class silhouette accents.
+  if (metal) {
+    block(ctx, left + u, top + 8 * u, 3 * u, 2 * u, '#9aa4ad');
+    block(ctx, left + 8 * u, top + 8 * u, 3 * u, 2 * u, '#9aa4ad');
+    ctx.fillStyle = '#d6e0e7';
+    ctx.fillRect(left + 2 * u, top + 8 * u, u, u);
+    ctx.fillRect(left + 9 * u, top + 8 * u, u, u);
+  } else if (barbarian) {
+    ctx.fillStyle = '#7a4b2e';
+    ctx.fillRect(left + u, top + 8 * u, 3 * u, u);
+    ctx.fillRect(left + 8 * u, top + 8 * u, 3 * u, u);
+  } else if (rogue || ranger) {
+    ctx.fillStyle = colors.detail;
+    ctx.fillRect(left + 2 * u, top + 10 * u, 8 * u, u);
   }
 
-  // Addon #2 is the head/crest layer.
-  if (addonMask & 2) {
-    ctx.fillStyle = colors.detail;
-    if (/warlock|necromancer|barbarian|shaman/.test(style)) {
-      ctx.beginPath(); ctx.moveTo(cx - s * 0.10, y - s * 0.34); ctx.lineTo(cx - s * 0.21, y - s * 0.48); ctx.lineTo(cx - s * 0.04, y - s * 0.36); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(cx + s * 0.10, y - s * 0.34); ctx.lineTo(cx + s * 0.21, y - s * 0.48); ctx.lineTo(cx + s * 0.04, y - s * 0.36); ctx.fill();
-    } else if (/noble/.test(style)) {
-      ctx.fillRect(cx - s * 0.15, y - s * 0.37, s * 0.30, s * 0.06);
-      for (const dx of [-0.11, 0, 0.11]) { ctx.beginPath(); ctx.moveTo(cx + s * dx - s * 0.035, y - s * 0.37); ctx.lineTo(cx + s * dx, y - s * 0.49); ctx.lineTo(cx + s * dx + s * 0.035, y - s * 0.37); ctx.fill(); }
+  // Head with outline, jaw shading and hair/hood volume.
+  block(ctx, left + 3 * u, top + 2 * u, 6 * u, 6 * u, colors.head);
+  ctx.fillStyle = skinDark;
+  ctx.fillRect(left + 3 * u, top + 6 * u, 6 * u, 2 * u);
+  const hooded = caster || rogue || ranger;
+  ctx.fillStyle = hooded ? colors.secondary : '#3a261c';
+  ctx.fillRect(left + 3 * u, top + u, 6 * u, 2 * u);
+  ctx.fillRect(left + 2 * u, top + 2 * u, u, 4 * u);
+  ctx.fillRect(left + 9 * u, top + 2 * u, u, 4 * u);
+  ctx.fillStyle = hooded ? shade(colors.secondary, 1.25) : '#5b3827';
+  ctx.fillRect(left + 4 * u, top + u, 3 * u, u);
+
+  // Directional face pixels.
+  if (direction !== 'up') {
+    const eyeY = top + 4 * u;
+    ctx.fillStyle = '#151515';
+    if (direction === 'left') {
+      ctx.fillRect(left + 3 * u, eyeY, u, u);
+      ctx.fillRect(left + 6 * u, eyeY, u, u);
+    } else if (direction === 'right') {
+      ctx.fillRect(left + 5 * u, eyeY, u, u);
+      ctx.fillRect(left + 8 * u, eyeY, u, u);
     } else {
-      ctx.fillRect(cx - s * 0.03, y - s * 0.44, s * 0.06, s * 0.18);
+      ctx.fillRect(left + 4 * u, eyeY, u, u);
+      ctx.fillRect(left + 7 * u, eyeY, u, u);
+    }
+    ctx.fillStyle = '#e7b889';
+    ctx.fillRect(left + 6 * u, top + 5 * u, u, u);
+  }
+
+  // Addon crest / helmet.
+  if ((addonMask & 2) || metal) {
+    ctx.fillStyle = colors.detail;
+    ctx.fillRect(left + 3 * u, top, 6 * u, u);
+    if (metal) {
+      ctx.fillStyle = '#8c969e';
+      ctx.fillRect(left + 4 * u, top, 4 * u, 2 * u);
+      ctx.fillStyle = '#d7e0e5';
+      ctx.fillRect(left + 5 * u, top, u, u);
+    } else {
+      ctx.fillRect(left + 5 * u, top - 2 * u, 2 * u, 2 * u);
     }
   }
+
+  // Class equipment reads as part of the sprite rather than a UI icon.
+  if (metal || barbarian) {
+    ctx.fillStyle = '#c6cbd0';
+    ctx.fillRect(left + 12 * u, top + 7 * u, u, 10 * u);
+    ctx.fillStyle = '#e7edf0';
+    ctx.fillRect(left + 11 * u, top + 7 * u, 3 * u, u);
+    ctx.fillStyle = '#6d4326';
+    ctx.fillRect(left + 11 * u, top + 16 * u, 3 * u, u);
+    if (metal) {
+      ctx.fillStyle = '#697784';
+      ctx.fillRect(left - 2 * u, top + 10 * u, 2 * u, 5 * u);
+      ctx.fillStyle = colors.detail;
+      ctx.fillRect(left - 2 * u, top + 11 * u, u, 3 * u);
+    }
+  } else if (ranger) {
+    ctx.strokeStyle = '#a6783c';
+    ctx.lineWidth = Math.max(1, u);
+    ctx.beginPath();
+    ctx.arc(left + 12 * u, top + 11 * u, 4 * u, Math.PI * 0.55, Math.PI * 1.45);
+    ctx.stroke();
+    ctx.strokeStyle = '#dfd8c8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(left + 12 * u, top + 7 * u);
+    ctx.lineTo(left + 12 * u, top + 15 * u);
+    ctx.stroke();
+  } else if (caster) {
+    ctx.fillStyle = '#6b4526';
+    ctx.fillRect(left + 12 * u, top + 5 * u, u, 12 * u);
+    ctx.fillStyle = colors.detail;
+    ctx.fillRect(left + 11 * u, top + 4 * u, 3 * u, 3 * u);
+    ctx.fillStyle = '#fff3c0';
+    ctx.fillRect(left + 12 * u, top + 4 * u, u, u);
+  }
+
+  ctx.restore();
 }
 
 export function drawAvatar(
@@ -251,73 +292,66 @@ export function drawAvatar(
   };
   const style = String(appearance?.outfit?.style || 'citizen').toLowerCase();
   const addonMask = Math.max(0, Math.min(3, Math.floor(Number(appearance?.addonMask) || 0)));
+  const u = Math.max(1, Math.round(size / 18));
 
   ctx.save();
-  const cx = x + size / 2;
-  const bob = Math.sin(time / 200) * (mounted ? 1.4 : 1.0);
-  const cy = y + size / 2 + bob;
+  ctx.imageSmoothingEnabled = false;
+  const cx = Math.round(x + size / 2);
+  const bob = Math.round(Math.sin(time / 260) * (mounted ? 0.6 : 0.35) * u);
+  const feetY = Math.round(y + size - 2 + bob);
 
-  const glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, size * 0.68);
-  glow.addColorStop(0, colors.primary + '26'); glow.addColorStop(1, 'transparent');
-  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, size * 0.68, 0, Math.PI * 2); ctx.fill();
-
-  ctx.fillStyle = 'rgba(0,0,0,0.42)';
-  ctx.beginPath(); ctx.ellipse(cx, y + size - 3, size * (mounted ? 0.43 : 0.34), size * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+  // Tight grounded shadow, no large vector glow halo.
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.beginPath();
+  ctx.ellipse(cx, y + size - 2, size * (mounted ? 0.45 : 0.30), Math.max(2, size * 0.07), 0, 0, Math.PI * 2);
+  ctx.fill();
 
   if (mounted) {
-    const effectiveMount: AvatarMount = mount || { id:'legacy', icon:fallbackMountIcon, color:vocationColor };
-    drawMount(ctx, cx, cy + size * 0.15, size, effectiveMount, direction, time);
+    drawMount(ctx, cx, feetY + 2 * u, size, mount || { id: 'legacy', icon: fallbackMountIcon, color: vocationColor }, direction, time);
+    drawPixelHuman(ctx, cx, feetY - 8 * u, size * 0.86, direction, style, colors, addonMask, time);
+  } else {
+    drawPixelHuman(ctx, cx, feetY, size * PIXEL_SPRITE_SCALE, direction, style, colors, addonMask, time);
   }
 
-  const scale = mounted ? 0.73 : 1;
-  const offsetY = mounted ? -size * 0.28 : 0;
-  drawStyleLayers(ctx, style, cx, cy, size, scale, offsetY, colors, addonMask);
-
-  // Face direction cue and small eye highlights.
-  const eyeShiftX = direction === 'left' ? -1.2 : direction === 'right' ? 1.2 : 0;
-  const eyeShiftY = direction === 'up' ? -0.8 : direction === 'down' ? 0.8 : 0;
-  const faceY = cy - size * 0.22 * scale + offsetY;
-  ctx.fillStyle = '#151515';
-  ctx.fillRect(cx - 3 + eyeShiftX, faceY + eyeShiftY, 1.5, 1.5);
-  ctx.fillRect(cx + 1.5 + eyeShiftX, faceY + eyeShiftY, 1.5, 1.5);
-
-  // Classic overhead status stack: name, health and mana all stay above the sprite.
+  // Reference-style overhead name + compact HP/MP stack above the taller sprite.
   const hpPct = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
   const manaPct = Math.max(0, Math.min(1, mana / Math.max(1, maxMana)));
-  const barW = Math.max(30, size * 1.05);
-  const barH = 5;
+  const barW = Math.max(34, Math.round(size * 1.18));
+  const barH = Math.max(3, Math.round(size / 11));
   const barX = Math.round(cx - barW / 2);
-  const hpBarY = Math.round(y - 14);
-  const manaBarY = Math.round(y - 8);
+  const hpBarY = Math.round(y - size * 0.28);
+  const manaBarY = hpBarY + barH + 2;
+  const nameY = hpBarY - 5;
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.font = 'bold 10px monospace';
+  ctx.font = `bold ${Math.max(10, Math.round(size * 0.31))}px monospace`;
   ctx.strokeStyle = 'rgba(0,0,0,0.95)';
   ctx.lineWidth = 3;
-  ctx.strokeText(name, cx, y - 18);
+  ctx.strokeText(name, cx, nameY);
   ctx.fillStyle = '#f4e6bd';
-  ctx.fillText(name, cx, y - 18);
+  ctx.fillText(name, cx, nameY);
 
-  ctx.fillStyle = '#080808';
+  ctx.fillStyle = '#090909';
   ctx.fillRect(barX - 1, hpBarY - 1, barW + 2, barH + 2);
   ctx.fillRect(barX - 1, manaBarY - 1, barW + 2, barH + 2);
-  ctx.fillStyle = '#4b1115';
+  ctx.fillStyle = '#461116';
   ctx.fillRect(barX, hpBarY, barW, barH);
-  ctx.fillStyle = '#b91f32';
+  ctx.fillStyle = '#c62535';
   ctx.fillRect(barX, hpBarY, Math.round(barW * hpPct), barH);
-  ctx.fillStyle = '#10274d';
+  ctx.fillStyle = '#10284d';
   ctx.fillRect(barX, manaBarY, barW, barH);
-  ctx.fillStyle = '#226bc5';
+  ctx.fillStyle = '#2877d4';
   ctx.fillRect(barX, manaBarY, Math.round(barW * manaPct), barH);
 
-  if (size >= 30) {
+  // Keep numeric readout only at larger scales so pixels remain readable.
+  if (size >= 38) {
     ctx.font = 'bold 6px monospace';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff7ef';
-    ctx.fillText(`${Math.max(0, Math.round(hp))}/${Math.max(0, Math.round(maxHp))}`, cx, hpBarY + 2.5);
-    ctx.fillStyle = '#dbeeff';
-    ctx.fillText(`${Math.max(0, Math.round(mana))}/${Math.max(0, Math.round(maxMana))}`, cx, manaBarY + 2.5);
+    ctx.fillStyle = '#fff8ef';
+    ctx.fillText(`${Math.max(0, Math.round(hp))}/${Math.max(0, Math.round(maxHp))}`, cx, hpBarY + barH / 2);
+    ctx.fillStyle = '#e0efff';
+    ctx.fillText(`${Math.max(0, Math.round(mana))}/${Math.max(0, Math.round(maxMana))}`, cx, manaBarY + barH / 2);
   }
   ctx.restore();
 }
