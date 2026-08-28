@@ -11,53 +11,15 @@ interface TooltipData {
   preferred?: 'top' | 'bottom' | 'left' | 'right';
 }
 
-const TOOLTIP_ID = '__global_tooltip_root__';
-
-function ensureRoot(): HTMLElement {
-  let root = document.getElementById(TOOLTIP_ID);
-  if (!root) {
-    root = document.createElement('div');
-    root.id = TOOLTIP_ID;
-    root.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999;';
-    document.body.appendChild(root);
-  }
-  return root;
-}
-
-// Singleton tooltip state
-let tooltipListeners: Array<(d: TooltipData | null) => void> = [];
-
-function showGlobalTooltip(data: TooltipData) {
-  tooltipListeners.forEach((fn) => fn(data));
-}
-
-function hideGlobalTooltip() {
-  tooltipListeners.forEach((fn) => fn(null));
-}
-
-/** Portal-rendered tooltip that lives at the body level */
-function GlobalTooltipRenderer() {
-  const [data, setData] = useState<TooltipData | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    tooltipListeners.push(setData);
-    return () => {
-      tooltipListeners = tooltipListeners.filter((fn) => fn !== setData);
-    };
-  }, []);
-
-  if (!data) return null;
-
-  // Calculate best position
+/** Shared body-level portal renderer used by real tooltip triggers. */
+function TooltipPortal({ data }: { data: TooltipData }) {
   const padding = 12;
   const tooltipW = 280;
-  const tooltipH = 200; // estimate
+  const tooltipH = 200;
   const r = data.rect;
   let x = 0, y = 0;
   const preferred = data.preferred || 'top';
 
-  // Try preferred position first
   if (preferred === 'top' && r.top - tooltipH - padding > 0) {
     x = r.left + r.width / 2 - tooltipW / 2;
     y = r.top - tooltipH - padding;
@@ -71,30 +33,18 @@ function GlobalTooltipRenderer() {
     x = r.right + padding;
     y = r.top + r.height / 2 - tooltipH / 2;
   } else {
-    // Fallback: below
     x = r.left + r.width / 2 - tooltipW / 2;
     y = r.bottom + padding;
-    // If would go below viewport, go above
-    if (y + tooltipH > window.innerHeight) {
-      y = Math.max(4, r.top - tooltipH - padding);
-    }
+    if (y + tooltipH > window.innerHeight) y = Math.max(4, r.top - tooltipH - padding);
   }
 
-  // Clamp to viewport
   x = Math.max(4, Math.min(window.innerWidth - tooltipW - 4, x));
   y = Math.max(4, Math.min(window.innerHeight - tooltipH - 4, y));
 
   return createPortal(
     <div
-      ref={ref}
-      style={{
-        position: 'fixed',
-        left: `${x}px`,
-        top: `${y}px`,
-        maxWidth: `${tooltipW}px`,
-        zIndex: 99999,
-        pointerEvents: 'none',
-      }}
+      data-tooltip-portal="true"
+      style={{ position: 'fixed', left: `${x}px`, top: `${y}px`, maxWidth: `${tooltipW}px`, zIndex: 99999, pointerEvents: 'none' }}
     >
       <div
         className="rounded-lg border-2 px-3 py-2 text-xs backdrop-blur-md shadow-2xl"
@@ -109,8 +59,13 @@ function GlobalTooltipRenderer() {
         {data.content}
       </div>
     </div>,
-    ensureRoot()
+    document.body,
   );
+}
+
+/** Compatibility mount retained while trigger-owned portals handle real tooltips. */
+function GlobalTooltipRenderer() {
+  return null;
 }
 
 export default GlobalTooltipRenderer;
@@ -125,44 +80,45 @@ interface TriggerProps {
 
 export function T({ content, children, position = 'top', delay = 150, disabled }: TriggerProps) {
   const triggerRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const timerRef = useRef<any>(undefined);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [localData, setLocalData] = useState<TooltipData | null>(null);
 
   const handleEnter = useCallback(() => {
     if (disabled) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      if (triggerRef.current) {
-        showGlobalTooltip({
-          content,
-          rect: triggerRef.current.getBoundingClientRect(),
-          preferred: position,
-        });
-      }
+      const node = triggerRef.current;
+      if (!node) return;
+      setLocalData({ content, rect: node.getBoundingClientRect(), preferred: position });
     }, delay);
   }, [content, position, delay, disabled]);
 
   const handleLeave = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    hideGlobalTooltip();
+    timerRef.current = undefined;
+    setLocalData(null);
   }, []);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      clearTimeout(timerRef.current);
-      hideGlobalTooltip();
-    };
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
   return (
-    <div
-      ref={triggerRef}
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
-      className="inline-flex"
-    >
-      {children}
-    </div>
+    <>
+      <div
+        ref={triggerRef}
+        data-tooltip-trigger="true"
+        data-tooltip-open={localData ? 'true' : 'false'}
+        className="inline-flex"
+        onPointerEnter={handleEnter}
+        onPointerLeave={handleLeave}
+        onFocusCapture={handleEnter}
+        onBlurCapture={handleLeave}
+      >
+        {children}
+      </div>
+      {localData ? <TooltipPortal data={localData} /> : null}
+    </>
   );
 }
 

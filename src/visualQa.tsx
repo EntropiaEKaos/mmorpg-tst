@@ -40,6 +40,8 @@ function seedVisualQa() {
   localStorage.removeItem('moria_books');
   localStorage.removeItem('moria_read_books_Aurora');
   localStorage.removeItem('moria_mail_Aurora');
+  // Deterministic HUD position for screenshot proof. This only affects visual-qa.html.
+  localStorage.setItem('moria:hud:action-bar:position', JSON.stringify({ x: 220, y: 820 }));
   saveBook({
     id: 'qa-eldoria',
     title: 'Chronicles of Eldoria',
