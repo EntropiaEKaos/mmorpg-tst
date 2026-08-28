@@ -23,3 +23,14 @@ A regra de cidade muralhada é implementada com os mesmos eixos (±28) e anel in
 ## Próximo passe — 9.36B
 
 A prova visual usará a Eldoria real, não a capital sintética: minimapa, City Designer e uma visão panorâmica gerada com `generateMap`, `drawTile` e `drawBuilding` de produção. O passe só será encerrado após screenshots e revisão humana.
+
+
+## 9.36B — prova visual autoritativa
+
+A aceitação visual de Grand Eldoria não usa uma cidade sintética. O `visual-qa.html` consulta o catálogo de mapas do servidor por uma sessão administrativa efêmera exclusiva do CI, sincroniza o mesmo registro usado pelo cliente e então produz três provas:
+
+- minimapa real de Eldoria em 160×160, com geometria além do antigo limite 80;
+- City Designer carregando os 16 marcos autoritativos e o orçamento de capital;
+- panorama urbano renderizado com `generateMap`, `drawTile` e `drawBuilding` de produção, recortado pelos `urbanBounds` reais.
+
+O workflow usa banco de conteúdo temporário para que a prova comece de uma instalação limpa, roda a suíte completa antes do navegador e publica os PNGs somente depois das asserções geométricas e de conteúdo.

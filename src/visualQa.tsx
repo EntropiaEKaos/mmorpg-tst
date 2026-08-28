@@ -14,6 +14,7 @@ import CastBar, { triggerCast } from './components/CastBar';
 import DPSMeter from './components/DPSMeter';
 import WorldMiniMap from './components/WorldMiniMap';
 import CityDesigner from './components/CityDesigner';
+import GrandEldoriaPanorama from './components/GrandEldoriaPanorama';
 import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge from './components/LocaleBridge';
 import { saveBook, sendSystemMail } from './game/content';
@@ -21,7 +22,7 @@ import type { Item, Player } from './game/types';
 import { saveAuctionListings, setCoins } from './game/economy';
 import { VOCATIONS } from './game/classes';
 import { dpsMeter } from './game/dpsMeter';
-import { syncServerMaps } from './game/maps';
+import { MAPS, syncServerMaps } from './game/maps';
 
 const QA_PLAYER = {
   name: 'Aurora',
@@ -129,6 +130,51 @@ function CastVisualQa() {
   return <CastBar />;
 }
 
+
+const ELDORIA_QA_PLAYER = { ...QA_PLAYER, mapId: 'eldoria', pos: { x: 120, y: 120 } } as unknown as Player;
+type EldoriaQaMode = 'eldoria-minimap' | 'eldoria-city-designer' | 'eldoria-panorama';
+
+function AuthoritativeGrandEldoriaQa({ mode }: { mode: EldoriaQaMode }) {
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const params = new URLSearchParams(window.location.search);
+    const base = params.get('qaServer') || 'http://127.0.0.1:3000';
+    const token = params.get('qaToken') || '';
+    fetch(`${base}/admin/api/maps?token=${encodeURIComponent(token)}`, { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Servidor de conteúdo respondeu ${response.status}`);
+        return response.json();
+      })
+      .then((payload) => {
+        if (!active) return;
+        const records = Array.isArray(payload?.items) ? payload.items : [];
+        const eldoria = records.find((record: any) => record?.id === 'eldoria');
+        if (!eldoria || Number(eldoria.width) !== 160 || Number(eldoria.height) !== 160 || eldoria.settlementClass !== 'capital') {
+          throw new Error('Grand Eldoria autoritativa 160×160 não foi recebida do servidor');
+        }
+        syncServerMaps(records);
+        setStatus('ready');
+      })
+      .catch((reason) => {
+        if (!active) return;
+        setError(reason instanceof Error ? reason.message : String(reason));
+        setStatus('error');
+      });
+    return () => { active = false; };
+  }, []);
+
+  if (status === 'loading') return <div className="relative z-10 p-8 text-amber-100" data-grand-eldoria-server-loading="true">Sincronizando Grand Eldoria com o servidor autoritativo…</div>;
+  if (status === 'error') return <div className="relative z-10 p-8 text-red-200" data-grand-eldoria-server-error="true">{error}</div>;
+
+  const map = MAPS.eldoria;
+  if (mode === 'eldoria-minimap') return <div className="relative z-10 flex min-h-screen items-center justify-center p-6"><div data-grand-eldoria-server-ready="minimap" className="rounded-xl border border-amber-300/30 bg-black/70 p-4 shadow-2xl"><div className="mb-3"><div className="text-sm font-black tracking-wider text-amber-100">GRAND ELDORIA · CAPITAL 160×160</div><div className="mt-1 text-[10px] text-amber-100/55">Servidor autoritativo · {map.districts.length} distritos · {map.landmarks.length} marcos · jogador 120,120</div></div><WorldMiniMap player={ELDORIA_QA_PLAYER} monsters={[]} mapId="eldoria" /></div></div>;
+  if (mode === 'eldoria-city-designer') return <div className="relative z-10 p-4" data-grand-eldoria-server-ready="designer"><CityDesigner /></div>;
+  return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-eldoria-server-ready="panorama"><GrandEldoriaPanorama /></div>;
+}
+
 function VisualQa() {
   const panel = new URLSearchParams(window.location.search).get('panel') || 'library';
   const [inventory, setInventory] = useState<Item[]>([
@@ -155,6 +201,9 @@ function VisualQa() {
       {panel === 'dps' && <DPSMeter onClose={() => {}} />}
       {panel === 'grand-minimap' && <div className="relative z-10 flex min-h-screen items-center justify-center p-6"><div data-grand-minimap-proof="true" className="rounded border border-amber-300/25 bg-black/65 p-4 shadow-2xl"><div className="mb-3"><div className="text-sm font-black tracking-wider text-amber-100">NOVA AURORIA · CAPITAL 160×160</div><div className="text-[10px] text-amber-100/55">Prova de escala · jogador 136,118 · Bastião do Horizonte 124,72</div></div><WorldMiniMap player={QA_GRAND_PLAYER} monsters={[]} mapId="qa_grand_capital" /></div></div>}
       {panel === 'grand-city-designer' && <div className="relative z-10 p-4"><CityDesigner /></div>}
+      {panel === 'eldoria-minimap' && <AuthoritativeGrandEldoriaQa mode="eldoria-minimap" />}
+      {panel === 'eldoria-city-designer' && <AuthoritativeGrandEldoriaQa mode="eldoria-city-designer" />}
+      {panel === 'eldoria-panorama' && <AuthoritativeGrandEldoriaQa mode="eldoria-panorama" />}
     </div>
   );
 }
