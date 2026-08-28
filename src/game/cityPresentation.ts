@@ -101,15 +101,65 @@ export function drawCityTileOverlay(
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  // Keep the textured base visible; city identity now accents edges and avenues
-  // instead of flattening every tile under a translucent rectangle.
+  const edge = Math.max(1, Math.round(size / 16));
+  const corePlaza = dx <= 5 && dy <= 5;
+  const avenueX = dx <= 1;
+  const avenueY = dy <= 1;
+  const fringe = Math.max(dx, dy) >= Math.max(4, map.townRange - 2);
+
+  // Keep the textured base visible. Paths receive only a restrained tint.
   if (tileType === 'path') {
-    ctx.globalAlpha = .16;
+    ctx.globalAlpha = .14;
     ctx.fillStyle = palette.road;
     ctx.fillRect(screenX, screenY, size, size);
   }
+
+  // Central plaza mosaic: alternating inset stones stop the town square from
+  // reading as one giant repeated texture while preserving the original tile.
+  if (corePlaza) {
+    const inset = Math.max(2, Math.round(size / 10));
+    const parity = (tileX + tileY) & 1;
+    ctx.globalAlpha = parity ? .10 : .16;
+    ctx.fillStyle = parity ? palette.wall : palette.road;
+    ctx.fillRect(screenX + inset, screenY + inset, size - inset * 2, edge);
+    ctx.fillRect(screenX + inset, screenY + size - inset - edge, size - inset * 2, edge);
+    if (((tileX * 3 + tileY * 5) & 3) === 0) {
+      ctx.globalAlpha = .18;
+      ctx.fillStyle = palette.accent;
+      ctx.fillRect(screenX + inset, screenY + inset, edge * 2, edge * 2);
+    }
+  }
+
+  // Town avenue edge strips: the two principal axes now read as constructed
+  // streets instead of disappearing into the surrounding plaza texture.
+  if (avenueX || avenueY) {
+    ctx.globalAlpha = .28;
+    ctx.fillStyle = palette.road;
+    if (avenueX) {
+      ctx.fillRect(screenX, screenY, edge, size);
+      ctx.fillRect(screenX + size - edge, screenY, edge, size);
+    }
+    if (avenueY) {
+      ctx.fillRect(screenX, screenY, size, edge);
+      ctx.fillRect(screenX, screenY + size - edge, size, edge);
+    }
+  }
+
+  // Moss fringe pixels: deterministic low-density edge noise visually blends
+  // masonry into the outer biome without creating fake collidable objects.
+  if (fringe && tileType === 'floor') {
+    const seed = ((tileX * 73856093) ^ (tileY * 19349663)) >>> 0;
+    if ((seed % 3) === 0) {
+      const p = Math.max(1, Math.round(size / 12));
+      ctx.globalAlpha = .18;
+      ctx.fillStyle = '#365a35';
+      ctx.fillRect(screenX + p, screenY + size - p * 2, p * 2, p);
+      if ((seed & 4) !== 0) ctx.fillRect(screenX + size - p * 3, screenY + p, p, p * 2);
+    }
+  }
+
   if (tileX === map.townCenter.x || tileY === map.townCenter.y) {
-    ctx.globalAlpha = .30;
+    ctx.globalAlpha = .34;
     ctx.strokeStyle = palette.road;
     ctx.lineWidth = 1;
     ctx.strokeRect(screenX + 1, screenY + 1, size - 2, size - 2);

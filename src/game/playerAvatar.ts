@@ -207,6 +207,19 @@ function drawSpriteMatrix(
     ctx.translate(Math.round(cx * 2), 0);
     ctx.scale(-1, 1);
   }
+  // Native-pixel silhouette drop shadow: a single offset pass keeps the
+  // authored frame readable over cobbles without turning it into a vector glow.
+  const shadowOffset = Math.max(1, Math.floor(cell / 2));
+  ctx.fillStyle = '#15120f';
+  for (let row = 0; row < frame.length; row++) {
+    const line = frame[row];
+    for (let col = 0; col < line.length; col++) {
+      const key = line[col];
+      if (key === ' ' || !palette[key]) continue;
+      ctx.fillRect(left + col * cell + shadowOffset, top + row * cell + shadowOffset, cell, cell);
+    }
+  }
+
   for (let row = 0; row < frame.length; row++) {
     const line = frame[row];
     for (let col = 0; col < line.length; col++) {

@@ -13,6 +13,7 @@ test('9.7 player presentation uses authored native-pixel frames instead of block
   assert.match(avatar, /const RANGER_FRAME: SpriteFrame/);
   assert.match(avatar, /const ROGUE_FRAME: SpriteFrame/);
   assert.match(avatar, /function drawSpriteMatrix/);
+  assert.match(avatar, /Native-pixel silhouette drop shadow/);
   assert.match(avatar, /export function drawPixelHuman/);
   assert.match(avatar, /inferVocationStyle/);
   assert.doesNotMatch(avatar, /createRadialGradient/);
@@ -37,6 +38,9 @@ test('9.7 city presentation replaces flat architecture with masonry and tiled ro
   assert.match(render, /const cellH = Math\.max\(4, Math\.round\(s \/ 6\)\)/);
   assert.match(render, /#a79270/);
   assert.match(city, /Keep the textured base visible/);
+  assert.match(city, /Central plaza mosaic/);
+  assert.match(city, /Town avenue edge strips/);
+  assert.match(city, /Moss fringe pixels/);
 });
 
 test('9.7 night presentation preserves detail instead of crushing the world under 55% darkness', () => {
