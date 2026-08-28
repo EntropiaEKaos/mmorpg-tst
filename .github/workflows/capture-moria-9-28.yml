@@ -3,6 +3,12 @@ on:
   push:
     branches: [moria-9.28-character-i18n-ptbr]
     paths:
+      - 'src/components/GameScreen.tsx'
+      - 'src/components/LoginScreen.tsx'
+      - 'src/components/LocaleBridge.tsx'
+      - 'src/components/VocationPortrait.tsx'
+      - 'src/game/render.ts'
+      - 'src/i18n/**'
       - 'tools/capture-moria-9-28.mjs'
       - '.github/workflows/capture-moria-9-28.yml'
 permissions:
