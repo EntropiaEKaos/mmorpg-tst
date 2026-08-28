@@ -4,6 +4,7 @@ on:
     branches: [moria-9.7-reference-visual-convergence]
     paths:
       - 'tools/apply-moria-9-7-world-labels-city-designer.py'
+      - 'tools/fix-moria-9-7-world-labels-architecture.py'
       - '.github/workflows/apply-moria-9-7-world-labels-city-designer.yml'
 permissions:
   contents: write
@@ -18,7 +19,14 @@ jobs:
         with:
           node-version: 22
       - name: Apply 9.7 world labels and city designer
-        run: python3 tools/apply-moria-9-7-world-labels-city-designer.py
+        run: |
+          python3 tools/apply-moria-9-7-world-labels-city-designer.py
+          python3 tools/fix-moria-9-7-world-labels-architecture.py
+      - name: Enforce GameScreen architecture budget
+        run: |
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -le 155000
       - name: Validate client
         run: npm ci && npm audit && npm run typecheck && npm run build
       - name: Validate server
@@ -28,6 +36,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -f tools/apply-moria-9-7-world-labels-city-designer.py
+          rm -f tools/fix-moria-9-7-world-labels-architecture.py
           rm -f .github/workflows/apply-moria-9-7-world-labels-city-designer.yml
           git add -A
           git diff --cached --quiet && exit 0
