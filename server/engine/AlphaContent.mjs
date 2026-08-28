@@ -20,6 +20,9 @@ const REGIONS = Object.freeze([
   { id:'nightfall_citadel', name:'Nightfall Citadel', biome:'shadow', level:60, seed:90909, theme:'Nightfall', giver:'Marshal Ilyr' },
 ]);
 
+const SCHOOL_BY_REGION = Object.freeze({ eldoria:'nature',sunreach_coast:'water',ironwood:'earth',frostpeak:'ice',shadowfen:'poison',emberhold:'fire',crystal_deep:'arcane',stormwatch_isle:'lightning',voidlands:'shadow',nightfall_citadel:'death' });
+const OPPOSING_SCHOOL = Object.freeze({ nature:'fire',water:'lightning',earth:'arcane',ice:'fire',poison:'holy',fire:'water',arcane:'physical',lightning:'earth',shadow:'holy',death:'holy' });
+
 const MONSTER_THEMES = Object.freeze({
   eldoria: [['Field Rat','🐀'],['Briar Wolf','🐺'],['Mossback Boar','🐗'],['Bandit Scout','🗡️'],['Verdant Marauder','🧟'],['Old Grove Colossus','🌳']],
   sunreach_coast: [['Reef Crab','🦀'],['Saltfang Serpent','🐍'],['Corsair Deckhand','🏴‍☠️'],['Tide Wisp','💧'],['Drowned Reaver','🧟'],['Leviathan Spawn','🐙']],
@@ -130,6 +133,10 @@ REGIONS.forEach((region, regionIndex) => {
     if (rarity === 'rare') record.critChance=2;
     if (rarity === 'epic') { record.critChance=3; record.xpBonus=2; }
     if (rarity === 'legendary') { record.critChance=5; record.lifesteal=3; record.goldBonus=4; }
+    const school=SCHOOL_BY_REGION[region.id];
+    record.damageBonuses={ [school]: rarity==='legendary'?18:rarity==='epic'?12:rarity==='rare'?8:5 };
+    if(i===5 || slot==='shield') record.resistances={ [school]: rarity==='legendary'?20:12 };
+    if(i===0 || slot==='weapon') record.skillBonuses={ [school]: rarity==='legendary'?5:rarity==='epic'?3:2 };
     items.push(record);
   }
 });
@@ -149,6 +156,8 @@ REGIONS.forEach((region, regionIndex) => {
       type:boss?'boss':elite?'elite':'normal', goldMin:Math.floor(level*(boss?12:elite?4:1)), goldMax:Math.floor(level*(boss?28:elite?9:3)),
       count:boss?1:elite?2:4, posX:clamp(18 + i*8,5,74), posY:clamp(20 + ((regionIndex+i)%6)*7,5,74),
       speed:boss?850:elite?950:1100, lootTableId:`loot_${region.id}`,
+      damageType:SCHOOL_BY_REGION[region.id], damageBonuses:{[SCHOOL_BY_REGION[region.id]]:boss?30:elite?15:5},
+      resistances:{[SCHOOL_BY_REGION[region.id]]:boss?55:elite?35:20}, weaknesses:{[OPPOSING_SCHOOL[SCHOOL_BY_REGION[region.id]]]:boss?30:elite?22:15},
     });
   });
 });

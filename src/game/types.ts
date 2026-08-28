@@ -26,6 +26,9 @@ export interface Position {
   y: number;
 }
 
+export type DamageSchool = 'physical' | 'magic' | 'arcane' | 'fire' | 'water' | 'earth' | 'lightning' | 'energy' | 'ice' | 'death' | 'holy' | 'nature' | 'poison' | 'shadow'; // energy is a read-compatible legacy alias; runtime normalizes it to lightning
+export type SchoolValues = Partial<Record<DamageSchool, number>>;
+
 export interface Monster {
   id: string;
   name: string;
@@ -47,7 +50,10 @@ export interface Monster {
   loot?: Array<{ name: string; icon: string; chance: number; value: number }>;
   level: number;
   type?: 'normal' | 'elite' | 'boss';
-  damageType?: 'physical' | 'fire' | 'ice' | 'death' | 'energy' | 'holy';
+  damageType?: DamageSchool;
+  resistances?: SchoolValues;
+  weaknesses?: SchoolValues;
+  damageBonuses?: SchoolValues;
 }
 
 export interface Player {
@@ -80,6 +86,10 @@ export interface Player {
     distance: { level: number; progress: number };
     shielding: { level: number; progress: number };
     magic: { level: number; progress: number };
+    arcane?: { level: number; progress: number }; fire?: { level: number; progress: number }; water?: { level: number; progress: number };
+    earth?: { level: number; progress: number }; lightning?: { level: number; progress: number }; ice?: { level: number; progress: number };
+    death?: { level: number; progress: number }; holy?: { level: number; progress: number }; nature?: { level: number; progress: number };
+    poison?: { level: number; progress: number }; shadow?: { level: number; progress: number };
     fishing: { level: number; progress: number };
   };
   // Equipment
@@ -253,6 +263,13 @@ export interface Equipment {
   xpBonus?: number; // % XP bonus
   goldBonus?: number; // % gold bonus
   damageReduction?: number; // % damage reduction
+  damageBonuses?: SchoolValues; // % outgoing power by school (magic also acts as generic magical power)
+  resistances?: SchoolValues; // % incoming mitigation by school
+  weaknesses?: SchoolValues; // % incoming vulnerability by school
+  skillBonuses?: Record<string, number>; // effective skill levels used by spell/weapon scaling
+  resistancePierce?: SchoolValues; // percentage points of target resistance ignored
+  spellPower?: number;
+  physicalPower?: number;
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
   level: number;
   description?: string;
@@ -292,7 +309,11 @@ export interface Spell {
   // Level-gating
   levelRequired?: number;
   // Detailed combat formula fields
-  damageType?: 'physical' | 'fire' | 'ice' | 'energy' | 'death' | 'holy' | 'nature';
+  damageType?: DamageSchool;
+  scalingStat?: 'attack' | 'magic' | 'hybrid';
+  skillId?: string;
+  weaponSkill?: 'fist' | 'sword' | 'axe' | 'club' | 'distance';
+  skillScaling?: number; // multiplicative gain per effective skill level above 10
   scalingCoeff?: number;       // multiplier applied to magic/attack stat (e.g. 1.5 = 150% of magic)
   critChance?: number;         // % base crit chance for THIS spell (stacks with player crit)
   critMult?: number;           // crit damage multiplier (e.g. 2 = 200%)

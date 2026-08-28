@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import type { Player, Spell, SchoolValues } from '../game/types';
+import { buildSpellScalingBreakdown, normalizeSchool, SCHOOL_META } from '../game/elementalScaling';
 
 interface TooltipData {
   content: React.ReactNode;
@@ -187,6 +189,7 @@ export function ItemTooltip({
     xpBonus?: number;
     goldBonus?: number;
     damageReduction?: number;
+    damageBonuses?: SchoolValues; resistances?: SchoolValues; weaknesses?: SchoolValues; skillBonuses?: Record<string,number>; resistancePierce?: SchoolValues; spellPower?: number; physicalPower?: number;
     rarity: string;
     level: number;
     slot: string;
@@ -232,6 +235,11 @@ export function ItemTooltip({
           {item.equipment.xpBonus ? <div style={{ color: '#f4e04d' }}>⭐ +{item.equipment.xpBonus}% XP</div> : null}
           {item.equipment.goldBonus ? <div style={{ color: '#f4e04d' }}>🪙 +{item.equipment.goldBonus}% Gold</div> : null}
           {item.equipment.damageReduction ? <div style={{ color: '#4a90e2' }}>🛡 -{item.equipment.damageReduction}% Dmg Taken</div> : null}
+          {Object.entries(item.equipment.damageBonuses || {}).map(([school,value]) => <div key={`power-${school}`} style={{ color: SCHOOL_META[normalizeSchool(school)].color }}>{SCHOOL_META[normalizeSchool(school)].icon} +{value}% {SCHOOL_META[normalizeSchool(school)].label} Power</div>)}
+          {Object.entries(item.equipment.resistances || {}).map(([school,value]) => <div key={`res-${school}`} className="text-cyan-200">🛡 +{value}% {SCHOOL_META[normalizeSchool(school)].label} Resistance</div>)}
+          {Object.entries(item.equipment.weaknesses || {}).map(([school,value]) => <div key={`weak-${school}`} className="text-rose-300">⚠ +{value}% {SCHOOL_META[normalizeSchool(school)].label} Vulnerability</div>)}
+          {Object.entries(item.equipment.skillBonuses || {}).map(([skill,value]) => <div key={`skill-${skill}`} className="text-emerald-300">📈 +{value} {skill} skill</div>)}
+          {Object.entries(item.equipment.resistancePierce || {}).map(([school,value]) => <div key={`pierce-${school}`} className="text-orange-300">✦ {value}% {SCHOOL_META[normalizeSchool(school)].label} resist pierce</div>)}
           {(item.equipment.affixes || []).length > 0 && (
             <div className="mt-1 border-t border-fuchsia-500/30 pt-1 space-y-1">
               {(item.equipment.affixes || []).map((affix) => (
@@ -256,11 +264,13 @@ export function ItemTooltip({
 
 export function SpellTooltip({
   spell,
+  player,
   idx,
   noMana,
   onCd,
   locked,
 }: {
+  player?: Player;
   spell: {
     name: string;
     icon: string;
@@ -271,7 +281,7 @@ export function SpellTooltip({
     color: string;
     type: string;
     levelRequired?: number;
-    damageType?: string;
+    damageType?: string; scalingStat?: 'attack'|'magic'|'hybrid'; skillId?: string; weaponSkill?: 'fist'|'sword'|'axe'|'club'|'distance'; skillScaling?: number;
     scalingCoeff?: number;
     critChance?: number;
     critMult?: number;
@@ -288,10 +298,9 @@ export function SpellTooltip({
   onCd: boolean;
   locked?: boolean;
 }) {
-  const dmgTypeColors: Record<string, string> = {
-    fire: '#ff6a00', ice: '#9bd4ff', energy: '#4a90e2', death: '#9b59ff',
-    holy: '#f4e04d', nature: '#2ecc71', physical: '#ffdddd',
-  };
+  const school = normalizeSchool(spell.damageType);
+  const meta = SCHOOL_META[school];
+  const scaling = player ? buildSpellScalingBreakdown(player, spell as Spell) : null;
   return (
     <div className="space-y-1 min-w-[190px]">
       <div className="flex items-center gap-2">
@@ -332,11 +341,21 @@ export function SpellTooltip({
         {spell.damageType && (
           <div className="flex justify-between">
             <span className="text-amber-200/70">Element:</span>
-            <span className="capitalize" style={{ color: dmgTypeColors[spell.damageType] || '#fff' }}>{spell.damageType}</span>
+            <span className="capitalize" style={{ color: meta.color }}>{meta.icon} {meta.label}</span>
           </div>
         )}
         {spell.scalingCoeff && (
-          <div className="flex justify-between"><span className="text-amber-200/70">Scaling:</span><span className="text-purple-300">×{spell.scalingCoeff} MAG</span></div>
+          <div className="flex justify-between"><span className="text-amber-200/70">Scaling:</span><span className="text-purple-300">×{spell.scalingCoeff} {(spell.scalingStat || (school==='physical'?'attack':'magic')).toUpperCase()}</span></div>
+        )}
+        {scaling && (
+          <div className="mt-1 space-y-1 border-t border-fuchsia-400/20 pt-1">
+            <div className="font-black uppercase tracking-wider text-fuchsia-200">Influence chain</div>
+            <div className="flex justify-between"><span className="text-slate-400">{scaling.statKind} stat</span><span className="text-purple-200">{scaling.stat.toFixed(0)} × {scaling.coeff}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">{scaling.skillId} skill</span><span className="text-emerald-300">Lv {scaling.effectiveSkill.toFixed(0)} → ×{scaling.skillMultiplier.toFixed(3)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">gear · {meta.label}</span><span style={{color:meta.color}}>+{scaling.itemBonus.toFixed(1)}% → ×{scaling.itemMultiplier.toFixed(3)}</span></div>
+            {scaling.pierce > 0 && <div className="flex justify-between"><span className="text-slate-400">resistance pierce</span><span className="text-orange-300">{scaling.pierce.toFixed(0)}%</span></div>}
+            <div className="flex justify-between border-t border-white/10 pt-1 font-black"><span className="text-amber-100">Estimated power</span><span className="text-white">{scaling.estimated}</span></div>
+          </div>
         )}
         {(spell.critChance ?? 0) > 0 && (
           <div className="flex justify-between"><span className="text-amber-200/70">Crit:</span><span className="text-red-300">{spell.critChance}% (×{spell.critMult})</span></div>
