@@ -1,0 +1,76 @@
+name: Mor'ia 9.42A Grand Crystal Deep
+on:
+  push:
+    branches: [moria-9.28-character-i18n-ptbr]
+    paths:
+      - 'tools/upgrade-moria-9-42a-grand-crystal-deep.py'
+      - '.github/workflows/moria-9-42a-grand-crystal-deep.yml'
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: moria-9.28-character-i18n-ptbr
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply Mor'ia 9.42A Grand Crystal Deep
+        run: |
+          python -m py_compile tools/upgrade-moria-9-42a-grand-crystal-deep.py
+          python tools/upgrade-moria-9-42a-grand-crystal-deep.py
+      - name: Verify Grand Crystal Deep source contract
+        run: |
+          set -euxo pipefail
+          for file in server/engine/GrandCrystalDeep.mjs server/test/grand-crystal-deep-9-42.test.mjs docs/MORIA_9_42_GRAND_CRYSTAL_DEEP.md; do test -s "$file"; done
+          grep -Fq "GRAND_CAPITAL_SCHEMA_VERSION=8" server/engine/GrandCrystalDeep.mjs
+          grep -Fq "urbanPlan:'geode-chambers'" server/engine/GrandCrystalDeep.mjs
+          grep -Fq "landmarks.length,42" server/test/grand-crystal-deep-9-42.test.mjs
+          grep -Fq "geodeChambersTile" server/engine/World.mjs
+          grep -Fq "geodeChambersTile" src/game/maps.ts
+          grep -Fq "nearGeodeGallery" server/engine/World.mjs
+          grep -Fq "nearGeodeGallery" src/game/maps.ts
+          grep -Fq "wall_crystal_" src/game/render.ts
+          grep -Fq "floor_crystal_" src/game/render.ts
+          grep -Fq "path_crystal_" src/game/render.ts
+          grep -Fq "CRYSTAL_TILE_COLORS" src/components/WorldMiniMap.tsx
+          grep -Fq "migrateGrandCrystalDeepData" server/engine/ContentDB.mjs
+          test "$(grep -Fc 'migrateGrandCrystalDeepData(this.data);' server/engine/ContentDB.mjs)" -ge 2
+          grep -Fq "GRAND_CRYSTAL_DEEP_MAP" server/engine/AlphaContent.mjs
+          grep -Fq "targetMap:'crystal_deep',targetX:80,targetY:138" server/engine/GrandFrostpeak.mjs
+          grep -Fq "targetMap:'crystal_deep',targetX:22,targetY:84" server/engine/GrandShadowfen.mjs
+          node --check server/engine/GrandCrystalDeep.mjs
+          node --check server/engine/World.mjs
+          node --check server/engine/ContentDB.mjs
+      - name: Verify PT-BR source coverage
+        run: python tools/audit-moria-9-28-i18n.py
+      - name: Validate client
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run typecheck
+          npm run build
+          bytes=$(wc -c < src/components/GameScreen.tsx)
+          echo "GameScreen bytes: $bytes"
+          test "$bytes" -lt 170000
+      - name: Validate focused Grand Crystal Deep contract
+        run: |
+          npm ci --prefix server
+          npm audit --prefix server --audit-level=high
+          npm run check --prefix server
+          node --test server/test/grand-crystal-deep-9-42.test.mjs
+      - name: Validate complete server suite
+        run: npm test --prefix server
+      - name: Commit validated Mor'ia 9.42A pass
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/engine/GrandCrystalDeep.mjs server/engine/GrandFrostpeak.mjs server/engine/GrandShadowfen.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs src/game/maps.ts src/game/types.ts src/game/render.ts src/components/WorldMiniMap.tsx server/test/grand-crystal-deep-9-42.test.mjs server/test/grand-emberhold-9-41.test.mjs docs/MORIA_9_42_GRAND_CRYSTAL_DEEP.md
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'feat(9.42a): build authoritative Grand Crystal Deep'
+          git push origin HEAD:moria-9.28-character-i18n-ptbr
