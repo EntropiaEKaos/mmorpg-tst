@@ -54,6 +54,9 @@ rep('server/test/official-action-registry.test.mjs',
 "  'mail_send','mail_read','mail_claim','mail_delete','world_event_claim','pvp_toggle','pvp_attack','dungeon_start','dungeon_abandon',\n];",
 "  'mail_send','mail_read','mail_claim','mail_delete','world_event_claim','pvp_toggle','pvp_attack','dungeon_start','dungeon_abandon',\n  'faction_join','faction_defect','node_donate','node_declare_war','node_attack','node_claim','craft_advanced','tame_animal','breed_animals','tame_activate',\n];")
 rep('server/test/official-action-registry.test.mjs',
+"        if (property === 'startDungeon') return { ok: true, wave: 1 };\n        return true;",
+"        if (property === 'startDungeon') return { ok: true, wave: 1 };\n        if (['joinFaction','defectFaction','donateNode','declareNodeWar','attackNode','claimNode','advancedCraft','tameAnimal','breedAnimals','activateTamedAnimal'].includes(String(property))) return { ok:true };\n        return true;")
+rep('server/test/official-action-registry.test.mjs',
 "    mailId: 'mail', targetId: 'target', waves: 3,\n",
 "    mailId: 'mail', targetId: 'target', waves: 3, factionId:'crown_eldoria', nodeId:'node_eldoria', parentAId:'a', parentBId:'b', animalId:'a',\n")
 rep('server/test/official-action-registry.test.mjs',
