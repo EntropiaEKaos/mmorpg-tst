@@ -21,10 +21,15 @@ function contentDB(maps = []) {
   return { get(type) { return type === 'maps' ? maps : []; } };
 }
 
-test('9.35A legacy maps stay 80x80 while a declared grand capital generates 160x160', () => {
+test('9.35A legacy regions stay 80x80 while declared capitals can generate 160x160', () => {
   const world = new WorldManager();
-  assert.equal(world.getMap('eldoria').width, MAP_WIDTH);
-  assert.equal(world.getMap('eldoria').height, MAP_HEIGHT);
+  assert.equal(world.getMap('eldoria').width, 160);
+  assert.equal(world.getMap('eldoria').height, 160);
+  assert.equal(world.getMap('eldoria').settlementClass, 'capital');
+  assert.equal(world.getMap('frostpeak').width, MAP_WIDTH);
+  assert.equal(world.getMap('frostpeak').height, MAP_HEIGHT);
+  assert.equal(world.getMap('shadowfen').width, MAP_WIDTH);
+  assert.equal(world.getMap('shadowfen').height, MAP_HEIGHT);
   world.syncContentMaps([capital()]);
   const map = world.getMap('qa_grand_capital');
   assert.equal(map.width, 160);

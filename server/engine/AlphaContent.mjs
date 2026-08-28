@@ -4,6 +4,8 @@
 // editable through the authoritative Admin/Content Studio.
 // ===================================================================
 
+import { GRAND_ELDORIA_MAP } from './GrandEldoria.mjs';
+
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const slug = value => String(value).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
@@ -98,6 +100,7 @@ const LEGACY_MAP_GATES = Object.freeze({ eldoria:1, frostpeak:1, shadowfen:1, em
 const CITY_STYLE_BY_REGION = Object.freeze({ eldoria:'royal',sunreach_coast:'harbor',ironwood:'ironwood',frostpeak:'alpine',shadowfen:'marsh',emberhold:'forge',crystal_deep:'crystal',stormwatch_isle:'storm',voidlands:'void',nightfall_citadel:'nightfall' });
 
 const maps = REGIONS.map(region => {
+  if (region.id === 'eldoria') return { ...GRAND_ELDORIA_MAP, portals: GRAND_ELDORIA_MAP.portals.map(portal => ({ ...portal })), districts: GRAND_ELDORIA_MAP.districts.map(entry => ({ ...entry })), landmarks: GRAND_ELDORIA_MAP.landmarks.map(entry => ({ ...entry })), props: GRAND_ELDORIA_MAP.props.map(entry => ({ ...entry })) };
   const [townX,townY] = mapCenters[region.id];
   return {
     id:region.id, name:region.name, biome:region.biome,

@@ -12,6 +12,7 @@ import { ALPHA_CONTENT } from './AlphaContent.mjs';
 import { ALPHA_SYSTEMS_CONTENT } from './AlphaSystemsContent.mjs';
 import { LIVING_REALM_CONTENT } from './LivingRealmContent.mjs';
 import { ROAD_TO_TEN_CONTENT } from './RoadToTenContent.mjs';
+import { GRAND_ELDORIA_VERSION, migrateGrandEldoriaData } from './GrandEldoria.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,7 +22,7 @@ const TYPE_ALIASES = Object.freeze({ events: 'worldEvents' });
 
 function emptyContentData() {
   return {
-    version: 1, livingRealmVersion: 0, roadToTenVersion: 0,
+    version: 1, livingRealmVersion: 0, roadToTenVersion: 0, grandCapitalVersion: 0,
     items: [], monsters: [], npcs: [], quests: [], spells: [], maps: [],
     worldEvents: [], shops: [], lootTables: [], gmRoster: [], taskQuests: [], houses: [], housingDecor: [], outfits: [], mounts: [],
     nodes: [], factions: [], materials: [], craftingRecipes: [], tamingSpecies: [],
@@ -77,6 +78,7 @@ export function normalizeContentData(raw) {
   normalized.version = Number.isInteger(version) && version > 0 ? version : 1;
   normalized.livingRealmVersion = Number.isInteger(Number(raw.livingRealmVersion)) && Number(raw.livingRealmVersion) > 0 ? Number(raw.livingRealmVersion) : 0;
   normalized.roadToTenVersion = Number.isInteger(Number(raw.roadToTenVersion)) && Number(raw.roadToTenVersion) > 0 ? Number(raw.roadToTenVersion) : 0;
+  normalized.grandCapitalVersion = Number.isInteger(Number(raw.grandCapitalVersion)) && Number(raw.grandCapitalVersion) > 0 ? Number(raw.grandCapitalVersion) : 0;
   for (const key of COLLECTION_KEYS) {
     if (key === 'worldEvents') continue;
     normalized[key] = normalizeCollection(raw[key], { requireId: key !== 'shops' && key !== 'lootTables' });
@@ -95,7 +97,7 @@ export class ContentDB {
     // Only seed a brand-new or unrecoverably corrupt database. A valid empty
     // collection is intentional admin state and must stay empty after restart.
     if (!this.load()) this.seedDefaults();
-    else { this.migrateAlphaV2(); this.migrateAlphaV3(); this.migrateLivingRealmV1(); this.migrateRoadToTenV1(); }
+    else { this.migrateAlphaV2(); this.migrateAlphaV3(); this.migrateLivingRealmV1(); this.migrateRoadToTenV1(); this.migrateGrandCapitalV1(); }
   }
 
   load() {
@@ -190,6 +192,14 @@ export class ContentDB {
       }
     }
     this.data.roadToTenVersion = 1;
+    this.save();
+    return true;
+  }
+
+  migrateGrandCapitalV1() {
+    if (Number(this.data.grandCapitalVersion) >= GRAND_ELDORIA_VERSION) return false;
+    migrateGrandEldoriaData(this.data);
+    this.data.grandCapitalVersion = GRAND_ELDORIA_VERSION;
     this.save();
     return true;
   }
@@ -313,6 +323,8 @@ export class ContentDB {
     this.data.tamingSpecies = mergeById(this.data.tamingSpecies, LIVING_REALM_CONTENT.tamingSpecies);
     this.data.version = 3;
     this.data.livingRealmVersion = 1;
+    migrateGrandEldoriaData(this.data);
+    this.data.grandCapitalVersion = GRAND_ELDORIA_VERSION;
 
     this.save();
   }

@@ -329,6 +329,19 @@ function isInboundTarget(mapId: string, x: number, y: number): boolean {
   return Object.values(MAPS).some(map => map.portals.some(portal => portal.targetMap === mapId && portal.targetSpawn.x === x && portal.targetSpawn.y === y));
 }
 
+function capitalUrbanTile(map: GameMap, x: number, y: number): Tile | null {
+  if (map.settlementClass !== 'capital' || !map.urbanBounds) return null;
+  const minX = map.urbanBounds.x, minY = map.urbanBounds.y;
+  const maxX = minX + map.urbanBounds.width - 1, maxY = minY + map.urbanBounds.height - 1;
+  if (x < minX || x > maxX || y < minY || y > maxY) return null;
+  if (x === minX || x === maxX || y === minY || y === maxY) return { type:'wall', walkable:false, blocksSight:true };
+  const cx = map.townCenter.x, cy = map.townCenter.y;
+  const major = Math.abs(x - cx) <= 1 || Math.abs(y - cy) <= 1;
+  const secondary = Math.abs(x - (cx - 28)) <= 1 || Math.abs(x - (cx + 28)) <= 1 || Math.abs(y - (cy - 28)) <= 1 || Math.abs(y - (cy + 28)) <= 1;
+  const innerRing = Math.abs(x - (minX + 14)) <= 1 || Math.abs(x - (maxX - 14)) <= 1 || Math.abs(y - (minY + 14)) <= 1 || Math.abs(y - (maxY - 14)) <= 1;
+  return { type:(major || secondary || innerRing) ? 'path' : 'floor', walkable:true, blocksSight:false };
+}
+
 export function generateMap(mapId: string): Tile[][] {
   const mapData = MAPS[mapId] || MAPS.eldoria;
   const biome = mapData.biome;
@@ -348,9 +361,11 @@ export function generateMap(mapId: string): Tile[][] {
       } else if (blocksByLandmark(mapData, x, y)) {
         // Client prediction mirrors authoritative landmark footprints exactly.
         type = 'wall'; walkable = false; blocksSight = true;
-      } else if (Math.abs(x - tc.x) <= mapData.townRange && Math.abs(y - tc.y) <= mapData.townRange) {
-        type = 'floor';
       } else {
+        const urban = capitalUrbanTile(mapData, x, y);
+        if (urban) { type = urban.type; walkable = urban.walkable; blocksSight = Boolean(urban.blocksSight); }
+        else if (Math.abs(x - tc.x) <= mapData.townRange && Math.abs(y - tc.y) <= mapData.townRange) type = 'floor';
+        else {
         const r = rand();
         if (biome === 'snow') {
           if (r < 0.15) { type = 'tree'; walkable = false; blocksSight = true; }
@@ -371,6 +386,7 @@ export function generateMap(mapId: string): Tile[][] {
           if (r < 0.04) { type = 'bush'; walkable = false; }
           else if (r < 0.06) { type = 'stone'; walkable = false; }
           else if (r < 0.18 && ((x < 25 && y < 30) || (x > 50 && y < 30))) { type = 'tree'; walkable = false; blocksSight = true; }
+        }
         }
       }
       row.push({ type, walkable, blocksSight });

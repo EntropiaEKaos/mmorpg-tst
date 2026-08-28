@@ -3,6 +3,8 @@
 //  Built-in maps are safe defaults; ContentDB can overlay them and add maps.
 // ===================================================================
 
+import { GRAND_ELDORIA_BUILTIN_WORLD_CONFIG } from './GrandEldoria.mjs';
+
 class Monster {
   constructor(data) {
     Object.assign(this, data);
@@ -36,19 +38,12 @@ const CITY_LANDMARKS = Object.freeze({
 const CITY_KINDS = ['keep','market','temple','depot','gate'];
 
 const MAP_CONFIG = Object.freeze({
-  eldoria: {
-    id: 'eldoria', name: 'Eldoria', description: 'The capital city. Lush plains and forests.', biome: 'plains',
-    spawnPoint: { x: 40, y: 40 }, townCenter: { x: 40, y: 40 }, townRange: 10, seed: 42,
-    portals: [
-      { pos: { x: 10, y: 40 }, targetMap: 'frostpeak', targetSpawn: { x: 70, y: 40 }, label: '❄ To Frostpeak' },
-      { pos: { x: 70, y: 10 }, targetMap: 'shadowfen', targetSpawn: { x: 40, y: 70 }, label: '🍄 To Shadowfen' },
-    ],
-  },
+  eldoria: GRAND_ELDORIA_BUILTIN_WORLD_CONFIG,
   frostpeak: {
     id: 'frostpeak', name: 'Frostpeak', description: 'Frozen mountain city. Frigid and deadly.', biome: 'snow',
     spawnPoint: { x: 70, y: 40 }, townCenter: { x: 65, y: 40 }, townRange: 8, seed: 1337,
     portals: [
-      { pos: { x: 75, y: 40 }, targetMap: 'eldoria', targetSpawn: { x: 12, y: 40 }, label: '🌳 To Eldoria' },
+      { pos: { x: 75, y: 40 }, targetMap: 'eldoria', targetSpawn: { x: 30, y: 80 }, label: '🌳 To Eldoria' },
       { pos: { x: 10, y: 70 }, targetMap: 'emberhold', targetSpawn: { x: 70, y: 10 }, label: '🌋 To Emberhold' },
     ],
   },
@@ -56,7 +51,7 @@ const MAP_CONFIG = Object.freeze({
     id: 'shadowfen', name: 'Shadowfen', description: 'Cursed swampland. Rotten and foggy.', biome: 'swamp',
     spawnPoint: { x: 40, y: 70 }, townCenter: { x: 40, y: 65 }, townRange: 8, seed: 7,
     portals: [
-      { pos: { x: 40, y: 75 }, targetMap: 'eldoria', targetSpawn: { x: 70, y: 12 }, label: '🌳 To Eldoria' },
+      { pos: { x: 40, y: 75 }, targetMap: 'eldoria', targetSpawn: { x: 130, y: 120 }, label: '🌳 To Eldoria' },
       { pos: { x: 10, y: 10 }, targetMap: 'voidlands', targetSpawn: { x: 70, y: 70 }, label: '☠ To Voidlands' },
     ],
   },
@@ -223,6 +218,21 @@ function normalizeConfig(record, base = null) {
   };
 }
 
+function capitalUrbanTile(config, x, y) {
+  if (config?.settlementClass !== 'capital') return null;
+  const bounds = config.urbanBounds;
+  if (!bounds) return null;
+  const minX = Number(bounds.x), minY = Number(bounds.y);
+  const maxX = minX + Number(bounds.width) - 1, maxY = minY + Number(bounds.height) - 1;
+  if (x < minX || x > maxX || y < minY || y > maxY) return null;
+  if (x === minX || x === maxX || y === minY || y === maxY) return { type:'wall', walkable:false, blocksSight:true };
+  const cx = config.townCenter.x, cy = config.townCenter.y;
+  const major = Math.abs(x - cx) <= 1 || Math.abs(y - cy) <= 1;
+  const secondary = Math.abs(x - (cx - 28)) <= 1 || Math.abs(x - (cx + 28)) <= 1 || Math.abs(y - (cy - 28)) <= 1 || Math.abs(y - (cy + 28)) <= 1;
+  const innerRing = Math.abs(x - (minX + 14)) <= 1 || Math.abs(x - (maxX - 14)) <= 1 || Math.abs(y - (minY + 14)) <= 1 || Math.abs(y - (maxY - 14)) <= 1;
+  return { type:(major || secondary || innerRing) ? 'path' : 'floor', walkable:true, blocksSight:false };
+}
+
 class WorldManager {
   constructor() {
     this.maps = new Map();
@@ -340,9 +350,11 @@ class WorldManager {
           // Content Studio landmark geometry is authoritative: visual buildings and
           // movement collision now share the exact same authored rectangle.
           type = 'wall'; walkable = false; blocksSight = true;
-        } else if (Math.abs(x - config.townCenter.x) <= config.townRange && Math.abs(y - config.townCenter.y) <= config.townRange) {
-          type = 'floor';
         } else {
+          const urban = capitalUrbanTile(config, x, y);
+          if (urban) { type = urban.type; walkable = urban.walkable; blocksSight = urban.blocksSight; }
+          else if (Math.abs(x - config.townCenter.x) <= config.townRange && Math.abs(y - config.townCenter.y) <= config.townRange) type = 'floor';
+          else {
           const r = rand();
           if (config.biome === 'snow') {
             if (r < 0.15) { type = 'tree'; walkable = false; blocksSight = true; }
@@ -363,6 +375,7 @@ class WorldManager {
             if (r < 0.04) { type = 'bush'; walkable = false; }
             else if (r < 0.06) { type = 'stone'; walkable = false; }
             else if (r < 0.18 && ((x < 25 && y < 30) || (x > 50 && y < 30))) { type = 'tree'; walkable = false; blocksSight = true; }
+          }
           }
         }
         row.push({ walkable, type, blocksSight });
