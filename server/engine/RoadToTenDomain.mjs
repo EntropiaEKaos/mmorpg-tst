@@ -9,7 +9,7 @@ const clone=v=>v===undefined?undefined:structuredClone(v);
 const isRecord=v=>Boolean(v&&typeof v==='object'&&!Array.isArray(v));
 const playerKey=name=>String(name||'').trim().toLocaleLowerCase('en-US').slice(0,80);
 
-export const ROAD_TO_TEN_VERSION='9.26.0';
+export const ROAD_TO_TEN_VERSION='9.26.1';
 export const ROAD_TO_TEN_LIMITS=Object.freeze({ledger:200,events:80,bounties:100,orders:30,discoveries:100,housingUpgrades:12,siegeAssets:12,choices:100,animalCare:40});
 
 function content(host){return isRecord(host?.roadToTenContent)?host.roadToTenContent:{professionSpecializations:[],economyPolicies:[],factionPrograms:[],siegeAssets:[],dynamicWorldRules:[],dungeonBlueprints:[],questConsequences:[],housingUpgrades:[]};}

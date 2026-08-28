@@ -109,5 +109,5 @@ test('Studio authors Road-to-10 catalogs and semantic validation fails closed fo
 
 test('9.17-9.26 UI remains modular, covers all ten releases and does not grow GameScreen',()=>{
   const director=fs.readFileSync(path.join(root,'src/components/RoadToTenDirector926.tsx'),'utf8');const player=fs.readFileSync(path.join(root,'src/components/RoadToTenPlayerPanel926.tsx'),'utf8');const editor=fs.readFileSync(path.join(root,'src/components/GameEditor.tsx'),'utf8');const screen=fs.readFileSync(path.join(root,'src/components/GameScreen.tsx'));
-  for(const version of ['9.17','9.18','9.19','9.20','9.21','9.22','9.23','9.24','9.25','9.26'])assert.match(director,new RegExp(version.replace('.','\\.')));assert.match(editor,/RoadToTenDirector926/);assert.match(player,/profession_specialize/);assert.match(player,/housing_upgrade/);assert.ok(screen.length<=155000,`GameScreen bytes=${screen.length}`);assert.equal(ROAD_TO_TEN_VERSION,'9.26.0');
+  for(const version of ['9.17','9.18','9.19','9.20','9.21','9.22','9.23','9.24','9.25','9.26'])assert.match(director,new RegExp(version.replace('.','\\.')));assert.match(editor,/RoadToTenDirector926/);assert.match(player,/profession_specialize/);assert.match(player,/housing_upgrade/);assert.ok(screen.length<=155000,`GameScreen bytes=${screen.length}`);assert.equal(ROAD_TO_TEN_VERSION,'9.26.1');
 });
