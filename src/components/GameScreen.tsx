@@ -56,6 +56,7 @@ import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/rend
 import Weather from './Weather';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
+import { drawWorldCinematicPass } from '../game/worldVisualRevamp927';
 import { drawHousing } from '../game/housingPresentation';
 import { createWorldLabelQueue } from '../game/worldNameplates';
 import { enforceNpcSpatialIntegrity } from '../game/spatialIntegrity';
@@ -2463,16 +2464,18 @@ export default function GameScreen({ account, onLogout }: Props) {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
+    const activeBiome = MAPS[currentMapIdRef.current]?.biome || 'plains';
     drawWorldAtmosphere(
       ctx,
       canvas,
-      MAPS[currentMapIdRef.current]?.biome || 'plains',
+      activeBiome,
       nightAlpha,
       p.pos,
       cam,
       TILE_SIZE,
       now,
     );
+    drawWorldCinematicPass(ctx, canvas, activeBiome, weather, nightAlpha, now);
 
     worldLabels.draw(ctx,MAPS[currentMapIdRef.current]||MAPS.eldoria);
 

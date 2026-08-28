@@ -1,0 +1,27 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const read = (p) => fs.readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
+
+test('9.27 visual revamp remains presentation-only and modular', () => {
+  const game = read('src/components/GameScreen.tsx');
+  const fx = read('src/game/worldVisualRevamp927.ts');
+  assert.match(game, /drawWorldCinematicPass/);
+  assert.match(fx, /setTransform\(1, 0, 0, 1, 0, 0\)/);
+  assert.doesNotMatch(fx, /serverSync|sendOfficial|fetch\(|WebSocket/);
+});
+
+test('9.27 renderer adds material finish and grounded entity shadows', () => {
+  const render = read('src/game/render.ts');
+  assert.match(render, /drawMaterialFinish/);
+  assert.match(render, /Layered contact shadow/);
+  assert.match(render, /entitySize \* 0\.40/);
+});
+
+test('9.27 CSS includes cinematic canvas and respects reduced motion', () => {
+  const css = read('src/index.css');
+  assert.match(css, /Mor'ia 9\.27 — Deep Visual Revamp/);
+  assert.match(css, /moria-world-canvas/);
+  assert.match(css, /prefers-reduced-motion: no-preference/);
+});

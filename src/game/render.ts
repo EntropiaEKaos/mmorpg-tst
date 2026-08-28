@@ -333,11 +333,51 @@ function buildTileCache(size: number) {
   }, size));
 }
 
+function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: number, y: number, size: number) {
+  const px = Math.max(1, Math.round(size / 32));
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+
+  // Universal micro-bevel: preserves tile readability while breaking the flat plane.
+  ctx.fillStyle = 'rgba(255,244,213,.035)';
+  ctx.fillRect(x, y, size, px);
+  ctx.fillRect(x, y, px, size);
+  ctx.fillStyle = 'rgba(5,8,12,.09)';
+  ctx.fillRect(x, y + size - px, size, px);
+  ctx.fillRect(x + size - px, y, px, size);
+
+  if (type === 'water') {
+    ctx.fillStyle = 'rgba(217,241,255,.20)';
+    ctx.fillRect(x + size*.12, y + size*.24, size*.28, px);
+    ctx.fillRect(x + size*.56, y + size*.66, size*.22, px);
+    ctx.fillStyle = 'rgba(5,26,58,.18)';
+    ctx.fillRect(x + size*.18, y + size*.83, size*.56, px);
+  } else if (type === 'lava') {
+    ctx.shadowColor = 'rgba(255,83,24,.45)';
+    ctx.shadowBlur = Math.max(2, size*.12);
+    ctx.fillStyle = 'rgba(255,205,82,.26)';
+    ctx.fillRect(x + size*.28, y + size*.42, size*.12, px);
+    ctx.fillRect(x + size*.59, y + size*.63, size*.18, px);
+    ctx.shadowBlur = 0;
+  } else if (type === 'grass' || type === 'sand') {
+    ctx.fillStyle = type === 'grass' ? 'rgba(210,228,144,.08)' : 'rgba(255,235,174,.11)';
+    ctx.fillRect(x + size*.22, y + size*.19, px, px);
+    ctx.fillRect(x + size*.67, y + size*.72, px, px);
+  } else if (type === 'path' || type === 'floor' || type === 'wood_floor' || type === 'bridge') {
+    ctx.fillStyle = 'rgba(255,239,196,.055)';
+    ctx.fillRect(x + px*2, y + px*2, size - px*4, px);
+  }
+  ctx.restore();
+}
+
 export function drawTile(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number, size: number) {
   ctx.imageSmoothingEnabled = false;
   buildTileCache(size);
   const cached = tileCache.get(`${tile.type}_${size}`);
-  if (cached) ctx.drawImage(cached, x, y, size, size);
+  if (cached) {
+    ctx.drawImage(cached, x, y, size, size);
+    drawMaterialFinish(ctx, tile.type, x, y, size);
+  }
 }
 
 export function drawPlayer(
@@ -376,10 +416,14 @@ export function drawMonster(
   const cy = y + size / 2 + bob;
   const entitySize = size * msSize;
 
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  // Layered contact shadow anchors sprites to the terrain without a blurry halo.
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
   ctx.beginPath();
-  ctx.ellipse(cx, y + size - 3, entitySize * 0.32, entitySize * 0.08, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, y + size - 2, entitySize * 0.40, entitySize * 0.105, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.beginPath();
+  ctx.ellipse(cx, y + size - 3, entitySize * 0.27, entitySize * 0.065, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Pixel-native rarity corners: readable without a vector glow halo.
@@ -412,9 +456,13 @@ export function drawNPC(
   const cx = x + size / 2;
   const cy = y + size / 2 + bob;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillStyle = 'rgba(0,0,0,0.14)';
   ctx.beginPath();
-  ctx.ellipse(cx, y + size - 3, size * 0.32, size * 0.08, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, y + size - 2, size * 0.39, size * 0.10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.36)';
+  ctx.beginPath();
+  ctx.ellipse(cx, y + size - 3, size * 0.25, size * 0.06, 0, 0, Math.PI * 2);
   ctx.fill();
 
   drawClassicNpcSprite(ctx, cx, cy, size, npc, time);
