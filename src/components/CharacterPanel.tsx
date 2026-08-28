@@ -6,6 +6,7 @@ import { getBlessings, BLESSINGS, getProfessions, getReputation, getRepLevel, FA
 import { getActiveSetBonuses } from '../game/itemSets';
 import { T as Tooltip } from './Tooltip';
 import LivingRealmPlayerPanel916 from './LivingRealmPlayerPanel916';
+import RoadToTenPlayerPanel926 from './RoadToTenPlayerPanel926';
 
 interface Props {
   player: Player;
@@ -291,6 +292,7 @@ export default function CharacterPanel({ player, onClose, onUnequip, official }:
           </div>
         </div>
         <LivingRealmPlayerPanel916 player={player} official={official} />
+        <RoadToTenPlayerPanel926 player={player} official={official} />
       </div>
     </div>
   );

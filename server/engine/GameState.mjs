@@ -96,7 +96,7 @@ class GameEngine {
       this.pendingEvents.set(mapId, []);
     }
     questEngine.registerPlayers(this.players);
-    livingWorldAI.sync(contentDB); interiorSystem.sync(contentDB); officialSystems.syncLivingRealmContent?.();
+    livingWorldAI.sync(contentDB); interiorSystem.sync(contentDB); officialSystems.syncLivingRealmContent?.(); officialSystems.syncRoadToTenContent?.();
     console.log(`🌍 World Init: ${WORLD.getMapIds().length} maps`);
   }
 
@@ -582,7 +582,8 @@ class GameEngine {
 
   killMonster(player, monster) {
     monster.dead = true;
-    monster.respawnAt = monster.noRespawn ? Number.MAX_SAFE_INTEGER : Date.now() + (monster.type === 'boss' ? 60000 : 15000);
+    const roadThreat=officialSystems.getRoadSpawnThreatMultiplier?.(player.mapId)||1;
+    monster.respawnAt = monster.noRespawn ? Number.MAX_SAFE_INTEGER : Date.now() + Math.floor((monster.type === 'boss' ? 60000 : 15000)/Math.max(.65,Math.min(2.2,roadThreat)));
     player.stats.monstersKilled++;
     if (monster.type === 'boss') player.stats.bossesKilled = (player.stats.bossesKilled || 0) + 1;
     const bossRewardEvent = buildBossDefeatEvent(player, monster);
@@ -1173,6 +1174,7 @@ class GameEngine {
       contentNpcs: contentDB.get('npcs'),
       contentShops: contentDB.get('shops'),
       nearbyMonsters: this.monstersByMap.get(player.mapId) || [],
+      ownedHouseId: housingSystem.ownedBy(player.name) || null,
       getPlayer: id => this.players.get(id),
       getDerivedStats: target => this.computeDerivedStats(target),
       characterExists: name => Boolean(accountStore.findCharacter(name)),

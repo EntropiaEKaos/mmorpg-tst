@@ -138,6 +138,7 @@ function projectState(host, player) {
     dungeon: isRecord(state.dungeon) ? state.dungeon : {},
     reputation: { ...(isRecord(player?.reputation) ? player.reputation : { town: 0 }) },
     shopDiscount: typeof host.getReputationDiscount === 'function' ? host.getReputationDiscount(player) : 0,
+    roadToTen: isRecord(state.roadToTen) ? state.roadToTen : {},
   });
 }
 
@@ -201,6 +202,7 @@ export class OfficialSnapshotReadModel {
       worldEvent: projectWorldEvent(event, pendingRewards),
       nearbyPvp: projectNearbyPvp(host, player, nearbyPlayers),
       livingRealm: typeof host.livingRealmSnapshot === 'function' ? clone(host.livingRealmSnapshot(player)) : null,
+      roadToTen: typeof host.roadToTenSnapshot === 'function' ? clone(host.roadToTenSnapshot(player)) : null,
     };
   }
 }

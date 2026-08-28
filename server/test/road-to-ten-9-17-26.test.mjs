@@ -42,7 +42,7 @@ test('9.18 regional economy records trade, changes scarcity and funds Node tax t
 
 test('9.19 profession specialization is skill-gated and permanently selects a branch',()=>{
   const {domain,host,player}=hostAndPlayer();
-  const ok=domain.chooseProfessionSpecialization(host,player,'weaponsmith');assert.equal(ok.ok,true);assert.equal(ok.specialization,'weaponsmith');
+  const beforeQuality=domain.craftQualityBonus(host,player);const ok=domain.chooseProfessionSpecialization(host,player,'weaponsmith');assert.equal(ok.ok,true);assert.equal(ok.specialization,'weaponsmith');assert.ok(domain.craftQualityBonus(host,player)>beforeQuality);
   const locked=domain.chooseProfessionSpecialization(host,player,'armorsmith');assert.equal(locked.ok,true); // different profession can specialize independently
   player.official.livingRealm.crafting.skills.enchanting.level=1;assert.equal(domain.chooseProfessionSpecialization(host,player,'runesmith').ok,false);
 });
@@ -63,7 +63,7 @@ test('9.21 faction politics funds treasury, spends influence on votes and leader
 test('9.22 siege warfare builds material-backed assets and damages fortification only in siege context',()=>{
   const {domain,host,player,nodeDef}=hostAndPlayer({mapId:'frostpeak',factionId:'red_pact'});const node=host.global.livingRealm.nodes[nodeDef.id];node.controllerFactionId='crown_eldoria';node.attackerFactionId='red_pact';node.status='siege';
   const built=domain.buildSiegeAsset(host,player,nodeDef.id,'battering_ram',20000);assert.equal(built.ok,true);const fort=host.global.roadToTen.warfare.nodes[nodeDef.id],before=fort.gateHp;
-  const strike=domain.useSiegeAsset(host,player,nodeDef.id,built.asset.id,22000);assert.equal(strike.ok,true);assert.ok(fort.gateHp<before);assert.ok(player.official.roadToTen.warfare.damage>0);
+  const protectedMultiplier=domain.nodeSiegeMultiplier(host,nodeDef.id);const strike=domain.useSiegeAsset(host,player,nodeDef.id,built.asset.id,22000);assert.equal(strike.ok,true);assert.ok(fort.gateHp<before);assert.ok(protectedMultiplier<1);assert.ok(player.official.roadToTen.warfare.damage>0);
 });
 
 test('9.23 dynamic world crosses authored thresholds into Chronicle-backed server events',()=>{
@@ -74,7 +74,7 @@ test('9.23 dynamic world crosses authored thresholds into Chronicle-backed serve
 test('9.24 dungeon blueprints enforce map level and Node stage then lock a branching path',()=>{
   const {domain,host,player}=hostAndPlayer({mapId:'ironwood',level:25});host.global.livingRealm.nodes.node_ironwood.stage=3;
   const start=domain.startDungeonBlueprint(host,player,'ironroot_depths',40000);assert.equal(start.ok,true);assert.equal(start.blueprint.id,'ironroot_depths');
-  assert.equal(domain.chooseDungeonPath(host,player,'roots').ok,true);assert.equal(domain.chooseDungeonPath(host,player,'fungal_halls').ok,false);
+  assert.equal(domain.chooseDungeonPath(host,player,'roots').ok,true);assert.equal(domain.chooseDungeonPath(host,player,'fungal_halls').ok,false);const completed=domain.completeDungeonBlueprint(host,player,{gold:100},41000);assert.equal(completed.ok,true);assert.equal(player.official.roadToTen.dungeon.blueprintId,null);
 });
 
 test('9.25 quest consequence requires completion, persists one choice and changes world state',()=>{
@@ -83,8 +83,8 @@ test('9.25 quest consequence requires completion, persists one choice and change
 });
 
 test('9.26 housing upgrades require ownership, charge gold and add functional persistent benefits',()=>{
-  const {domain,host,player}=hostAndPlayer();const before=player.gold;const out=domain.buyHousingUpgrade(host,player,'home_workshop',60000);assert.equal(out.ok,true);assert.equal(player.gold,before-2500);assert.ok(player.official.roadToTen.housing.upgrades.includes('home_workshop'));
-  const noHouse=hostAndPlayer().player;delete noHouse.housing;assert.equal(domain.buyHousingUpgrade(host,noHouse,'home_stable',61000).ok,false);
+  const {domain,host,player}=hostAndPlayer();const before=player.gold;const out=domain.buyHousingUpgrade(host,player,'home_workshop','house_alpha',60000);assert.equal(out.ok,true);assert.equal(player.gold,before-2500);assert.ok(player.official.roadToTen.housing.upgrades.includes('home_workshop'));
+  const noHouse=hostAndPlayer().player;delete noHouse.housing;assert.equal(domain.buyHousingUpgrade(host,noHouse,'home_stable',null,61000).ok,false);
 });
 
 test('Road-to-10 state round-trips through official player and global persistence boundaries',()=>{

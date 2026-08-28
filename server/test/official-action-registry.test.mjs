@@ -9,6 +9,7 @@ const EXPECTED = [
   'craft','socket_gem','daily_claim','gather','book_read','mystery_answer','coin_buy','auction_list','auction_buy','auction_cancel',
   'mail_send','mail_read','mail_claim','mail_delete','world_event_claim','pvp_toggle','pvp_attack','dungeon_start','dungeon_abandon',
   'faction_join','faction_defect','node_donate','node_declare_war','node_attack','node_claim','craft_advanced','tame_animal','breed_animals','tame_activate',
+  'profession_specialize','beast_care','beast_role','faction_treasury_donate','faction_vote','faction_diplomacy','bounty_place','siege_build','siege_use','dungeon_blueprint_start','dungeon_path','quest_consequence','housing_upgrade',
 ];
 
 test('official registry contains every public authoritative action exactly once', () => {
@@ -41,7 +42,7 @@ test('registry dispatch covers every action and preserves contextual side effect
         if (property === 'pvpToggle') return false;
         if (property === 'pvpAttack') return { damage: 5 };
         if (property === 'startDungeon') return { ok: true, wave: 1 };
-        if (['joinFaction','defectFaction','donateNode','declareNodeWar','attackNode','claimNode','advancedCraft','tameAnimal','breedAnimals','activateTamedAnimal'].includes(String(property))) return { ok:true };
+        if (['joinFaction','defectFaction','donateNode','declareNodeWar','attackNode','claimNode','advancedCraft','tameAnimal','breedAnimals','activateTamedAnimal','chooseProfessionSpecialization','careTamedAnimal','assignTamedAnimalRole','donateFactionTreasury','voteFactionLeader','setFactionDiplomacy','placeFactionBounty','buildSiegeAsset','useSiegeAsset','startDungeonBlueprint','chooseDungeonPath','applyQuestConsequence','buyHousingUpgrade'].includes(String(property))) return { ok:true };
         return true;
       };
     },
@@ -56,13 +57,13 @@ test('registry dispatch covers every action and preserves contextual side effect
   const payload = {
     petId: 'pet', itemId: 'item', depotId: 'depot', amount: 1, foodId: 'food', quantity: 1, recipeId: 'recipe',
     gemItemId: 'gem', bookId: 'book', mysteryId: 'mystery', answer: 'answer', price: 1, listingId: 'listing',
-    mailId: 'mail', targetId: 'target', waves: 3, factionId:'crown_eldoria', nodeId:'node_eldoria', parentAId:'a', parentBId:'b', animalId:'a',
+    mailId: 'mail', targetId: 'target', waves: 3, factionId:'crown_eldoria', targetFactionId:'free_league', status:'allied', nodeId:'node_eldoria', parentAId:'a', parentBId:'b', animalId:'a', specId:'weaponsmith', kind:'feed', role:'scout', candidate:'Registry Tester', targetName:'Target', reward:500, assetId:'battering_ram', builtAssetId:'asset', blueprintId:'ironroot_depths', path:'roots', consequenceId:'ironwood_preserve', upgradeId:'home_workshop',
   };
   for (const action of EXPECTED) {
     const result = executeOfficialAction(systems, player, action, payload, ctx);
     assert.equal(result?.ok, true, action);
   }
-  assert.equal(sideEffects.start, 1);
+  assert.equal(sideEffects.start, 2);
   assert.equal(sideEffects.clear, 1);
   assert.equal(executeOfficialAction(systems, player, 'missing', payload, ctx), null);
   assert.ok(calls.length >= EXPECTED.length - 1);

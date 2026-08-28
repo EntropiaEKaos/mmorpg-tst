@@ -18,6 +18,7 @@ import { officialPlayerLifecycleDomain } from './OfficialPlayerLifecycleDomain.m
 import { officialSnapshotReadModel } from './OfficialSnapshotReadModel.mjs';
 import { officialRuntimeCoordinator } from './OfficialRuntimeCoordinator.mjs';
 import { livingRealmDomain } from './LivingRealmDomain.mjs';
+import { roadToTenDomain } from './RoadToTenDomain.mjs';
 import { contentDB } from './ContentDB.mjs';
 import {
   OFFICIAL_PETS, OFFICIAL_GEMS, OFFICIAL_SHOP, OFFICIAL_FOOD, OFFICIAL_RECIPES,
@@ -36,8 +37,10 @@ export class OfficialSystems {
     this.global = freshGlobalState();
     this.contentEvents = [];
     this.livingRealmContent = {};
+    this.roadToTenContent = {};
     this.load();
     this.syncLivingRealmContent();
+    this.syncRoadToTenContent();
   }
 
   load() {
@@ -52,6 +55,7 @@ export class OfficialSystems {
   }
 
   syncLivingRealmContent() { return livingRealmDomain.syncContent(this,{nodes:contentDB.get('nodes'),factions:contentDB.get('factions'),materials:contentDB.get('materials'),craftingRecipes:contentDB.get('craftingRecipes'),tamingSpecies:contentDB.get('tamingSpecies')}); }
+  syncRoadToTenContent() { return roadToTenDomain.syncContent(this,{professionSpecializations:contentDB.get('professionSpecializations'),economyPolicies:contentDB.get('economyPolicies'),factionPrograms:contentDB.get('factionPrograms'),siegeAssets:contentDB.get('siegeAssets'),dynamicWorldRules:contentDB.get('dynamicWorldRules'),dungeonBlueprints:contentDB.get('dungeonBlueprints'),questConsequences:contentDB.get('questConsequences'),housingUpgrades:contentDB.get('housingUpgrades')}); }
 
   syncWorldEvents(events = []) {
     this.contentEvents = Array.isArray(events)
@@ -132,7 +136,9 @@ export class OfficialSystems {
   }
 
   onMonsterKill(player, monster) {
-    return officialRuntimeCoordinator.onMonsterKill(this, player, monster);
+    const result=officialRuntimeCoordinator.onMonsterKill(this, player, monster);
+    if(result?.dungeonComplete) roadToTenDomain.completeDungeonBlueprint(this,player,result.dungeonComplete);
+    return result;
   }
 
   getDungeonWave(wave, playerLevel) {
@@ -256,7 +262,7 @@ export class OfficialSystems {
   }
 
 
-  livingRealmTick(now=Date.now()){ return livingRealmDomain.tick(this,now); }
+  livingRealmTick(now=Date.now()){ const living=livingRealmDomain.tick(this,now); roadToTenDomain.tick(this,now); return living; }
   livingRealmSnapshot(player=null){ return livingRealmDomain.publicRealm(this,player); }
   joinFaction(player,factionId){ return livingRealmDomain.joinFaction(this,player,factionId); }
   defectFaction(player,factionId){ return livingRealmDomain.defectFaction(this,player,factionId); }
@@ -264,11 +270,33 @@ export class OfficialSystems {
   declareNodeWar(player,nodeId){ return livingRealmDomain.declareNodeWar(this,player,nodeId); }
   attackNode(player,nodeId){ return livingRealmDomain.attackNode(this,player,nodeId); }
   claimNode(player,nodeId){ return livingRealmDomain.claimNeutralNode(this,player,nodeId); }
-  advancedCraft(player,recipeId){ return livingRealmDomain.advancedCraft(this,player,recipeId); }
+  advancedCraft(player,recipeId){ const result=livingRealmDomain.advancedCraft(this,player,recipeId); roadToTenDomain.onCraft(this,player,result,recipeId); return result; }
   tameAnimal(player,speciesId,nearbyMonsters=[]){ return livingRealmDomain.tame(this,player,speciesId,nearbyMonsters); }
   breedAnimals(player,parentAId,parentBId){ return livingRealmDomain.breed(this,player,parentAId,parentBId); }
   activateTamedAnimal(player,animalId){ return livingRealmDomain.activateAnimal(this,player,animalId); }
-  livingRealmMonsterKill(player,monster){ return livingRealmDomain.onMonsterKill(this,player,monster); }
+  livingRealmMonsterKill(player,monster){ const living=livingRealmDomain.onMonsterKill(this,player,monster); roadToTenDomain.onMonsterKill(this,player,monster); return living; }
+
+  roadToTenSnapshot(player=null){ return roadToTenDomain.publicSnapshot(this,player); }
+  getRegionalMarketMultiplier(player){ return roadToTenDomain.marketMultiplier(this,player); }
+  getRoadCraftQualityBonus(player){ return roadToTenDomain.craftQualityBonus(this,player); }
+  getRoadTamingChanceBonus(player){ return roadToTenDomain.tamingChanceBonus(this,player); }
+  getRoadBreedingMutationBonus(player){ return roadToTenDomain.breedingMutationBonus(this,player); }
+  getRoadNodeSiegeMultiplier(nodeId){ return roadToTenDomain.nodeSiegeMultiplier(this,nodeId); }
+  getRoadSpawnThreatMultiplier(mapId){ return roadToTenDomain.spawnThreatMultiplier(this,mapId); }
+  recordRegionalTrade(player,value,direction='buy',category='general'){ return roadToTenDomain.recordTrade(this,player,value,direction,category); }
+  chooseProfessionSpecialization(player,specId){ return roadToTenDomain.chooseProfessionSpecialization(this,player,specId); }
+  careTamedAnimal(player,animalId,kind){ return roadToTenDomain.careAnimal(this,player,animalId,kind); }
+  assignTamedAnimalRole(player,animalId,role){ return roadToTenDomain.assignAnimalRole(this,player,animalId,role); }
+  donateFactionTreasury(player,amount){ return roadToTenDomain.donateFaction(this,player,amount); }
+  voteFactionLeader(player,candidate){ return roadToTenDomain.voteLeader(this,player,candidate); }
+  setFactionDiplomacy(player,targetFactionId,status){ return roadToTenDomain.setDiplomacy(this,player,targetFactionId,status); }
+  placeFactionBounty(player,targetName,reward){ return roadToTenDomain.placeBounty(this,player,targetName,reward); }
+  buildSiegeAsset(player,nodeId,assetId){ return roadToTenDomain.buildSiegeAsset(this,player,nodeId,assetId); }
+  useSiegeAsset(player,nodeId,builtAssetId){ return roadToTenDomain.useSiegeAsset(this,player,nodeId,builtAssetId); }
+  startDungeonBlueprint(player,blueprintId){ return roadToTenDomain.startDungeonBlueprint(this,player,blueprintId); }
+  chooseDungeonPath(player,path){ return roadToTenDomain.chooseDungeonPath(this,player,path); }
+  applyQuestConsequence(player,consequenceId){ return roadToTenDomain.applyQuestConsequence(this,player,consequenceId); }
+  buyHousingUpgrade(player,upgradeId,ownedHouseId=null){ return roadToTenDomain.buyHousingUpgrade(this,player,upgradeId,ownedHouseId); }
 
   snapshot(player, nearbyPlayers = []) {
     return officialSnapshotReadModel.snapshot(this, player, nearbyPlayers);
