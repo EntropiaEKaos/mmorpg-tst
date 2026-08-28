@@ -37,3 +37,12 @@ test('9.27 second pass preserves architecture contracts while extracting richer 
   assert.match(avatar, /size \* 1\.08/);
   assert.match(vfx, /globalCompositeOperation\s*=\s*'lighter'/);
 });
+
+
+test('9.27 third pass deepens vegetation and architecture without changing authority', () => {
+  const render = read('src/game/render.ts');
+  assert.match(render, /2\.5D facade model/);
+  assert.match(render, /layered canopy shadow/);
+  assert.match(render, /variation > \.54/);
+  assert.match(render, /Roof mass and tile bands/);
+});

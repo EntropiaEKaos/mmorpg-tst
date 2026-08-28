@@ -77,10 +77,12 @@ function buildTileCache(size: number) {
     ctx.fillRect(0, 0, s, s);
     const u = Math.max(1, Math.round(s / 16));
 
-    // Ground detail and tight pixel shadow.
+    // Ground detail and layered canopy shadow.
+    ctx.fillStyle = 'rgba(14,20,13,.20)';
+    ctx.fillRect(s/2-u*7, s-u*4, u*14, u*3);
     ctx.fillStyle = '#294d27';
     ctx.fillRect(u, s-u*2, s-u*2, u);
-    ctx.fillStyle = 'rgba(20,24,16,.45)';
+    ctx.fillStyle = 'rgba(20,24,16,.52)';
     ctx.fillRect(s/2-u*5, s-u*3, u*10, u*2);
 
     // Trunk, roots and bark highlights.
@@ -378,6 +380,14 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
     const ox = Math.floor(hash(worldX, worldY, 41) * size), oy = Math.floor(hash(worldY, worldX, 53) * size);
     ctx.fillStyle = variation > .72 ? 'rgba(215,224,126,.17)' : 'rgba(18,50,22,.16)'; ctx.fillRect(x + ox, y + oy, px, px * (variation > .5 ? 2 : 1));
     if (variation > .88) { ctx.fillStyle = 'rgba(255,218,128,.26)'; ctx.fillRect(x + ((ox + px*5) % size), y + ((oy + px*3) % size), px, px); }
+    if (variation > .54) {
+      const patchX = x + size * (.12 + hash(worldX, worldY, 61) * .58);
+      const patchY = y + size * (.18 + hash(worldY, worldX, 67) * .56);
+      ctx.fillStyle = variation > .80 ? 'rgba(112,151,72,.18)' : 'rgba(22,53,27,.13)';
+      ctx.fillRect(patchX, patchY, Math.max(px*2, size*.16), Math.max(px, size*.055));
+      ctx.fillRect(patchX + px, patchY - px*2, px, px*3);
+      if (variation > .76) ctx.fillRect(patchX + px*4, patchY - px, px, px*2);
+    }
   } else if (type === 'sand' && variation > .62) { ctx.fillStyle = 'rgba(116,88,50,.09)'; ctx.fillRect(x + size*.18, y + size*(.28 + variation*.25), size*.48, px); }
   if (type === 'water') {
     const wave = (Math.sin(time / 430 + worldX * .7 + worldY * .31) + 1) * .5; ctx.fillStyle = `rgba(220,245,255,${.05 + wave*.11})`; ctx.fillRect(x + size*.12, y + size * (.28 + wave * .20), size*(.22 + wave*.22), px);
@@ -559,7 +569,8 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
     return;
   }
   if (building.type === 'well') {
-    ctx.fillStyle = 'rgba(0,0,0,.32)'; ctx.fillRect(sx + w*.18, sy+h*.72, w*.64, h*.10);
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(sx + w*.08, sy+h*.68, w*.84, h*.18);
+    ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.fillRect(sx + w*.18, sy+h*.72, w*.64, h*.10);
     ctx.fillStyle = '#4a4740'; ctx.fillRect(sx+w*.18, sy+h*.49, w*.64, h*.25);
     ctx.fillStyle = '#847d6d'; ctx.fillRect(sx+w*.22, sy+h*.45, w*.56, h*.10);
     ctx.fillStyle = '#173a4c'; ctx.fillRect(sx+w*.29, sy+h*.51, w*.42, h*.14);
@@ -584,6 +595,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
     ctx.strokeStyle=accent;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(cx,sy+h*.60,w*.28,h*.17,0,0,Math.PI*2);ctx.stroke();ctx.restore();return;
   }
   if (building.type === 'market') {
+    ctx.fillStyle='rgba(0,0,0,.22)';ctx.fillRect(sx+w*.03,sy+h*.67,w*.94,h*.18);
     for(let i=0;i<3;i++){const bx=sx+i*w/3;const stripe=i%2?accent:roof;ctx.fillStyle='#5f4027';ctx.fillRect(bx+3,sy+h*.43,w/3-6,h*.40);ctx.fillStyle=stripe;ctx.beginPath();ctx.moveTo(bx,sy+h*.43);ctx.lineTo(bx+w/6,sy+h*.12);ctx.lineTo(bx+w/3,sy+h*.43);ctx.closePath();ctx.fill();ctx.fillStyle='#d8bd85';ctx.fillRect(bx+6,sy+h*.50,w/3-12,h*.08);} ctx.restore();return;
   }
 
@@ -598,6 +610,19 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
   ctx.fillRect(sx, wallTop, w, wallH);
   ctx.fillStyle = wall;
   ctx.fillRect(sx + 2, wallTop + 2, w - 4, wallH - 4);
+
+  // 2.5D facade model: roof/eave cast shadow, right side plane and heavy foundation AO.
+  const sideW = Math.max(3, Math.round(tileSize * .12));
+  ctx.fillStyle = 'rgba(25,20,17,.20)';
+  ctx.fillRect(sx + w - sideW - 2, wallTop + 2, sideW, wallH - 4);
+  ctx.fillStyle = 'rgba(255,239,205,.08)';
+  ctx.fillRect(sx + 2, wallTop + 2, Math.max(2, tileSize*.08), wallH - 5);
+  ctx.fillStyle = 'rgba(20,15,12,.23)';
+  ctx.fillRect(sx + 2, wallTop + 2, w - 4, Math.max(3, Math.round(tileSize*.12)));
+  ctx.fillStyle = 'rgba(21,18,14,.30)';
+  ctx.fillRect(sx + 2, wallTop + wallH - Math.max(4, Math.round(tileSize*.14)), w - 4, Math.max(4, Math.round(tileSize*.14)));
+  ctx.fillStyle = 'rgba(130,112,82,.18)';
+  for (let xx=sx+Math.max(4,tileSize*.12); xx<sx+w-6; xx+=Math.max(12,Math.round(tileSize*.72))) ctx.fillRect(xx, wallTop+wallH-Math.max(3,tileSize*.10), Math.max(3,tileSize*.12), Math.max(2,tileSize*.06));
 
   // Pixel masonry courses and alternating vertical joints.
   const course = Math.max(5, Math.round(tileSize*.20));
@@ -636,6 +661,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
     if (Math.abs(wx-cx) < doorW*.65) continue;
     const wy = wallTop + wallH*.22;
     const ww = Math.max(8,tileSize*.32), wh=Math.max(8,tileSize*.28);
+    ctx.fillStyle='rgba(20,15,12,.52)';ctx.fillRect(wx-ww/2-3,wy-3,ww+7,wh+7);
     ctx.fillStyle='#34291f';ctx.fillRect(wx-ww/2-2,wy-2,ww+4,wh+4);
     ctx.fillStyle=`rgba(239,190,91,${flicker})`;ctx.fillRect(wx-ww/2,wy,ww,wh);
     ctx.fillStyle='rgba(255,239,169,.7)';ctx.fillRect(wx-ww/2+2,wy+2,ww*.38,2);
@@ -644,6 +670,10 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, sx: number, sy: numb
 
   // Roof mass and tile bands.
   drawPixelRoofTiles(ctx, sx, sy, w, h, roof);
+  ctx.fillStyle = 'rgba(18,13,11,.34)';
+  ctx.fillRect(sx - 4, sy + h*.425, w + 8, Math.max(3, Math.round(tileSize*.10)));
+  ctx.fillStyle = 'rgba(255,224,173,.08)';
+  ctx.fillRect(sx, sy + h*.415, w, Math.max(1, Math.round(tileSize*.035)));
 
   // Chimney and type accents.
   if (building.w >= 3 && !['castle','tower'].includes(building.type)) {
