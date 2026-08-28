@@ -14,3 +14,10 @@ NPCs, monstros e `node_stormwatch` também usam migração exact-default-only. G
 A validação visual usa o mesmo `generateMap`, `drawTile`, `drawBuilding`, minimapa e City Designer do cliente de produção, sincronizados com `/admin/api/maps` do servidor autoritativo. O tile lógico não muda; a variante cosmética `storm` fornece mar profundo com whitecaps, costa de ardósia molhada, neve castigada por granizo e causeways metálicos.
 
 O gate captura minimapa, Designer e panorâmica, mede os contadores reais de mar/pontes/rocha/neve/caminhos e também inspeciona a paleta de pixels para impedir regressão a água tropical ou superfície clara genérica.
+
+
+## Provas versionadas no checkpoint
+
+- [Minimapa](screenshots/moria-9-43-stormwatch-minimap.png)
+- [City Designer](screenshots/moria-9-43-stormwatch-city-designer.png)
+- [Panorâmica](screenshots/moria-9-43-stormwatch-panorama.png)
