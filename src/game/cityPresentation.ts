@@ -1,6 +1,6 @@
 import type { GameMap } from './maps';
 import type { Building } from './render';
-import { getCityPalette, type CityLandmark, type CityProp } from './cityIdentity';
+import { getCityPalette, type CityLandmark, type CityProp, type CityPropKind } from './cityIdentity';
 
 export interface CityMinimapMarker {
   id: string;
@@ -31,6 +31,15 @@ function buildingTypeFor(kind: CityLandmark['kind']): Building['type'] {
   }
 }
 
+function overlapsLandmark(map: GameMap, x: number, y: number, w: number, h: number, margin = 1) {
+  return map.landmarks.some((landmark) =>
+    x < landmark.x + landmark.w + margin &&
+    x + w + margin > landmark.x &&
+    y < landmark.y + landmark.h + margin &&
+    y + h + margin > landmark.y
+  );
+}
+
 export function getCityBuildings(map: GameMap): Building[] {
   const palette = getCityPalette({
     id: map.id, style: map.cityStyle, biome: map.biome,
@@ -49,16 +58,17 @@ export function getCityBuildings(map: GameMap): Building[] {
     icon: landmark.icon,
   }));
 
-  // Smaller houses make every city feel inhabited without making the town
-  // geometry authoritative. They are visual-only and therefore never change
-  // collision/pathing rules on the server.
+  // Visual-only residential ring. It deliberately frames the square more
+  // tightly than 9.6, but never changes authoritative collision/pathing.
   const tc = map.townCenter;
   const homes: Array<[number, number, number, number]> = [
-    [-8, 5, 3, 3], [-4, 6, 3, 3], [4, 6, 3, 3], [8, 5, 3, 3],
+    [-13,-6,4,3], [-13,3,3,3], [-9,7,4,3], [-4,8,3,3], [2,8,4,3],
+    [8,7,4,3], [11,3,3,3], [11,-3,4,3], [8,-10,4,3], [1,-12,3,3],
   ];
   for (const [dx, dy, w, h] of homes) {
     const x = Math.max(1, Math.min(78 - w, tc.x + dx));
     const y = Math.max(1, Math.min(78 - h, tc.y + dy));
+    if (overlapsLandmark(map, x, y, w, h, 1)) continue;
     buildings.push({ x, y, w, h, type: 'house', roofColor: palette.roof, wallColor: palette.wall, accentColor: palette.accent });
   }
   return buildings;
@@ -66,12 +76,11 @@ export function getCityBuildings(map: GameMap): Building[] {
 
 export function getCityMinimapMarkers(map: GameMap): CityMinimapMarker[] {
   const palette = getCityPalette({ id: map.id, style: map.cityStyle, biome: map.biome, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor });
-  const markers: CityMinimapMarker[] = [
+  return [
     ...map.landmarks.map((entry) => ({ id: entry.id, name: entry.name, icon: entry.icon, x: entry.x + entry.w / 2, y: entry.y + entry.h / 2, color: palette.accent, kind: 'landmark' as const })),
     ...map.districts.map((entry) => ({ id: entry.id, name: entry.name, icon: entry.icon, x: entry.x, y: entry.y, color: entry.color || palette.accent, kind: 'district' as const })),
     ...map.portals.map((portal, index) => ({ id: `${map.id}_portal_${index}`, name: portal.label || portal.targetMap, icon: '◉', x: portal.pos.x, y: portal.pos.y, color: '#7fe7ff', kind: 'portal' as const })),
   ];
-  return markers;
 }
 
 export function drawCityTileOverlay(
@@ -109,7 +118,6 @@ export function drawCityTileOverlay(
     const p = Math.max(2, Math.round(size / 12));
     ctx.globalAlpha = .34;
     ctx.fillStyle = palette.accent;
-    // Small plaza mosaic corners preserve cobble detail while making center unique.
     ctx.fillRect(screenX + p, screenY + p, p, p);
     ctx.fillRect(screenX + size - p * 2, screenY + p, p, p);
     ctx.fillRect(screenX + p, screenY + size - p * 2, p, p);
@@ -118,51 +126,95 @@ export function drawCityTileOverlay(
   ctx.restore();
 }
 
+const AMBIENT_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [-12,-8],[-9,-10],[-5,-11],[-1,-12],[4,-11],[9,-9],[12,-6],[13,-1],
+  [12,4],[10,8],[6,10],[2,11],[-3,11],[-7,10],[-11,7],[-13,3],[-13,-2],
+  [-8,-5],[-7,4],[7,5],[8,-4],[-4,6],[4,6],[-5,-6],[5,-6],
+];
+
+function ambientKinds(map: GameMap): CityPropKind[] {
+  const style = String(map.cityStyle || 'royal');
+  if (style === 'harbor') return ['lamp','barrel','anchor','cart','sign','barrel'];
+  if (style === 'alpine') return ['pine','brazier','pine','barrel','sign','banner'];
+  if (style === 'ironwood') return ['pine','barrel','sign','cart','pine','banner'];
+  if (style === 'marsh') return ['lamp','mushroom','barrel','sign','mushroom','grave'];
+  if (style === 'forge') return ['brazier','barrel','cart','banner','brazier','sign'];
+  if (style === 'crystal') return ['crystal','lamp','rune','crystal','sign','lamp'];
+  if (style === 'storm') return ['banner','lamp','brazier','sign','lamp','anchor'];
+  if (style === 'void' || style === 'nightfall') return ['grave','brazier','rune','statue','grave','banner'];
+  if (style === 'sanctum') return ['rune','lamp','crystal','banner','statue','lamp'];
+  return ['pine','lamp','barrel','banner','cart','lamp'];
+}
+
+export function getAmbientCityProps(map: GameMap): CityProp[] {
+  const kinds = ambientKinds(map);
+  const existing = new Set(map.props.map((prop) => `${prop.x}:${prop.y}`));
+  const props: CityProp[] = [];
+  AMBIENT_OFFSETS.forEach(([dx, dy], index) => {
+    const x = Math.max(2, Math.min(77, Math.round(map.townCenter.x + dx)));
+    const y = Math.max(2, Math.min(77, Math.round(map.townCenter.y + dy)));
+    if (existing.has(`${x}:${y}`)) return;
+    if (overlapsLandmark(map, x, y, 1, 1, 0)) return;
+    props.push({ id: `${map.id}_ambient_${index}`, kind: kinds[index % kinds.length], x, y });
+  });
+  return props;
+}
+
+function pixelRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
+  ctx.fillStyle = '#1d1813';
+  ctx.fillRect(Math.round(x - 1), Math.round(y - 1), Math.round(w + 2), Math.round(h + 2));
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
+}
+
 function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number, y: number, size: number, time: number, accent: string) {
   const cx = x + size / 2;
-  const cy = y + size * 0.68;
-  const pulse = 0.75 + Math.sin(time / 450 + prop.x) * 0.12;
+  const cy = y + size * 0.70;
+  const u = Math.max(1, Math.round(size / 16));
+  const pulse = 0.72 + Math.sin(time / 450 + prop.x) * 0.08;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.strokeStyle = '#17120d';
-  ctx.lineWidth = Math.max(1, size / 18);
-  ctx.fillStyle = prop.color || accent;
 
   switch (prop.kind) {
     case 'banner':
-      ctx.fillStyle = '#493421'; ctx.fillRect(cx - size * .04, y + size * .15, size * .08, size * .72);
-      ctx.fillStyle = prop.color || accent; ctx.fillRect(cx, y + size * .18, size * .30, size * .28);
-      ctx.strokeRect(cx, y + size * .18, size * .30, size * .28); break;
+      pixelRect(ctx,cx-u,y+size*.18,u*2,size*.67,'#5b4028');
+      pixelRect(ctx,cx+u,y+size*.20,u*5,u*6,prop.color || accent);
+      ctx.fillStyle='rgba(255,255,255,.24)';ctx.fillRect(cx+u*2,y+size*.22,u,u*4); break;
     case 'lamp':
-      ctx.fillStyle = '#3d3528'; ctx.fillRect(cx - 2, y + size * .25, 4, size * .58);
-      ctx.shadowColor = '#ffd56a'; ctx.shadowBlur = 8 * pulse; ctx.fillStyle = '#ffd56a'; ctx.fillRect(cx - 4, y + size * .22, 8, 8); break;
+      pixelRect(ctx,cx-u,y+size*.31,u*2,size*.52,'#42392d');
+      ctx.fillStyle=`rgba(255,211,104,${pulse*.25})`;ctx.fillRect(cx-u*5,y+size*.17,u*10,u*10);
+      pixelRect(ctx,cx-u*2,y+size*.21,u*4,u*5,'#e7bd5c');
+      ctx.fillStyle='#fff0a7';ctx.fillRect(cx-u,y+size*.23,u*2,u*2); break;
     case 'brazier':
-      ctx.fillStyle = '#4b4034'; ctx.fillRect(cx - 7, cy - 4, 14, 7);
-      ctx.shadowColor = '#ff7a2f'; ctx.shadowBlur = 10 * pulse; ctx.fillStyle = '#ff9a38'; ctx.beginPath(); ctx.moveTo(cx - 5, cy - 5); ctx.lineTo(cx, cy - 18); ctx.lineTo(cx + 6, cy - 5); ctx.fill(); break;
+      pixelRect(ctx,cx-u*4,cy,u*8,u*3,'#524438');
+      ctx.fillStyle='#8f3926';ctx.fillRect(cx-u*3,cy-u*3,u*6,u*3);
+      ctx.fillStyle='#ff9737';ctx.fillRect(cx-u*2,cy-u*6,u*4,u*4);ctx.fillStyle='#ffd15e';ctx.fillRect(cx-u,cy-u*7,u*2,u*4); break;
     case 'crystal':
-      ctx.shadowColor = prop.color || accent; ctx.shadowBlur = 9 * pulse; ctx.fillStyle = prop.color || accent;
-      ctx.beginPath(); ctx.moveTo(cx, y + size * .12); ctx.lineTo(cx + size * .18, cy); ctx.lineTo(cx, y + size * .88); ctx.lineTo(cx - size * .18, cy); ctx.closePath(); ctx.fill(); break;
+      ctx.fillStyle=prop.color || accent;ctx.fillRect(cx-u*2,y+size*.28,u*4,u*8);ctx.fillRect(cx-u,y+size*.18,u*2,u*12);
+      ctx.fillStyle='rgba(255,255,255,.52)';ctx.fillRect(cx-u,y+size*.22,u,u*5); break;
     case 'grave':
-      ctx.fillStyle = '#706f72'; ctx.fillRect(cx - 7, y + size * .35, 14, size * .46); ctx.fillRect(cx - 11, y + size * .43, 22, 5); break;
+      pixelRect(ctx,cx-u*3,y+size*.40,u*6,u*7,'#77736d');ctx.fillStyle='#9b968c';ctx.fillRect(cx-u*2,y+size*.42,u*4,u);ctx.fillRect(cx-u*5,y+size*.47,u*10,u*2); break;
     case 'tent':
-      ctx.fillStyle = prop.color || accent; ctx.beginPath(); ctx.moveTo(cx, y + size * .18); ctx.lineTo(x + size * .12, y + size * .82); ctx.lineTo(x + size * .88, y + size * .82); ctx.closePath(); ctx.fill(); ctx.stroke(); break;
+      ctx.fillStyle='#1d1813';ctx.fillRect(x+u*2,y+size*.44,size-u*4,size*.39);ctx.fillStyle=prop.color || accent;ctx.fillRect(x+u*3,y+size*.46,size-u*6,size*.35);ctx.fillStyle='#d2b67f';ctx.fillRect(cx-u,y+size*.48,u*2,size*.32); break;
     case 'sign':
-      ctx.fillStyle = '#6e4c2b'; ctx.fillRect(cx - 2, y + size * .45, 4, size * .42); ctx.fillRect(cx - size * .28, y + size * .30, size * .56, size * .28); break;
+      pixelRect(ctx,cx-u,y+size*.48,u*2,size*.35,'#684729');pixelRect(ctx,cx-u*5,y+size*.30,u*10,u*5,'#76512e');ctx.fillStyle='#c29b58';ctx.fillRect(cx-u*3,y+size*.34,u*5,u); break;
     case 'barrel':
-      ctx.fillStyle = '#78502d'; ctx.fillRect(cx - 8, y + size * .42, 16, size * .36); ctx.strokeRect(cx - 8, y + size * .42, 16, size * .36); break;
+      pixelRect(ctx,cx-u*4,y+size*.43,u*8,u*7,'#79502e');ctx.fillStyle='#b57a42';ctx.fillRect(cx-u*3,y+size*.45,u*6,u);ctx.fillStyle='#352a20';ctx.fillRect(cx-u*4,y+size*.48,u*8,u);ctx.fillRect(cx-u*4,y+size*.68,u*8,u); break;
     case 'cart':
-      ctx.fillStyle = '#76512d'; ctx.fillRect(x + size * .18, y + size * .43, size * .62, size * .28); ctx.fillStyle = '#2d241c'; ctx.beginPath(); ctx.arc(x + size * .28, y + size * .78, 5, 0, Math.PI * 2); ctx.arc(x + size * .70, y + size * .78, 5, 0, Math.PI * 2); ctx.fill(); break;
+      pixelRect(ctx,x+size*.16,y+size*.42,size*.67,size*.26,'#75502e');ctx.fillStyle='#a6743d';ctx.fillRect(x+size*.20,y+size*.44,size*.58,u*2);ctx.fillStyle='#241d18';ctx.fillRect(x+size*.22,y+size*.69,u*4,u*4);ctx.fillRect(x+size*.64,y+size*.69,u*4,u*4);ctx.fillStyle='#79502e';ctx.fillRect(x+size*.79,y+size*.50,size*.18,u*2); break;
     case 'pine':
-      ctx.fillStyle = '#2d4c32'; for (let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(cx,y+size*(.12+i*.15));ctx.lineTo(x+size*(.22+i*.05),y+size*(.58+i*.12));ctx.lineTo(x+size*(.78-i*.05),y+size*(.58+i*.12));ctx.closePath();ctx.fill();} break;
+      ctx.fillStyle='#513623';ctx.fillRect(cx-u,y+size*.56,u*2,size*.31);
+      ctx.fillStyle='#18351f';ctx.fillRect(cx-u*5,y+size*.38,u*10,u*7);ctx.fillRect(cx-u*4,y+size*.26,u*8,u*7);ctx.fillRect(cx-u*3,y+size*.15,u*6,u*7);
+      ctx.fillStyle='#2f5d34';ctx.fillRect(cx-u*3,y+size*.28,u*4,u*2);ctx.fillRect(cx-u*2,y+size*.18,u*3,u*2);ctx.fillStyle='#4f7d46';ctx.fillRect(cx,y+size*.20,u*2,u*2); break;
     case 'mushroom':
-      ctx.fillStyle = '#d6d2b6'; ctx.fillRect(cx - 2, cy - 1, 4, 10); ctx.fillStyle = prop.color || '#a15d8e'; ctx.beginPath(); ctx.arc(cx, cy - 3, 8, Math.PI, 0); ctx.fill(); break;
+      ctx.fillStyle='#d6d2b6';ctx.fillRect(cx-u,cy,u*2,u*5);ctx.fillStyle=prop.color || '#a15d8e';ctx.fillRect(cx-u*3,cy-u*3,u*6,u*3);ctx.fillRect(cx-u*2,cy-u*4,u*4,u); break;
     case 'anchor':
-      ctx.strokeStyle = prop.color || accent; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, y+size*.24); ctx.lineTo(cx, y+size*.78); ctx.moveTo(cx-size*.18,y+size*.62);ctx.quadraticCurveTo(cx, y+size*.90, cx+size*.18,y+size*.62);ctx.stroke(); break;
+      ctx.fillStyle=prop.color || accent;ctx.fillRect(cx-u,y+size*.25,u*2,size*.50);ctx.fillRect(cx-u*4,y+size*.32,u*8,u*2);ctx.fillRect(cx-u*5,y+size*.67,u*3,u*2);ctx.fillRect(cx+u*2,y+size*.67,u*3,u*2);ctx.fillRect(cx-u*4,y+size*.69,u*2,u*3);ctx.fillRect(cx+u*2,y+size*.69,u*2,u*3); break;
     case 'rune':
-      ctx.shadowColor = prop.color || accent; ctx.shadowBlur = 7*pulse; ctx.strokeStyle = prop.color || accent; ctx.lineWidth = 2; ctx.strokeRect(cx-8,cy-8,16,16); ctx.beginPath();ctx.moveTo(cx-6,cy+5);ctx.lineTo(cx,cy-6);ctx.lineTo(cx+6,cy+5);ctx.stroke(); break;
+      pixelRect(ctx,cx-u*4,cy-u*4,u*8,u*8,'#30263b');ctx.fillStyle=prop.color || accent;ctx.fillRect(cx-u,cy-u*3,u*2,u*6);ctx.fillRect(cx-u*3,cy-u,u*6,u*2);ctx.fillRect(cx+u,cy-u*3,u*2,u*2); break;
     case 'statue':
     default:
-      ctx.fillStyle = '#77756f'; ctx.fillRect(cx - 7, y + size * .35, 14, size * .38); ctx.fillRect(cx - 11, y + size * .73, 22, 6); ctx.beginPath(); ctx.arc(cx, y + size * .27, 7, 0, Math.PI * 2); ctx.fill();
+      pixelRect(ctx,cx-u*3,y+size*.36,u*6,u*8,'#77756f');pixelRect(ctx,cx-u*5,y+size*.73,u*10,u*3,'#625f5b');ctx.fillStyle='#96938c';ctx.fillRect(cx-u*2,y+size*.25,u*4,u*4);ctx.fillRect(cx-u,y+size*.21,u*2,u*2);
   }
   ctx.restore();
 }
@@ -175,27 +227,28 @@ export function drawCityDecor(
   time: number,
 ) {
   const palette = getCityPalette({ id: map.id, style: map.cityStyle, biome: map.biome, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor });
-  for (const prop of map.props) {
+  const visualProps = [...getAmbientCityProps(map), ...map.props];
+  for (const prop of visualProps) {
     const sx = (prop.x - camera.x) * tileSize;
     const sy = (prop.y - camera.y) * tileSize;
     if (sx < -tileSize || sy < -tileSize || sx > ctx.canvas.width + tileSize || sy > ctx.canvas.height + tileSize) continue;
     drawPropGlyph(ctx, prop, sx, sy, tileSize, time, palette.accent);
   }
 
-  // Labels are deliberately sparse: landmarks become navigation anchors instead
-  // of filling the world with floating text.
+  // Landmarks remain navigation anchors, but typography follows the world pixel
+  // language instead of looking like a floating modern web label.
   for (const landmark of map.landmarks) {
     const sx = (landmark.x + landmark.w / 2 - camera.x) * tileSize;
     const sy = (landmark.y - camera.y) * tileSize;
     if (sx < 0 || sy < 0 || sx > ctx.canvas.width || sy > ctx.canvas.height) continue;
     ctx.save();
-    ctx.font = '800 9px system-ui, sans-serif';
+    ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
     ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(0,0,0,.9)';
-    ctx.strokeText(`${landmark.icon} ${landmark.name}`, sx, sy - 5);
+    ctx.strokeStyle = 'rgba(0,0,0,.92)';
+    ctx.strokeText(landmark.name, sx, sy - 5);
     ctx.fillStyle = palette.accent;
-    ctx.fillText(`${landmark.icon} ${landmark.name}`, sx, sy - 5);
+    ctx.fillText(landmark.name, sx, sy - 5);
     ctx.restore();
   }
 }
