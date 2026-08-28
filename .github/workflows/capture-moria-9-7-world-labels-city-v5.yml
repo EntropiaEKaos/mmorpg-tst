@@ -1,3 +1,4 @@
+# Final 9.7 smart-label and direct-city-authoring visual review
 name: Capture Mor'ia 9.7 World Labels City V5
 
 on:
@@ -50,7 +51,6 @@ jobs:
           cat > /tmp/moria-shot/capture.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
-
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
           const consoleLines = [];
@@ -62,19 +62,11 @@ jobs:
           await page.waitForTimeout(5000);
           fs.mkdirSync('/tmp/moria-capture', { recursive: true });
           await page.screenshot({ path: '/tmp/moria-capture/moria-9-7-gameplay-v5.png', fullPage: false });
-
           const canvases = page.locator('canvas');
           const canvasCount = await canvases.count();
           let best = null;
-          for (let i = 0; i < canvasCount; i++) {
-            const box = await canvases.nth(i).boundingBox();
-            if (!box) continue;
-            if (!best || box.width * box.height > best.box.width * best.box.height) best = { i, box };
-          }
-          if (best && best.box.width > 200 && best.box.height > 150) {
-            await canvases.nth(best.i).screenshot({ path: '/tmp/moria-capture/moria-9-7-world-canvas-v5.png' });
-          }
-
+          for (let i = 0; i < canvasCount; i++) { const box = await canvases.nth(i).boundingBox(); if (box && (!best || box.width * box.height > best.box.width * best.box.height)) best = { i, box }; }
+          if (best && best.box.width > 200 && best.box.height > 150) await canvases.nth(best.i).screenshot({ path: '/tmp/moria-capture/moria-9-7-world-canvas-v5.png' });
           await page.getByRole('button', { name: /Debug/i }).click();
           await page.getByRole('button', { name: /Game Editor \(Items\/Spells\/Maps\/NPCs\/Monsters\/Books\)/i }).click();
           await page.getByRole('button', { name: /City Designer · Live/i }).click();
@@ -85,7 +77,6 @@ jobs:
           if (box) await page.mouse.click(box.x + box.width * 0.62, box.y + box.height * 0.62);
           await page.waitForTimeout(500);
           await page.screenshot({ path: '/tmp/moria-capture/moria-9-7-city-designer-v5.png', fullPage: false });
-
           const bodyText = await page.locator('body').innerText();
           fs.writeFileSync('/tmp/moria-capture/browser-console.txt', consoleLines.join('\n') + `\ncanvasCount=${canvasCount}\ncityDesigner=${bodyText.includes('CITY DESIGNER · DIRECT MANIPULATION')}\n`);
           await browser.close();
