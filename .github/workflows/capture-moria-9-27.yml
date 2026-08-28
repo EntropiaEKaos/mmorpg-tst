@@ -21,14 +21,17 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx --yes playwright@1.55.0 install --with-deps chromium
+      - name: Install browser harness
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
       - name: Serve client
         run: |
           npm run build
           nohup python3 -m http.server 4173 -d dist >/tmp/moria927-http.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173 >/dev/null && break; sleep 1; done
       - name: Capture real browser review
-        run: npx --yes -p playwright@1.55.0 node tools/capture927.mjs
+        run: node tools/capture927.mjs
       - name: Validate screenshots
         run: |
           test -s docs/screenshots/moria-9-27-login-revamp.png
