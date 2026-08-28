@@ -92,6 +92,7 @@ const mapCenters = {
 };
 
 const LEGACY_MAP_GATES = Object.freeze({ eldoria:1, frostpeak:1, shadowfen:1, emberhold:1, voidlands:25 });
+const CITY_STYLE_BY_REGION = Object.freeze({ eldoria:'royal',sunreach_coast:'harbor',ironwood:'ironwood',frostpeak:'alpine',shadowfen:'marsh',emberhold:'forge',crystal_deep:'crystal',stormwatch_isle:'storm',voidlands:'void',nightfall_citadel:'nightfall' });
 
 const maps = REGIONS.map(region => {
   const [townX,townY] = mapCenters[region.id];
@@ -99,14 +100,14 @@ const maps = REGIONS.map(region => {
     id:region.id, name:region.name, biome:region.biome,
     description:`${region.name} — ${region.theme} frontier for levels ${region.level}+ with its own hunts, boss, quests and economy hooks.`,
     levelRequired:LEGACY_MAP_GATES[region.id] ?? region.level, seed:region.seed, spawnX:townX, spawnY:townY, townX, townY, townRange:8,
-    access:'public', portals:PORTALS[region.id] || [],
+    cityStyle:CITY_STYLE_BY_REGION[region.id], access:'public', portals:PORTALS[region.id] || [],
   };
 });
 maps.push({
   id:'gm_sanctum', name:'Astra Sanctum — GM Island', biome:'plains',
   description:'Restricted operations island for Game Masters: test arena, content review docks, event staging and safe administrative coordination.',
   levelRequired:1, seed:424242, spawnX:40, spawnY:40, townX:40, townY:40, townRange:14,
-  access:'gm', portals:PORTALS.gm_sanctum,
+  cityStyle:'sanctum', access:'gm', portals:PORTALS.gm_sanctum,
 });
 
 const slots = ['weapon','armor','helmet','legs','boots','shield','ring','ring2','amulet','cloak','belt','gloves','relic'];

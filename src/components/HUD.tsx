@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import type { Player, Spell, Monster } from '../game/types';
 import { computeDerivedStats } from '../game/types';
 import { VOCATIONS } from '../game/classes';
-import { MAP_WIDTH, MAP_HEIGHT } from '../game/world';
+import { MAPS } from '../game/maps';
+import WorldMiniMap from './WorldMiniMap';
 import { T as Tooltip, SpellTooltip, StatTooltip } from './Tooltip';
 import { getCoins } from '../game/economy';
 import MovableHudWindow from './MovableHudWindow';
@@ -14,9 +15,10 @@ interface Props {
   onCastSpell: (idx: number) => void;
   monsters?: Monster[];
   official?: any;
+  mapId: string;
 }
 
-export default function HUD({ player, spells, onCastSpell, monsters, tick, official }: Props) {
+export default function HUD({ player, spells, onCastSpell, monsters, official, mapId }: Props) {
   const authoritative = Boolean(official);
   const derived = authoritative ? {
     totalAttack: player.attack,
@@ -42,12 +44,12 @@ export default function HUD({ player, spells, onCastSpell, monsters, tick, offic
     <>
       <MovableHudWindow
         id="minimap"
-        title={`Minimap · ${player.pos.x}, ${player.pos.y}`}
+        title={`Minimap · ${MAPS[mapId]?.name || mapId} · ${player.pos.x}, ${player.pos.y}`}
         className="w-[252px]"
         contentClassName="p-2"
         defaultStyle={{ left: 8, top: 8 }}
       >
-        <MiniMap player={player} monsters={monsters || []} tick={tick} />
+        <WorldMiniMap player={player} monsters={monsters || []} mapId={mapId} />
       </MovableHudWindow>
 
       <MovableHudWindow
@@ -212,37 +214,6 @@ function Stat({ label, icon, value, color }: { label: string; icon: string; valu
 
 function MiniValue({ label, value, color }: { label: string; value: string; color: string }) {
   return <div className="moria-hud-cell flex items-center justify-between gap-2 px-2 py-1.5 text-[8px]"><span className="font-bold tracking-wider text-slate-500">{label}</span><span className="font-mono font-black" style={{ color }}>{value}</span></div>;
-}
-
-function MiniMap({ player, monsters, tick: _tick }: { player: Player; monsters: Monster[]; tick: number }) {
-  const size = 232;
-  const scale = size / MAP_WIDTH;
-  const height = size * (MAP_HEIGHT / MAP_WIDTH);
-  const px = player.pos.x * scale;
-  const py = player.pos.y * scale;
-  const tiles: Array<{ x: number; y: number; color: string }> = [];
-
-  for (let y = 0; y < MAP_HEIGHT; y += 4) {
-    for (let x = 0; x < MAP_WIDTH; x += 4) {
-      let color = '#263847';
-      if (x === 0 || y === 0 || x >= MAP_WIDTH - 4 || y >= MAP_HEIGHT - 4) color = '#0c1119';
-      else if (x >= 35 && x <= 48 && y >= 35 && y <= 45) color = '#74654f';
-      else if (Math.hypot(x - 18, y - 18) < 8) color = '#21466c';
-      else if (Math.hypot(x - 65, y - 65) < 6) color = '#6f2833';
-      else if ((x < 25 && y < 30) || (x > 50 && y < 30)) color = '#243c33';
-      else if (x > 55 && y > 55) color = '#493f43';
-      else if (x < 25 && y > 55) color = '#22392f';
-      tiles.push({ x, y, color });
-    }
-  }
-
-  return (
-    <div className="relative overflow-hidden border border-[#806437] bg-[#070a10] shadow-[inset_0_0_18px_rgba(0,0,0,.85)]" style={{ width: `${size}px`, height: `${height}px` }}>
-      {tiles.map((t, i) => <div key={i} className="absolute" style={{ left: `${t.x * scale}px`, top: `${t.y * scale}px`, width: `${4 * scale}px`, height: `${4 * scale}px`, background: t.color }} />)}
-      {monsters.filter((m) => !m.dead).slice(0, 40).map((m) => <div key={m.id} className="absolute z-20" style={{ left: `${m.pos.x * scale - 1.5}px`, top: `${m.pos.y * scale - 1.5}px`, width: '3px', height: '3px', background: m.type === 'boss' ? '#ffd87b' : m.type === 'elite' ? '#b88aff' : '#ff5666' }} />)}
-      <div className="absolute z-30 bg-amber-200" style={{ left: `${px - 3}px`, top: `${py - 3}px`, width: '6px', height: '6px', boxShadow: '0 0 6px rgba(255,225,160,.95)' }} />
-    </div>
-  );
 }
 
 function clampPct(value: number, max: number) {

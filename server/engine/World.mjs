@@ -13,6 +13,23 @@ const MAP_WIDTH = 80;
 const MAP_HEIGHT = 80;
 const BIOMES = new Set(['plains', 'snow', 'swamp', 'desert', 'shadow']);
 const BIOME_SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
+const CITY_STYLES = new Set(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
+const CITY_STYLE_BY_MAP = Object.freeze({ eldoria:'royal',sunreach_coast:'harbor',ironwood:'ironwood',frostpeak:'alpine',shadowfen:'marsh',emberhold:'forge',crystal_deep:'crystal',stormwatch_isle:'storm',voidlands:'void',nightfall_citadel:'nightfall',gm_sanctum:'sanctum' });
+const CITY_PALETTES = Object.freeze({
+  royal:['#d8b45a','#7e2f34','#c9b68d','#9b8764'], harbor:['#55b9d8','#326177','#c2bda5','#8f8068'], ironwood:['#b48b4a','#4a3324','#8f8066','#755b42'],
+  alpine:['#9dd8ff','#334b67','#cbd4d8','#7f8c92'], marsh:['#8fb85a','#334229','#76755c','#5f6048'], forge:['#ff9b45','#7c3923','#aa7950','#744a38'],
+  crystal:['#74e1ff','#443d72','#8582a5','#56536e'], storm:['#8ddcff','#405169','#aab4bf','#657180'], void:['#a86dff','#21192d','#4c4259','#342c42'],
+  nightfall:['#e85b75','#201b24','#55515b','#39343d'], sanctum:['#f5de8f','#d8d9e7','#d5d0c2','#a79f8d'],
+});
+const CITY_LANDMARKS = Object.freeze({
+  royal:['Sunspire Keep','Grand Market','Temple of Dawn','Royal Depot','Oath Fountain'], harbor:['Tidewatch Hall','Salt Market','Sea Chapel','Harbor Depot','Mariner Gate'],
+  ironwood:['Marchwarden Hall','Timber Exchange','Grove Shrine','Ironwood Depot','East Palisade'], alpine:['Frostguard Keep','Anvil Hall','Ice Chapel','Expedition Depot','Northwatch Gate'],
+  marsh:['Mirewatch Hall','Lantern Market','Witch Shrine','Fen Depot','Ferryman Dock'], forge:['Ember Citadel','Great Foundry','Ash Bazaar','Flame Shrine','Cinder Arena'],
+  crystal:['Prism Hall','Shard Exchange','Resonance Shrine','Deep Depot','Crystal Spire'], storm:['Tempest Bastion','Gale Exchange','Storm Chapel','Fleet Depot','Thunderwatch'],
+  void:['Black Obelisk','Bone Market','Silent Sanctum','Rift Depot','Necropolis Gate'], nightfall:['Regent Keep','Blacksteel Market','Moonless Chapel','Citadel Depot','Dread Gate'],
+  sanctum:['Astral Command','Review Forum','Aether Shrine','GM Vault','Event Gate'],
+});
+const CITY_KINDS = ['keep','market','temple','depot','gate'];
 
 const MAP_CONFIG = Object.freeze({
   eldoria: {
@@ -88,6 +105,29 @@ function normalizePortal(raw) {
   };
 }
 
+function cityStyleFor(id, biome, requested) {
+  if (CITY_STYLES.has(String(requested || ''))) return String(requested);
+  if (CITY_STYLE_BY_MAP[id]) return CITY_STYLE_BY_MAP[id];
+  return biome === 'snow' ? 'alpine' : biome === 'swamp' ? 'marsh' : biome === 'desert' ? 'forge' : biome === 'shadow' ? 'void' : 'royal';
+}
+function cityColor(value, fallback) { return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback; }
+function cityCoord(value, fallback) { return integer(value, 1, MAP_WIDTH - 2, fallback); }
+function defaultCityIdentity(id, biome, townCenter, record = {}, base = null) {
+  const cityStyle = cityStyleFor(id, biome, record.cityStyle ?? base?.cityStyle);
+  const [accent, roof, wall, road] = CITY_PALETTES[cityStyle];
+  const offsets=[[-3,-8],[-9,-1],[5,-7],[6,1],[0,5]], sizes=[[6,5],[5,4],[4,5],[5,4],[3,3]], icons=['♜','⚖','✦','▣','◆'];
+  const sourceLandmarks = Array.isArray(record.landmarks) && record.landmarks.length ? record.landmarks : (Array.isArray(base?.landmarks) && base.landmarks.length ? base.landmarks : CITY_LANDMARKS[cityStyle].map((name,index)=>({id:`${id}_landmark_${index+1}`,name,kind:CITY_KINDS[index],icon:icons[index],x:townCenter.x+offsets[index][0],y:townCenter.y+offsets[index][1],w:sizes[index][0],h:sizes[index][1]})));
+  const landmarks = sourceLandmarks.filter(x=>x&&typeof x==='object').slice(0,12).map((x,index)=>({id:String(x.id||`${id}_landmark_${index+1}`).slice(0,60),name:String(x.name||`Landmark ${index+1}`).slice(0,60),kind:String(x.kind||'market').slice(0,20),icon:String(x.icon||'◆').slice(0,8),x:cityCoord(x.x,townCenter.x),y:cityCoord(x.y,townCenter.y),w:integer(x.w,1,10,4),h:integer(x.h,1,10,4)}));
+  const districtOffsets=[[-5,-2],[5,-2],[-4,5],[5,5]];
+  const sourceDistricts = Array.isArray(record.districts) && record.districts.length ? record.districts : (Array.isArray(base?.districts) && base.districts.length ? base.districts : districtOffsets.map((offset,index)=>({id:`${id}_district_${index+1}`,name:['Civic Ward','Market Ward','Temple Ward','Commons'][index],icon:['♜','⚖','✦','⌂'][index],x:townCenter.x+offset[0],y:townCenter.y+offset[1],radius:index===0?5:4,color:accent})));
+  const districts = sourceDistricts.filter(x=>x&&typeof x==='object').slice(0,8).map((x,index)=>({id:String(x.id||`${id}_district_${index+1}`).slice(0,60),name:String(x.name||`District ${index+1}`).slice(0,60),icon:String(x.icon||'◇').slice(0,8),x:cityCoord(x.x,townCenter.x),y:cityCoord(x.y,townCenter.y),radius:integer(x.radius,1,12,4),color:cityColor(x.color,accent)}));
+  const propKinds={royal:['banner','lamp','statue','barrel','cart'],harbor:['anchor','lamp','barrel','cart','sign'],ironwood:['sign','barrel','cart','pine','banner'],alpine:['brazier','pine','banner','sign','barrel'],marsh:['lamp','mushroom','sign','barrel','grave'],forge:['brazier','banner','barrel','cart','sign'],crystal:['crystal','rune','lamp','crystal','sign'],storm:['banner','lamp','anchor','brazier','sign'],void:['grave','rune','brazier','statue','grave'],nightfall:['banner','brazier','grave','statue','sign'],sanctum:['rune','crystal','banner','lamp','statue']};
+  const propOffsets=[[-8,5],[-5,4],[-2,4],[2,4],[5,4],[8,5],[-8,-5],[-5,-4],[-2,-4],[2,-4],[5,-4],[8,-5],[-10,0],[10,0],[0,7],[0,-10]];
+  const sourceProps=Array.isArray(record.props)&&record.props.length?record.props:(Array.isArray(base?.props)&&base.props.length?base.props:propOffsets.map((offset,index)=>({id:`${id}_prop_${index+1}`,kind:propKinds[cityStyle][index%propKinds[cityStyle].length],x:townCenter.x+offset[0],y:townCenter.y+offset[1],color:accent})));
+  const props=sourceProps.filter(x=>x&&typeof x==='object').slice(0,80).map((x,index)=>({id:String(x.id||`${id}_prop_${index+1}`).slice(0,60),kind:String(x.kind||'banner').slice(0,20),x:cityCoord(x.x,townCenter.x),y:cityCoord(x.y,townCenter.y),color:cityColor(x.color,accent),label:typeof x.label==='string'?x.label.slice(0,60):undefined}));
+  return {cityStyle,cityAccent:cityColor(record.cityAccent??base?.cityAccent,accent),roofColor:cityColor(record.roofColor??base?.roofColor,roof),wallColor:cityColor(record.wallColor??base?.wallColor,wall),roadColor:cityColor(record.roadColor??base?.roadColor,road),districts,landmarks,props};
+}
+
 function normalizeConfig(record, base = null) {
   const id = typeof record?.id === 'string' && record.id.trim() ? record.id.trim().slice(0, 50) : base?.id;
   if (!id) return null;
@@ -97,6 +137,11 @@ function normalizeConfig(record, base = null) {
   const baseTown = base?.townCenter || { x: 40, y: 40 };
   const rawPortals = Array.isArray(record?.portals) ? record.portals : (base?.portals || []);
   const portals = rawPortals.map(normalizePortal).filter(Boolean).slice(0, 20);
+  const townCenter = {
+    x: integer(record?.townX ?? record?.townCenter?.x, 1, MAP_WIDTH - 2, baseTown.x),
+    y: integer(record?.townY ?? record?.townCenter?.y, 1, MAP_HEIGHT - 2, baseTown.y),
+  };
+  const cityIdentity = defaultCityIdentity(id, biome, townCenter, record || {}, base);
   return {
     id,
     name: typeof record?.name === 'string' && record.name.trim() ? record.name.trim().slice(0, 80) : (base?.name || id.charAt(0).toUpperCase() + id.slice(1)),
@@ -107,10 +152,8 @@ function normalizeConfig(record, base = null) {
       x: integer(record?.spawnX ?? record?.spawnPoint?.x, 1, MAP_WIDTH - 2, baseSpawn.x),
       y: integer(record?.spawnY ?? record?.spawnPoint?.y, 1, MAP_HEIGHT - 2, baseSpawn.y),
     },
-    townCenter: {
-      x: integer(record?.townX ?? record?.townCenter?.x, 1, MAP_WIDTH - 2, baseTown.x),
-      y: integer(record?.townY ?? record?.townCenter?.y, 1, MAP_HEIGHT - 2, baseTown.y),
-    },
+    townCenter,
+    ...cityIdentity,
     townRange: integer(record?.townRange, 0, 20, base?.townRange ?? 8),
     levelRequired: integer(record?.levelRequired, 1, 100_000, base?.levelRequired ?? 1),
     access: record?.access === 'gm' ? 'gm' : (base?.access === 'gm' ? 'gm' : 'public'),
@@ -187,6 +230,8 @@ class WorldManager {
       levelRequired: config.levelRequired, seed: config.seed,
       spawnX: config.spawnPoint.x, spawnY: config.spawnPoint.y,
       townX: config.townCenter.x, townY: config.townCenter.y, townRange: config.townRange,
+      cityStyle: config.cityStyle, cityAccent: config.cityAccent, roofColor: config.roofColor, wallColor: config.wallColor, roadColor: config.roadColor,
+      districts: config.districts.map(entry => ({ ...entry })), landmarks: config.landmarks.map(entry => ({ ...entry })), props: config.props.map(entry => ({ ...entry })),
       portals: config.portals.map(portal => ({
         x: portal.pos.x, y: portal.pos.y, targetMap: portal.targetMap,
         targetX: portal.targetSpawn.x, targetY: portal.targetSpawn.y, label: portal.label || '',

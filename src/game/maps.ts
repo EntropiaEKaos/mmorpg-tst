@@ -1,4 +1,5 @@
 import type { Tile, Position } from './types';
+import { CITY_STYLES, withCityDefaults, type CityStyle, type CityDistrict, type CityLandmark, type CityProp } from './cityIdentity';
 
 export const MAP_WIDTH = 80;
 export const MAP_HEIGHT = 80;
@@ -25,14 +26,63 @@ export interface GameMap {
   townRange: number;
   levelRequired?: number;
   dangerLevel?: string;
+  cityStyle: CityStyle;
+  cityAccent: string;
+  roofColor: string;
+  wallColor: string;
+  roadColor: string;
+  districts: CityDistrict[];
+  landmarks: CityLandmark[];
+  props: CityProp[];
 }
 
 const BIOME_SEEDS: Record<BiomeType, number> = { plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 };
 const VALID_BIOMES = new Set<BiomeType>(['plains', 'snow', 'swamp', 'desert', 'shadow']);
+const VALID_CITY_STYLES = new Set<CityStyle>(CITY_STYLES);
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+function cityCoord(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(1, Math.min(MAP_WIDTH - 2, Math.round(n))) : fallback;
+}
+function cityColor(value: unknown, fallback: string): string { return typeof value === 'string' && HEX_COLOR.test(value) ? value : fallback; }
+function normalizeDistricts(raw: unknown): CityDistrict[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((entry: any) => entry && typeof entry === 'object').slice(0, 8).map((entry: any, index) => ({
+    id: String(entry.id || `district_${index + 1}`).slice(0, 60), name: String(entry.name || `District ${index + 1}`).slice(0, 60), icon: String(entry.icon || '◇').slice(0, 8),
+    x: cityCoord(entry.x, 40), y: cityCoord(entry.y, 40), radius: Math.max(1, Math.min(12, Math.round(Number(entry.radius) || 4))), color: cityColor(entry.color, '#d8b45a'),
+  }));
+}
+function normalizeLandmarks(raw: unknown): CityLandmark[] {
+  const kinds = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower']);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((entry: any) => entry && typeof entry === 'object').slice(0, 12).map((entry: any, index) => ({
+    id: String(entry.id || `landmark_${index + 1}`).slice(0, 60), name: String(entry.name || `Landmark ${index + 1}`).slice(0, 60),
+    kind: (kinds.has(String(entry.kind)) ? String(entry.kind) : 'market') as CityLandmark['kind'], icon: String(entry.icon || '◆').slice(0, 8),
+    x: cityCoord(entry.x, 40), y: cityCoord(entry.y, 40), w: Math.max(1, Math.min(10, Math.round(Number(entry.w) || 4))), h: Math.max(1, Math.min(10, Math.round(Number(entry.h) || 4))),
+  }));
+}
+function normalizeProps(raw: unknown): CityProp[] {
+  const kinds = new Set(['banner','lamp','statue','brazier','crystal','grave','tent','sign','barrel','cart','pine','mushroom','anchor','rune']);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((entry: any) => entry && typeof entry === 'object' && kinds.has(String(entry.kind))).slice(0, 80).map((entry: any, index) => ({
+    id: String(entry.id || `prop_${index + 1}`).slice(0, 60), kind: String(entry.kind) as CityProp['kind'], x: cityCoord(entry.x, 40), y: cityCoord(entry.y, 40),
+    color: typeof entry.color === 'string' && HEX_COLOR.test(entry.color) ? entry.color : undefined, label: typeof entry.label === 'string' ? entry.label.slice(0, 60) : undefined,
+  }));
+}
+function hydrateMapIdentity(map: GameMap): GameMap {
+  const style = VALID_CITY_STYLES.has(map.cityStyle) ? map.cityStyle : undefined;
+  const hydrated = withCityDefaults({
+    id: map.id, name: map.name, style, biome: map.biome, townCenter: map.townCenter, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor,
+    districts: normalizeDistricts(map.districts), landmarks: normalizeLandmarks(map.landmarks), props: normalizeProps(map.props),
+  });
+  return { ...map, cityStyle: hydrated.style, cityAccent: hydrated.cityAccent, roofColor: hydrated.roofColor, wallColor: hydrated.wallColor, roadColor: hydrated.roadColor, districts: hydrated.districts, landmarks: hydrated.landmarks, props: hydrated.props };
+}
 
 const BASE_MAPS: Record<string, GameMap> = {
   eldoria: {
     id: 'eldoria', name: 'Eldoria', description: 'The capital city. Lush plains and forests.', biome: 'plains', seed: 42,
+    cityStyle: 'royal', cityAccent: '#d8b45a', roofColor: '#7e2f34', wallColor: '#c9b68d', roadColor: '#9b8764', districts: [], landmarks: [], props: [],
     spawnPoint: { x: 40, y: 40 }, townCenter: { x: 40, y: 40 }, townRange: 10,
     portals: [
       { pos: { x: 10, y: 40 }, targetMap: 'frostpeak', targetSpawn: { x: 70, y: 40 }, label: '❄ To Frostpeak' },
@@ -41,6 +91,7 @@ const BASE_MAPS: Record<string, GameMap> = {
   },
   frostpeak: {
     id: 'frostpeak', name: 'Frostpeak', description: 'Frozen mountain city. Frigid and deadly.', biome: 'snow', seed: 1337,
+    cityStyle: 'alpine', cityAccent: '#9dd8ff', roofColor: '#334b67', wallColor: '#cbd4d8', roadColor: '#7f8c92', districts: [], landmarks: [], props: [],
     spawnPoint: { x: 70, y: 40 }, townCenter: { x: 65, y: 40 }, townRange: 8,
     portals: [
       { pos: { x: 75, y: 40 }, targetMap: 'eldoria', targetSpawn: { x: 12, y: 40 }, label: '🌳 To Eldoria' },
@@ -49,6 +100,7 @@ const BASE_MAPS: Record<string, GameMap> = {
   },
   shadowfen: {
     id: 'shadowfen', name: 'Shadowfen', description: 'Cursed swampland. Rotten and foggy.', biome: 'swamp', seed: 7,
+    cityStyle: 'marsh', cityAccent: '#8fb85a', roofColor: '#334229', wallColor: '#76755c', roadColor: '#5f6048', districts: [], landmarks: [], props: [],
     spawnPoint: { x: 40, y: 70 }, townCenter: { x: 40, y: 65 }, townRange: 8,
     portals: [
       { pos: { x: 40, y: 75 }, targetMap: 'eldoria', targetSpawn: { x: 70, y: 12 }, label: '🌳 To Eldoria' },
@@ -57,20 +109,24 @@ const BASE_MAPS: Record<string, GameMap> = {
   },
   emberhold: {
     id: 'emberhold', name: 'Emberhold', description: 'Volcanic desert. Scorched earth and lava.', biome: 'desert', seed: 999,
+    cityStyle: 'forge', cityAccent: '#ff9b45', roofColor: '#7c3923', wallColor: '#aa7950', roadColor: '#744a38', districts: [], landmarks: [], props: [],
     spawnPoint: { x: 70, y: 10 }, townCenter: { x: 65, y: 15 }, townRange: 8,
     portals: [{ pos: { x: 75, y: 10 }, targetMap: 'frostpeak', targetSpawn: { x: 12, y: 70 }, label: '❄ To Frostpeak' }],
   },
   voidlands: {
     id: 'voidlands', name: 'Voidlands', description: 'The end of the world. Pure darkness and ancient evil.', biome: 'shadow', seed: 666,
+    cityStyle: 'void', cityAccent: '#a86dff', roofColor: '#21192d', wallColor: '#4c4259', roadColor: '#342c42', districts: [], landmarks: [], props: [],
     spawnPoint: { x: 70, y: 70 }, townCenter: { x: 40, y: 40 }, townRange: 6, levelRequired: 25, dangerLevel: 'Nightmare',
     portals: [{ pos: { x: 75, y: 75 }, targetMap: 'shadowfen', targetSpawn: { x: 12, y: 12 }, label: '🍄 To Shadowfen' }],
   },
 };
 
 function cloneMap(map: GameMap): GameMap {
+  const hydrated = hydrateMapIdentity(map);
   return {
-    ...map, spawnPoint: { ...map.spawnPoint }, townCenter: { ...map.townCenter },
-    portals: map.portals.map(portal => ({ ...portal, pos: { ...portal.pos }, targetSpawn: { ...portal.targetSpawn } })),
+    ...hydrated, spawnPoint: { ...hydrated.spawnPoint }, townCenter: { ...hydrated.townCenter },
+    portals: hydrated.portals.map(portal => ({ ...portal, pos: { ...portal.pos }, targetSpawn: { ...portal.targetSpawn } })),
+    districts: hydrated.districts.map(entry => ({ ...entry })), landmarks: hydrated.landmarks.map(entry => ({ ...entry })), props: hydrated.props.map(entry => ({ ...entry })),
   };
 }
 
@@ -116,7 +172,7 @@ export function syncServerMaps(rawMaps: unknown): void {
     const portals = Array.isArray(raw.portals)
       ? raw.portals.map(normalizePortal).filter((portal: Portal | null): portal is Portal => Boolean(portal)).slice(0, 20)
       : (base?.portals.map(portal => ({ ...portal, pos: { ...portal.pos }, targetSpawn: { ...portal.targetSpawn } })) || []);
-    next[id] = {
+    next[id] = hydrateMapIdentity({
       id,
       name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : (base?.name || id),
       description: typeof raw.description === 'string' ? raw.description.trim().slice(0, 300) : (base?.description || ''),
@@ -133,14 +189,29 @@ export function syncServerMaps(rawMaps: unknown): void {
       townRange: integer(raw.townRange, 0, 20, base?.townRange ?? 8),
       levelRequired: integer(raw.levelRequired, 1, 100_000, base?.levelRequired ?? 1),
       dangerLevel: typeof raw.dangerLevel === 'string' ? raw.dangerLevel.slice(0, 40) : base?.dangerLevel,
+      cityStyle: (typeof raw.cityStyle === 'string' ? raw.cityStyle : base?.cityStyle) as CityStyle,
+      cityAccent: cityColor(raw.cityAccent, base?.cityAccent || '#d8b45a'), roofColor: cityColor(raw.roofColor, base?.roofColor || '#7e2f34'),
+      wallColor: cityColor(raw.wallColor, base?.wallColor || '#c9b68d'), roadColor: cityColor(raw.roadColor, base?.roadColor || '#9b8764'),
+      districts: Array.isArray(raw.districts) ? normalizeDistricts(raw.districts) : (base?.districts || []),
+      landmarks: Array.isArray(raw.landmarks) ? normalizeLandmarks(raw.landmarks) : (base?.landmarks || []),
+      props: Array.isArray(raw.props) ? normalizeProps(raw.props) : (base?.props || []),
       portals,
-    };
+    });
   }
 
   const known = new Set(Object.keys(next));
   for (const map of Object.values(next)) map.portals = map.portals.filter(portal => known.has(portal.targetMap));
   for (const key of Object.keys(MAPS)) delete MAPS[key];
   Object.assign(MAPS, next);
+}
+
+// Offline City Designer drafts are presentation/content overrides only. Online
+// server content always supersedes them when authoritative definitions arrive.
+if (typeof localStorage !== 'undefined') {
+  try {
+    const stored = JSON.parse(localStorage.getItem('moria_city_designer_maps') || 'null');
+    if (Array.isArray(stored) && stored.length) syncServerMaps(stored);
+  } catch { /* ignore malformed local drafts */ }
 }
 
 function seededRandom(seed: number) {

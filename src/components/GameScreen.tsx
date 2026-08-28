@@ -51,7 +51,7 @@ import { serverSync } from '../game/ServerSync';
 import { loadLocal, saveLocal, applySave, persistSubSystems } from '../game/SaveManager';
 import { getCustomNPCs, getCustomMonsters, getMail, sendSystemMail, getUILayout, saveUILayout, DEFAULT_UI_PANEL_ORDER, type UILayout, type CustomNPC, type CustomMonster } from '../game/content';
 import { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeServerSpells, serverNpcToClient, serverQuestToClient, spellContentSlug } from '../game/serverContentAdapters';
-import { getTownBuildings } from '../game/world';
+import { getCityBuildings, drawCityDecor, drawCityTileOverlay } from '../game/cityPresentation';
 import { drawBuilding, type Building } from '../game/render';
 import Weather from './Weather';
 import RegionBanner from './RegionBanner';
@@ -158,7 +158,7 @@ export default function GameScreen({ account, onLogout }: Props) {
   const [activeDialog, setActiveDialog] = useState<NPC | null>(null);
 
   // Buildings + custom NPCs/monsters for current map
-  const buildingsRef = useRef<Building[]>(getTownBuildings('plains'));
+  const buildingsRef = useRef<Building[]>(getCityBuildings(MAPS.eldoria));
   const customNpcsRef = useRef<CustomNPC[]>(getCustomNPCs());
   const customMonstersRef = useRef<CustomMonster[]>(getCustomMonsters());
   // Force refresh of custom content (used after admin edits)
@@ -524,7 +524,7 @@ export default function GameScreen({ account, onLogout }: Props) {
             syncServerMaps(content.maps);
             if (MAPS[currentMapIdRef.current]) {
               worldRef.current = generateMap(currentMapIdRef.current);
-              buildingsRef.current = getTownBuildings(MAPS[currentMapIdRef.current].biome);
+              buildingsRef.current = getCityBuildings(MAPS[currentMapIdRef.current]);
             }
             const quests = Array.isArray(content.quests)
               ? content.quests.map(serverQuestToClient).filter((q: Quest | null): q is Quest => Boolean(q))
@@ -1073,7 +1073,7 @@ export default function GameScreen({ account, onLogout }: Props) {
     currentMapIdRef.current = targetMapId;
     setCurrentMapId(targetMapId);
     worldRef.current = generateMap(targetMapId);
-    buildingsRef.current = getTownBuildings(mapData.biome);
+    buildingsRef.current = getCityBuildings(mapData);
     // Reset monsters and NPCs for the new map, including local admin-created content.
     customNpcsRef.current = getCustomNPCs();
     customMonstersRef.current = getCustomMonsters();
@@ -1692,7 +1692,7 @@ export default function GameScreen({ account, onLogout }: Props) {
             currentMapIdRef.current = sp.mapId;
             setCurrentMapId(sp.mapId);
             worldRef.current = generateMap(sp.mapId);
-            buildingsRef.current = getTownBuildings(MAPS[sp.mapId].biome);
+            buildingsRef.current = getCityBuildings(MAPS[sp.mapId]);
             if (serverNpcCatalogRef.current.length > 0) {
               npcsRef.current = serverNpcCatalogRef.current
                 .filter((entry) => entry.mapId === sp.mapId)
@@ -2154,6 +2154,7 @@ export default function GameScreen({ account, onLogout }: Props) {
         const tx = cam.x + x, ty = cam.y + y;
         if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) continue;
         drawTile(ctx, world[ty][tx], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE);
+        drawCityTileOverlay(ctx, MAPS[currentMapIdRef.current] || MAPS.eldoria, tx, ty, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, world[ty][tx].type);
       }
     }
 
@@ -2198,6 +2199,8 @@ export default function GameScreen({ account, onLogout }: Props) {
       if (sx > canvas.width || sy > canvas.height || sx + b.w * TILE_SIZE < 0 || sy + b.h * TILE_SIZE < 0) continue;
       drawBuilding(ctx, sx, sy, b, TILE_SIZE, now);
     }
+
+    drawCityDecor(ctx, MAPS[currentMapIdRef.current] || MAPS.eldoria, cam, TILE_SIZE, now);
 
     // Houses and decoration are presentation-only projections of global server state.
     if (serverSync.isActive()) drawHousing(ctx, p.housing, cam, TILE_SIZE, now);
@@ -2982,6 +2985,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               player={player}
               setPlayer={(p) => setPlayer(p)}
               onClose={() => { setShowEditor(false); refreshCustomContent(); }}
+              onMapsChanged={() => { const map = MAPS[currentMapIdRef.current] || MAPS.eldoria; worldRef.current = generateMap(map.id); buildingsRef.current = getCityBuildings(map); setCurrentMapId(map.id); }}
             />
           )}
           {allowLocalAdmin && showAdmin && (
@@ -3001,13 +3005,13 @@ export default function GameScreen({ account, onLogout }: Props) {
               damageMultiplier={damageMultiplier} setDamageMultiplier={setDamageMultiplier}
               setDayTime={setDayTimeOverride}
               weather={weather} setWeather={setWeather}
-              onOpenEditor={() => { setShowEditor(true); refreshCustomContent(); }}
+              onOpenEditor={() => { setShowAdmin(false); setShowEditor(true); refreshCustomContent(); }}
               onOpenQuestCreator={() => setShowQuestCreator(true)}
               onSetSkull={(skull: string) => { adminSetSkull(player.name, skull as any); addToast('info', 'Skull Set', `Your skull is now: ${skull}`, SKULLS[skull as keyof typeof SKULLS].icon, SKULLS[skull as keyof typeof SKULLS].color); }}
               onOpenWorldEventCreator={() => setShowWorldEventCreator(true)}
             />
           )}
-          <HUD player={player} tick={hudTick} spells={spells} onCastSpell={castSpell} monsters={monstersRef.current} official={serverSync.isActive() ? officialState : null} />
+          <HUD player={player} tick={hudTick} spells={spells} onCastSpell={castSpell} monsters={monstersRef.current} official={serverSync.isActive() ? officialState : null} mapId={currentMapId} />
       </div>
 
     </div>

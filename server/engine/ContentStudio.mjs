@@ -20,6 +20,9 @@ const BUFF_TYPES = Object.freeze(['shield', 'haste', 'invisible', 'frenzy']);
 const SPELL_TARGET_MODES = Object.freeze(['smart', 'self', 'target', 'area']);
 const ALLY_EFFECTS = Object.freeze(['none', 'heal', 'buff']);
 const ENEMY_EFFECTS = Object.freeze(['none', 'damage', 'drain']);
+const CITY_STYLES = Object.freeze(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
+const CITY_LANDMARK_KINDS = new Set(['keep','market','temple','depot','gate','forge','dock','arena','obelisk','library','graveyard','lodge','tower']);
+const CITY_PROP_KINDS = new Set(['banner','lamp','statue','brazier','crystal','grave','tent','sign','barrel','cart','pine','mushroom','anchor','rune']);
 
 const field = (id, label = id, kind = 'text', extra = {}) => Object.freeze({ id, label, kind, ...extra });
 
@@ -69,6 +72,8 @@ export const CONTENT_STUDIO_SCHEMAS = Object.freeze({
     field('id', 'ID'), field('name', 'Name'), field('biome', 'Biome', 'select', { optionKey: 'biomes' }), field('description', 'Description', 'textarea'),
     field('levelRequired', 'Required level', 'number'), field('seed', 'Seed', 'number'), field('spawnX', 'Spawn X', 'number'), field('spawnY', 'Spawn Y', 'number'),
     field('townX', 'Town X', 'number'), field('townY', 'Town Y', 'number'), field('townRange', 'Town range', 'number'),
+    field('cityStyle', 'City style', 'select', { optionKey: 'cityStyles' }), field('cityAccent', 'City accent'), field('roofColor', 'Roof color'), field('wallColor', 'Wall color'), field('roadColor', 'Road color'),
+    field('districts', 'Districts', 'json'), field('landmarks', 'Landmarks', 'json'), field('props', 'Street props', 'json'),
     field('access', 'Access', 'select', { optionKey: 'mapAccess' }), field('portals', 'Portals', 'json'),
   ]),
   events: Object.freeze([
@@ -242,6 +247,20 @@ export function validateStudioRecord(type, record) {
     error = numberIn(record, 'seed', 1, 2_147_483_646, { required: true, integer: true }); if (error) return error;
     error = numberIn(record, 'townRange', 0, 20, { required: true, integer: true }); if (error) return error;
     if (record.portals !== undefined && !Array.isArray(record.portals)) return 'portals must be a JSON array';
+    if (record.cityStyle !== undefined && record.cityStyle !== '' && !CITY_STYLES.includes(String(record.cityStyle))) return 'cityStyle is not supported';
+    for (const key of ['cityAccent','roofColor','wallColor','roadColor']) if (record[key] !== undefined && record[key] !== '' && !COLOR_RE.test(String(record[key]))) return `${key} must be a CSS hex color`;
+    if (record.districts !== undefined) {
+      if (!Array.isArray(record.districts) || record.districts.length > 8) return 'districts must be a JSON array with at most 8 entries';
+      for (const entry of record.districts) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'district entries must be objects'; for (const key of ['x','y']) { const e=playableCoord(entry,key); if(e)return `district ${e}`; } const e=numberIn(entry,'radius',1,12,{required:true,integer:true}); if(e)return `district ${e}`; if(entry.color && !COLOR_RE.test(String(entry.color))) return 'district color must be a CSS hex color'; }
+    }
+    if (record.landmarks !== undefined) {
+      if (!Array.isArray(record.landmarks) || record.landmarks.length > 12) return 'landmarks must be a JSON array with at most 12 entries';
+      for (const entry of record.landmarks) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'landmark entries must be objects'; if (!CITY_LANDMARK_KINDS.has(String(entry.kind||''))) return 'landmark kind is not supported'; for (const key of ['x','y']) { const e=playableCoord(entry,key); if(e)return `landmark ${e}`; } for (const key of ['w','h']) { const e=numberIn(entry,key,1,10,{required:true,integer:true}); if(e)return `landmark ${e}`; } }
+    }
+    if (record.props !== undefined) {
+      if (!Array.isArray(record.props) || record.props.length > 80) return 'props must be a JSON array with at most 80 entries';
+      for (const entry of record.props) { if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'prop entries must be objects'; if (!CITY_PROP_KINDS.has(String(entry.kind||''))) return 'prop kind is not supported'; for (const key of ['x','y']) { const e=playableCoord(entry,key); if(e)return `prop ${e}`; } if(entry.color && !COLOR_RE.test(String(entry.color))) return 'prop color must be a CSS hex color'; }
+    }
     if (!MAP_ACCESS.includes(String(record.access || 'public'))) return 'map access is not supported';
     return null;
   }
@@ -299,7 +318,7 @@ export function getContentStudioSchema(type, contentDB) {
   const options = {
     rarities: [...RARITIES], slots: [...ITEM_SLOTS], monsterTypes: [...MONSTER_TYPES], npcRoles: [...NPC_ROLES],
     spellTypes: [...SPELL_TYPES], buffTypes: [...BUFF_TYPES], spellTargetModes: [...SPELL_TARGET_MODES], allyEffects: [...ALLY_EFFECTS], enemyEffects: [...ENEMY_EFFECTS], vocations: Object.keys(VOCATIONS).sort(),
-    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], eventTypes: [...EVENT_TYPES],
+    biomes: [...BIOMES].sort(), maps: mapOptions(contentDB), mapAccess: [...MAP_ACCESS], cityStyles: [...CITY_STYLES], eventTypes: [...EVENT_TYPES],
     npcs: contentDB.get('npcs').map(entry => entry.id).filter(Boolean).sort(),
     quests: contentDB.get('quests').map(entry => entry.id).filter(Boolean).sort(),
     items: contentDB.get('items').map(entry => entry.id).filter(Boolean).sort(),
@@ -311,7 +330,7 @@ export function getContentStudioSchema(type, contentDB) {
     npcs: 'NPCs are synchronized to online clients and gate linked quests/services by server proximity.',
     spells: 'Published spells merge into vocation spell slots and execute server-side.',
     quests: 'Quest NPCs, prerequisites and kill targets are checked before publish.',
-    maps: 'Map edits rebuild deterministic terrain and live portal travel. Built-in maps cannot be deleted.',
+    maps: 'Map edits rebuild deterministic terrain and live portal travel. City style, palette, districts, landmarks and street props drive the 9.6 runtime presentation and minimap. Built-in maps cannot be deleted.',
     events: 'World events rotate and reward participants from authoritative server state.',
     shops: 'Content shops extend the authoritative alpha merchant catalog and can be edited without a client rebuild.',
     lootTables: 'Loot tables are rolled server-side by monsters that reference them.',
