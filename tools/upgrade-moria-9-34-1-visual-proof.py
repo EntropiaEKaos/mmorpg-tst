@@ -74,7 +74,7 @@ new_action = """  if (panel === 'actionbar') {
     const triggerClass = await tooltipTrigger.getAttribute('class');
     const triggerQa = await tooltipTrigger.getAttribute('data-tooltip-trigger');
     if (!triggerClass?.includes('inline-flex') || triggerQa !== 'true') throw new Error(`Mor'ia 9.34 tooltip trigger wrapper not found: ${triggerClass} / ${triggerQa}`);
-    await tooltipTrigger.hover();
+    await spellSlot.focus();
     await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForTimeout(180);
     const tooltipText = await page.locator('#__global_tooltip_root__').innerText();
@@ -109,7 +109,7 @@ Durante o endurecimento do gate, o hover automatizado também expôs fragilidade
 - o Tooltip real usa `pointerenter/pointerleave` e também `focus/blur`, evitando depender exclusivamente de eventos de mouse e melhorando suporte a teclado/pen;
 - agendamentos de tooltip anteriores são cancelados antes de um novo timer, evitando timers concorrentes;
 - wrappers reais recebem `data-tooltip-trigger=\"true\"` para QA estrutural sem alterar regras de jogo;
-- o QA ancora o hover no pai exato do primeiro slot de magia, confirma o wrapper real, aguarda o portal visível e exige: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
+- a prova visual foca o botão real do primeiro slot de magia, exercita o mesmo Tooltip de produção pela rota de teclado, aguarda o portal visível e exige: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
 - adiciona `You have` à lista de vazamentos proibidos do print de Talentos.
 
 ## Escopo
