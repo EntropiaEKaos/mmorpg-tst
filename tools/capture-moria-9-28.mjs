@@ -69,7 +69,7 @@ await page.waitForTimeout(350);
 if (await previews.count() !== 14) throw new Error(`expected 14 vocation previews, got ${await previews.count()}`);
 await captureText('characters-top');
 await assertPortuguese('character creation', [
-  'CONECTADO COMO REVISÃO928','CRIE SEU PERSONAGEM','NOME DO PERSONAGEM','VOCAÇÃO',
+  'CONECTADO COMO REVISAO928','CRIE SEU PERSONAGEM','NOME DO PERSONAGEM','VOCAÇÃO',
   'CAVALEIRO','PALADINO','FEITICEIRO','DRUIDA','BRUXO','LADINO','SACERDOTE',
   'CAVALEIRO DA MORTE','MONGE','PATRULHEIRO','NECROMANTE','XAMÃ','TEMPLÁRIO'
 ]);
@@ -88,7 +88,6 @@ await screenshot('moria-9-28-character-creation-b.png');
 // Reset the temporary auth session and enter deterministic offline gameplay.
 await page.evaluate(() => {
   localStorage.removeItem('moria_session_token');
-  // Ensure the visual review starts from a clean event/chat state.
   localStorage.removeItem('moria_world_events');
 });
 await page.reload({ waitUntil:'networkidle' });
