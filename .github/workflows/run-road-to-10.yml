@@ -22,8 +22,8 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             server/package-lock.json
-      - name: Apply 9.26.1 pre-10 closure
-        run: python tools/close-road-to-10-pre10.py
+      - name: Apply explicit 9.26.1 verification patch
+        run: python tools/verify-pre10-closure.py
       - name: Install client
         run: npm ci
       - name: Audit client
@@ -48,11 +48,11 @@ jobs:
         run: npm run check --prefix server
       - name: Test server
         run: npm test --prefix server
-      - name: Commit validated integration
+      - name: Commit verified 9.26.1 baseline
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add server/engine/RoadToTenDomain.mjs server/engine/OfficialSystems.mjs server/engine/OfficialDungeonDomain.mjs server/engine/OfficialActionRegistry.mjs server/engine/OfficialStateSchema.mjs server/engine/GameState.mjs server/test/official-action-registry.test.mjs src/components/RoadToTenPlayerPanel926.tsx package.json package-lock.json server/package.json server/package-lock.json
-          if git diff --cached --quiet; then echo 'No 9.26.1 changes to commit'; exit 0; fi
-          git commit -m 'feat(9.26.1): close pre-10 runtime loops'
+          git add server/engine/RoadToTenDomain.mjs server/test/road-to-ten-9-17-26.test.mjs server/test/road-to-ten-9-26-1-pre10.test.mjs
+          if git diff --cached --quiet; then echo 'No verification changes to commit'; exit 0; fi
+          git commit -m 'test(9.26.1): verify pre-10 runtime closure'
           git push origin HEAD:moria-9.17-9.26-road-to-10
