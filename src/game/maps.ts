@@ -8,7 +8,7 @@ export const MAX_MAP_DIMENSION = 192;
 export const TILE_SIZE = 32;
 
 export type SettlementClass = 'wilderness' | 'town' | 'city' | 'capital';
-export type UrbanPlan = 'royal-grid' | 'harbor-crescent' | 'forest-rings';
+export type UrbanPlan = 'royal-grid' | 'harbor-crescent' | 'forest-rings' | 'terraced-bastion';
 export interface UrbanBounds { x: number; y: number; width: number; height: number; }
 
 export type BiomeType = 'plains' | 'snow' | 'swamp' | 'desert' | 'shadow';
@@ -86,7 +86,7 @@ function settlementClassOf(value: unknown, mapId = ''): SettlementClass {
   return (['wilderness','town','city','capital'] as const).includes(requested as SettlementClass) ? requested as SettlementClass : 'city';
 }
 function mapDimension(value: unknown, fallback = MAP_WIDTH): number { return integer(value, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, fallback); }
-function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const fallback: UrbanPlan = mapId === 'sunreach_coast' ? 'harbor-crescent' : mapId === 'ironwood' ? 'forest-rings' : 'royal-grid'; const requested = String(value || fallback); return requested === 'harbor-crescent' || requested === 'forest-rings' ? requested : 'royal-grid'; }
+function urbanPlanOf(value: unknown, mapId = ''): UrbanPlan { const fallback: UrbanPlan = mapId === 'sunreach_coast' ? 'harbor-crescent' : mapId === 'ironwood' ? 'forest-rings' : mapId === 'frostpeak' ? 'terraced-bastion' : 'royal-grid'; const requested = String(value || fallback); return requested === 'harbor-crescent' || requested === 'forest-rings' || requested === 'terraced-bastion' ? requested : 'royal-grid'; }
 function normalizeUrbanBounds(raw: unknown, width: number, height: number, townCenter: Position, settlementClass: SettlementClass): UrbanBounds {
   const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Partial<UrbanBounds> : {};
   const radius = settlementClass === 'capital' ? Math.min(36, Math.floor(Math.min(width, height) / 3)) : Math.min(14, Math.floor(Math.min(width, height) / 4));
@@ -178,7 +178,7 @@ const BASE_MAPS: Record<string, GameMap> = {
     id: 'emberhold', name: 'Emberhold', description: 'Volcanic desert. Scorched earth and lava.', biome: 'desert', seed: 999,
     cityStyle: 'forge', cityAccent: '#ff9b45', roofColor: '#7c3923', wallColor: '#aa7950', roadColor: '#744a38', districts: [], landmarks: [], props: [],
     spawnPoint: { x: 70, y: 10 }, townCenter: { x: 65, y: 15 }, townRange: 8,
-    portals: [{ pos: { x: 75, y: 10 }, targetMap: 'frostpeak', targetSpawn: { x: 12, y: 70 }, label: '❄ To Frostpeak' }],
+    portals: [{ pos: { x: 75, y: 10 }, targetMap: 'frostpeak', targetSpawn: { x: 130, y: 112 }, label: '❄ To Frostpeak' }],
   },
   voidlands: {
     id: 'voidlands', name: 'Voidlands', description: 'The end of the world. Pure darkness and ancient evil.', biome: 'shadow', seed: 666,
@@ -396,10 +396,33 @@ function forestCapitalTile(map: GameMap, x: number, y: number): Tile | null {
   return { type:'grass', walkable:true, blocksSight:false };
 }
 
+
+function terracedBastionTile(map: GameMap, x: number, y: number): Tile | null {
+  const bounds=map.urbanBounds; if(!bounds)return null;
+  const minX=bounds.x,minY=bounds.y,maxX=minX+bounds.width-1,maxY=minY+bounds.height-1;
+  if(x<minX||x>maxX||y<minY||y>maxY)return null;
+  const cx=map.townCenter.x;
+  const portalGate=map.portals.some(portal=>((portal.pos.x===minX||portal.pos.x===maxX)&&x===portal.pos.x&&Math.abs(y-portal.pos.y)<=2)||((portal.pos.y===minY||portal.pos.y===maxY)&&y===portal.pos.y&&Math.abs(x-portal.pos.x)<=2));
+  const verticalGate=(y===minY||y===maxY)&&Math.abs(x-cx)<=2;
+  if(portalGate||verticalGate)return {type:'path',walkable:true,blocksSight:false};
+  if(x===minX||x===maxX||y===minY||y===maxY)return {type:'wall',walkable:false,blocksSight:true};
+  const retaining=[42,66,90,114].includes(y);
+  const ramp=Math.abs(x-cx)<=2||Math.abs(x-(cx-30))<=1||Math.abs(x-(cx+30))<=1;
+  if(retaining&&!ramp)return {type:'wall',walkable:false,blocksSight:true};
+  const vertical=ramp;
+  const terraceRoad=[34,58,82,106,130].some(line=>Math.abs(y-line)<=1);
+  const highCourt=x>=cx-16&&x<=cx+16&&y>=26&&y<=38;
+  const forgeCourt=x>=42&&x<=62&&y>=72&&y<=86;
+  const expeditionCourt=x>=98&&x<=122&&y>=72&&y<=86;
+  const lowerCourt=x>=cx-14&&x<=cx+14&&y>=96&&y<=108;
+  return {type:(vertical||terraceRoad||highCourt||forgeCourt||expeditionCourt||lowerCourt)?'path':'snow',walkable:true,blocksSight:false};
+}
+
 function capitalUrbanTile(map: GameMap, x: number, y: number): Tile | null {
   if (map.settlementClass !== 'capital' || !map.urbanBounds) return null;
   if (map.urbanPlan === 'harbor-crescent') return harborCapitalTile(map, x, y);
   if (map.urbanPlan === 'forest-rings') return forestCapitalTile(map, x, y);
+  if (map.urbanPlan === 'terraced-bastion') return terracedBastionTile(map, x, y);
   const minX = map.urbanBounds.x, minY = map.urbanBounds.y;
   const maxX = minX + map.urbanBounds.width - 1, maxY = minY + map.urbanBounds.height - 1;
   if (x < minX || x > maxX || y < minY || y > maxY) return null;
@@ -443,6 +466,7 @@ export function generateMap(mapId: string): Tile[][] {
         else {
         const r = rand();
         if (biome === 'snow') {
+          type = 'snow';
           if (r < 0.15) { type = 'tree'; walkable = false; blocksSight = true; }
           else if (r < 0.20) { type = 'rock'; walkable = false; }
           else if (r < 0.22) { type = 'stone'; walkable = false; }

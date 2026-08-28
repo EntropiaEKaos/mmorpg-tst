@@ -33,12 +33,12 @@ function legacyData() {
   };
 }
 
-test('9.36A Grand Eldoria is a 160x160 authored capital while other built-ins remain legacy-sized', () => {
+test('9.36A Grand Eldoria stays a 160x160 authored capital while unpromoted built-ins remain legacy-sized', () => {
   const world = new WorldManager();
   const eldoria = world.getMap('eldoria');
-  const frostpeak = world.getMap('frostpeak');
+  const shadowfen = world.getMap('shadowfen');
   assert.equal(eldoria.width,160); assert.equal(eldoria.height,160); assert.equal(eldoria.settlementClass,'capital');
-  assert.equal(frostpeak.width,80); assert.equal(frostpeak.height,80);
+  assert.equal(shadowfen.width,80); assert.equal(shadowfen.height,80);
   assert.ok(eldoria.districts.length >= 10); assert.ok(eldoria.landmarks.length >= 16); assert.ok(eldoria.props.length >= 60);
 });
 

@@ -38,7 +38,7 @@ test('9.37A Grand Sunreach is a 160x160 harbor capital distinct from royal Eldor
   assert.equal(map.width,160); assert.equal(map.height,160); assert.equal(map.settlementClass,'capital'); assert.equal(map.urbanPlan,'harbor-crescent');
   assert.equal(map.districts.length,12); assert.equal(map.landmarks.length,38); assert.ok(map.props.length>=50);
   assert.equal(world.getMap('eldoria').urbanPlan,'royal-grid');
-  assert.equal(world.getMap('frostpeak').width,80);
+  assert.equal(world.getMap('shadowfen').width,80);
 });
 
 test('9.37A harbor terrain has terrestrial walls, curved sea, quay, piers and breakwater',()=>{

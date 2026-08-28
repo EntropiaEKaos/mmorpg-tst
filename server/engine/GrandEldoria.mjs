@@ -90,7 +90,7 @@ export const GRAND_ELDORIA_MAP = Object.freeze({
   residentialRingEnabled:false, residentialRingDensity:0,
   districts, landmarks:Object.freeze([...landmarks, ...GRAND_ELDORIA_RESIDENTIAL]), props:Object.freeze(buildProps()), access:'public',
   portals:Object.freeze([
-    { x:28, y:80, targetMap:'frostpeak', targetX:70, targetY:40, label:'❄ Passagem de Frostpeak' },
+    { x:28, y:80, targetMap:'frostpeak', targetX:28, targetY:82, label:'❄ Passagem de Frostpeak' },
     { x:80, y:24, targetMap:'sunreach_coast', targetX:40, targetY:68, label:'🌊 Portão de Sunreach' },
     { x:132, y:80, targetMap:'ironwood', targetX:10, targetY:40, label:'🌲 Portão de Ironwood' },
     { x:132, y:120, targetMap:'shadowfen', targetX:40, targetY:70, label:'🍄 Estrada de Shadowfen' },

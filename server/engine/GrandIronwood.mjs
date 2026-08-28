@@ -103,7 +103,7 @@ export const GRAND_IRONWOOD_MAP = Object.freeze({
   districts, landmarks:Object.freeze([...landmarks, ...GRAND_IRONWOOD_MINOR_ARCHITECTURE]), props:Object.freeze(buildProps()), access:'public',
   portals:Object.freeze([
     { x:24, y:78, targetMap:'eldoria', targetX:130, targetY:80, label:'🏰 Estrada de Eldoria' },
-    { x:80, y:22, targetMap:'frostpeak', targetX:68, targetY:40, label:'❄ Estrada da Geada' },
+    { x:80, y:22, targetMap:'frostpeak', targetX:80, targetY:136, label:'❄ Estrada da Geada' },
     { x:80, y:137, targetMap:'sunreach_coast', targetX:135, targetY:70, label:'⚓ Trilha Mercante de Sunreach' },
   ]),
 });

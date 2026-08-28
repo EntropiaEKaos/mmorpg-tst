@@ -93,13 +93,13 @@ test('9.38A administrator-authored Ironwood geometry and coordinates are preserv
   assert.equal(JSON.stringify(data), before);
 });
 
-test('9.38A fresh ContentDB converges Road-to-10 and all three grand-capital migrations', () => {
+test('9.38A fresh ContentDB converges Road-to-10 and at least the Ironwood grand-capital schema', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(),'moria-938-'));
   const file = path.join(dir,'content.json');
   try {
     const db = new ContentDB(file);
     const data = db.getAllContent();
-    assert.equal(data.grandCapitalVersion, GRAND_CAPITAL_SCHEMA_VERSION);
+    assert.ok(data.grandCapitalVersion >= GRAND_CAPITAL_SCHEMA_VERSION);
     assert.equal(data.roadToTenVersion, 1);
     assert.ok(data.professionSpecializations.length > 0);
     const sunreach = data.maps.find(map => map.id === 'sunreach_coast');

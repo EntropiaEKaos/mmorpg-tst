@@ -6,6 +6,7 @@ export type TileType =
   | 'tree'
   | 'stone'
   | 'sand'
+  | 'snow'
   | 'path'
   | 'wall'
   | 'floor'

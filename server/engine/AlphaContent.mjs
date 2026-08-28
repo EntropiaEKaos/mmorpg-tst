@@ -7,6 +7,7 @@
 import { GRAND_ELDORIA_MAP } from './GrandEldoria.mjs';
 import { GRAND_SUNREACH_MAP } from './GrandSunreach.mjs';
 import { GRAND_IRONWOOD_MAP } from './GrandIronwood.mjs';
+import { GRAND_FROSTPEAK_MAP } from './GrandFrostpeak.mjs';
 
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const slug = value => String(value).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -105,6 +106,7 @@ const maps = REGIONS.map(region => {
   if (region.id === 'eldoria') return { ...GRAND_ELDORIA_MAP, portals: GRAND_ELDORIA_MAP.portals.map(portal => ({ ...portal })), districts: GRAND_ELDORIA_MAP.districts.map(entry => ({ ...entry })), landmarks: GRAND_ELDORIA_MAP.landmarks.map(entry => ({ ...entry })), props: GRAND_ELDORIA_MAP.props.map(entry => ({ ...entry })) };
   if (region.id === 'sunreach_coast') return { ...GRAND_SUNREACH_MAP, portals: GRAND_SUNREACH_MAP.portals.map(portal => ({ ...portal })), districts: GRAND_SUNREACH_MAP.districts.map(entry => ({ ...entry })), landmarks: GRAND_SUNREACH_MAP.landmarks.map(entry => ({ ...entry })), props: GRAND_SUNREACH_MAP.props.map(entry => ({ ...entry })) };
   if (region.id === 'ironwood') return { ...GRAND_IRONWOOD_MAP, portals: GRAND_IRONWOOD_MAP.portals.map(portal => ({ ...portal })), districts: GRAND_IRONWOOD_MAP.districts.map(entry => ({ ...entry })), landmarks: GRAND_IRONWOOD_MAP.landmarks.map(entry => ({ ...entry })), props: GRAND_IRONWOOD_MAP.props.map(entry => ({ ...entry })) };
+  if (region.id === 'frostpeak') return { ...GRAND_FROSTPEAK_MAP, portals: GRAND_FROSTPEAK_MAP.portals.map(portal => ({ ...portal })), districts: GRAND_FROSTPEAK_MAP.districts.map(entry => ({ ...entry })), landmarks: GRAND_FROSTPEAK_MAP.landmarks.map(entry => ({ ...entry })), props: GRAND_FROSTPEAK_MAP.props.map(entry => ({ ...entry })) };
   const [townX,townY] = mapCenters[region.id];
   return {
     id:region.id, name:region.name, biome:region.biome,

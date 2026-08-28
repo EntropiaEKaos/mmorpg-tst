@@ -6,6 +6,7 @@
 import { GRAND_ELDORIA_BUILTIN_WORLD_CONFIG } from './GrandEldoria.mjs';
 import { GRAND_SUNREACH_BUILTIN_WORLD_CONFIG } from './GrandSunreach.mjs';
 import { GRAND_IRONWOOD_BUILTIN_WORLD_CONFIG } from './GrandIronwood.mjs';
+import { GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG } from './GrandFrostpeak.mjs';
 
 class Monster {
   constructor(data) {
@@ -19,7 +20,7 @@ const MIN_MAP_DIMENSION = 40;
 const MAX_MAP_DIMENSION = 192;
 const SETTLEMENT_CLASSES = Object.freeze(['wilderness','town','city','capital']);
 const SETTLEMENT_CLASS_SET = new Set(SETTLEMENT_CLASSES);
-const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings']);
+const URBAN_PLANS = new Set(['royal-grid','harbor-crescent','forest-rings','terraced-bastion']);
 const BIOMES = new Set(['plains', 'snow', 'swamp', 'desert', 'shadow']);
 const BIOME_SEEDS = Object.freeze({ plains: 42, snow: 1337, swamp: 7, desert: 999, shadow: 666 });
 const CITY_STYLES = new Set(['royal','harbor','ironwood','alpine','marsh','forge','crystal','storm','void','nightfall','sanctum']);
@@ -44,14 +45,7 @@ const MAP_CONFIG = Object.freeze({
   eldoria: GRAND_ELDORIA_BUILTIN_WORLD_CONFIG,
   sunreach_coast: GRAND_SUNREACH_BUILTIN_WORLD_CONFIG,
   ironwood: GRAND_IRONWOOD_BUILTIN_WORLD_CONFIG,
-  frostpeak: {
-    id: 'frostpeak', name: 'Frostpeak', description: 'Frozen mountain city. Frigid and deadly.', biome: 'snow',
-    spawnPoint: { x: 70, y: 40 }, townCenter: { x: 65, y: 40 }, townRange: 8, seed: 1337,
-    portals: [
-      { pos: { x: 75, y: 40 }, targetMap: 'eldoria', targetSpawn: { x: 30, y: 80 }, label: '🌳 To Eldoria' },
-      { pos: { x: 10, y: 70 }, targetMap: 'emberhold', targetSpawn: { x: 70, y: 10 }, label: '🌋 To Emberhold' },
-    ],
-  },
+  frostpeak: GRAND_FROSTPEAK_BUILTIN_WORLD_CONFIG,
   shadowfen: {
     id: 'shadowfen', name: 'Shadowfen', description: 'Cursed swampland. Rotten and foggy.', biome: 'swamp',
     spawnPoint: { x: 40, y: 70 }, townCenter: { x: 40, y: 65 }, townRange: 8, seed: 7,
@@ -64,7 +58,7 @@ const MAP_CONFIG = Object.freeze({
     id: 'emberhold', name: 'Emberhold', description: 'Volcanic desert. Scorched earth and lava.', biome: 'desert',
     spawnPoint: { x: 70, y: 10 }, townCenter: { x: 65, y: 15 }, townRange: 8, seed: 999,
     portals: [
-      { pos: { x: 75, y: 10 }, targetMap: 'frostpeak', targetSpawn: { x: 12, y: 70 }, label: '❄ To Frostpeak' },
+      { pos: { x: 75, y: 10 }, targetMap: 'frostpeak', targetSpawn: { x: 130, y: 112 }, label: '❄ To Frostpeak' },
     ],
   },
   voidlands: {
@@ -170,7 +164,7 @@ function normalizeConfig(record, base = null) {
   const height = integer(record?.height, MIN_MAP_DIMENSION, MAX_MAP_DIMENSION, base?.height || MAP_HEIGHT);
   const requestedSettlement = String(record?.settlementClass || base?.settlementClass || (id === 'eldoria' ? 'capital' : 'city'));
   const settlementClass = SETTLEMENT_CLASS_SET.has(requestedSettlement) ? requestedSettlement : 'city';
-  const defaultUrbanPlan = id === 'sunreach_coast' ? 'harbor-crescent' : id === 'ironwood' ? 'forest-rings' : 'royal-grid';
+  const defaultUrbanPlan = id === 'sunreach_coast' ? 'harbor-crescent' : id === 'ironwood' ? 'forest-rings' : id === 'frostpeak' ? 'terraced-bastion' : 'royal-grid';
   const requestedUrbanPlan = String(record?.urbanPlan || base?.urbanPlan || defaultUrbanPlan);
   const urbanPlan = settlementClass === 'capital' && URBAN_PLANS.has(requestedUrbanPlan) ? requestedUrbanPlan : 'royal-grid';
   const baseSpawn = base?.spawnPoint || { x: Math.floor(width / 2), y: Math.floor(height / 2) };
@@ -288,10 +282,33 @@ function forestCapitalTile(config, x, y) {
   return { type:'grass', walkable:true, blocksSight:false };
 }
 
+
+function terracedBastionTile(config, x, y) {
+  const bounds=config.urbanBounds; if(!bounds)return null;
+  const minX=Number(bounds.x),minY=Number(bounds.y),maxX=minX+Number(bounds.width)-1,maxY=minY+Number(bounds.height)-1;
+  if(x<minX||x>maxX||y<minY||y>maxY)return null;
+  const cx=config.townCenter.x,cy=config.townCenter.y;
+  const portalGate=config.portals.some(portal=>((portal.pos.x===minX||portal.pos.x===maxX)&&x===portal.pos.x&&Math.abs(y-portal.pos.y)<=2)||((portal.pos.y===minY||portal.pos.y===maxY)&&y===portal.pos.y&&Math.abs(x-portal.pos.x)<=2));
+  const verticalGate=(y===minY||y===maxY)&&Math.abs(x-cx)<=2;
+  if(portalGate||verticalGate)return {type:'path',walkable:true,blocksSight:false};
+  if(x===minX||x===maxX||y===minY||y===maxY)return {type:'wall',walkable:false,blocksSight:true};
+  const retaining=[42,66,90,114].includes(y);
+  const ramp=Math.abs(x-cx)<=2||Math.abs(x-(cx-30))<=1||Math.abs(x-(cx+30))<=1;
+  if(retaining&&!ramp)return {type:'wall',walkable:false,blocksSight:true};
+  const vertical=ramp;
+  const terraceRoad=[34,58,82,106,130].some(line=>Math.abs(y-line)<=1);
+  const highCourt=x>=cx-16&&x<=cx+16&&y>=26&&y<=38;
+  const forgeCourt=x>=42&&x<=62&&y>=72&&y<=86;
+  const expeditionCourt=x>=98&&x<=122&&y>=72&&y<=86;
+  const lowerCourt=x>=cx-14&&x<=cx+14&&y>=96&&y<=108;
+  return {type:(vertical||terraceRoad||highCourt||forgeCourt||expeditionCourt||lowerCourt)?'path':'snow',walkable:true,blocksSight:false};
+}
+
 function capitalUrbanTile(config, x, y) {
   if (config?.settlementClass !== 'capital') return null;
   if (config.urbanPlan === 'harbor-crescent') return harborCapitalTile(config, x, y);
   if (config.urbanPlan === 'forest-rings') return forestCapitalTile(config, x, y);
+  if (config.urbanPlan === 'terraced-bastion') return terracedBastionTile(config, x, y);
   const bounds = config.urbanBounds;
   if (!bounds) return null;
   const minX = Number(bounds.x), minY = Number(bounds.y);
@@ -435,6 +452,7 @@ class WorldManager {
           else {
           const r = rand();
           if (config.biome === 'snow') {
+            type = 'snow';
             if (r < 0.15) { type = 'tree'; walkable = false; blocksSight = true; }
             else if (r < 0.20) { type = 'rock'; walkable = false; }
             else if (r < 0.22) { type = 'stone'; walkable = false; }

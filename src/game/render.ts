@@ -156,6 +156,22 @@ function buildTileCache(size: number) {
     }
   }, size));
 
+
+  tileCache.set(`snow_${size}`, createTileCanvas((ctx, s) => {
+    ctx.imageSmoothingEnabled = false;
+    const grad = ctx.createLinearGradient(0, 0, s, s);
+    grad.addColorStop(0, '#eef7fb'); grad.addColorStop(.55, '#dcecf4'); grad.addColorStop(1, '#bfd3df');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, s, s);
+    const px = Math.max(1, Math.round(s / 32));
+    for (let i = 0; i < 24; i++) {
+      const xx = Math.floor(hash(i, 71) * s / px) * px, yy = Math.floor(hash(i, 79) * s / px) * px;
+      ctx.fillStyle = hash(i,83) > .45 ? 'rgba(255,255,255,.48)' : 'rgba(126,161,181,.18)';
+      ctx.fillRect(xx, yy, px * (hash(i,89) > .78 ? 2 : 1), px);
+    }
+    ctx.fillStyle='rgba(255,255,255,.34)'; ctx.fillRect(0,0,s,px);
+    ctx.fillStyle='rgba(90,126,148,.10)'; ctx.fillRect(0,s-px,s,px);
+  }, size));
+
   tileCache.set(`path_${size}`, createTileCanvas((ctx, s) => {
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#816b4f';
@@ -362,8 +378,8 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, type: string, x: numb
     ctx.fillRect(x + size*.28, y + size*.42, size*.12, px);
     ctx.fillRect(x + size*.59, y + size*.63, size*.18, px);
     ctx.shadowBlur = 0;
-  } else if (type === 'grass' || type === 'sand') {
-    ctx.fillStyle = type === 'grass' ? 'rgba(210,228,144,.08)' : 'rgba(255,235,174,.11)';
+  } else if (type === 'grass' || type === 'sand' || type === 'snow') {
+    ctx.fillStyle = type === 'grass' ? 'rgba(210,228,144,.08)' : type === 'snow' ? 'rgba(255,255,255,.16)' : 'rgba(255,235,174,.11)';
     ctx.fillRect(x + size*.22, y + size*.19, px, px);
     ctx.fillRect(x + size*.67, y + size*.72, px, px);
   } else if (type === 'path' || type === 'floor' || type === 'wood_floor' || type === 'bridge') {
