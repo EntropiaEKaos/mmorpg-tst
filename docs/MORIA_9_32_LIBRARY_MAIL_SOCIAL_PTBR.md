@@ -43,3 +43,19 @@ Os PNGs são gerados pela build corrente, usando os componentes React reais. O h
 ## Próximo bloco sugerido
 
 9.33: Inventário/Depot/Auction/Coin Shop, seguido de uma nova varredura de strings residuais e uma rodada de polish visual responsivo.
+
+
+## 9.32.1 — Paridade do Visual QA
+
+A primeira captura revelou que o harness isolado não carregava o `LocaleBridge` usado pelo `App.tsx`. O jogo normal já carregava essa camada, mas os screenshots ficaram parcialmente em inglês. A correção 9.32.1 faz o harness usar a mesma infraestrutura de locale do runtime real e adiciona uma barreira automática contra regressão: a captura falha se rótulos ingleses críticos reaparecerem em Biblioteca, Correio ou Social.
+
+Isso transforma os prints em uma verificação funcional de localização, e não apenas em evidência visual.
+
+
+## 9.32.2 — Fechamento explícito dos painéis
+
+O gate visual da 9.32.1 foi mantido e deliberadamente não foi enfraquecido. Ele detectou que alguns rótulos estáticos ainda dependiam do bridge global de tradução. Nesta revisão, Biblioteca, Correio e Social passam a traduzir seus próprios rótulos críticos diretamente com `tr(...)`.
+
+Também foi corrigido o assunto exibido na lista de correio, que ainda renderizava `m.subject` sem passar pelo catálogo. O objetivo é que cada painel seja corretamente localizado mesmo quando renderizado isoladamente em testes, Storybook futuro ou QA visual.
+
+A captura continua falhando se os marcadores ingleses críticos reaparecerem. Portanto, screenshots e localização agora fazem parte do critério de aceite da versão, não apenas da documentação.

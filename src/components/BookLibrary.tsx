@@ -30,7 +30,7 @@ export default function BookLibrary({ player, onClose }: Props) {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-black tracking-widest text-transparent bg-clip-text"
               style={{ backgroundImage: 'linear-gradient(180deg, #9b59ff 0%, #4a2090 100%)' }}>
-            📚 LIBRARY
+            📚 {tr('LIBRARY')}
           </h2>
           <button onClick={onClose} className="text-purple-200/60 hover:text-white text-2xl" aria-label={tr('Close library')}>✕</button>
         </div>
@@ -40,7 +40,7 @@ export default function BookLibrary({ player, onClose }: Props) {
             {books.length === 0 ? (
               <div className="text-center text-purple-200/40 py-12">
                 <div className="text-5xl mb-3">📖</div>
-                <div>The library shelves are empty. An admin can create books to fill them!</div>
+                <div>{tr('The library shelves are empty. An admin can create books to fill them!')}</div>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -78,12 +78,12 @@ export default function BookLibrary({ player, onClose }: Props) {
             <div className="flex items-center justify-between mt-3">
               <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
                       className="px-4 py-1.5 rounded bg-purple-900/50 text-purple-200 text-xs disabled:opacity-30 border border-purple-700/50">
-                ◀ Previous
+                ◀ {tr('Previous')}
               </button>
               <span className="text-purple-200/60 text-xs">{tr('Page')} {Math.min(page + 1, pageCount)} {tr('of')} {pageCount}</span>
               <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1}
                       className="px-4 py-1.5 rounded bg-purple-900/50 text-purple-200 text-xs disabled:opacity-30 border border-purple-700/50">
-                Next ▶
+                {tr('Next')} ▶
               </button>
             </div>
           </div>

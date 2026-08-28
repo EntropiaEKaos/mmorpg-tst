@@ -4,6 +4,7 @@ import './index.css';
 import BookLibrary from './components/BookLibrary';
 import MailBox from './components/MailBox';
 import SocialHub from './components/SocialHub';
+import LocaleBridge from './components/LocaleBridge';
 import { saveBook, sendSystemMail } from './game/content';
 import type { Item, Player } from './game/types';
 
@@ -73,4 +74,4 @@ function VisualQa() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><VisualQa /></StrictMode>);
+createRoot(document.getElementById('root')!).render(<StrictMode><LocaleBridge /><VisualQa /></StrictMode>);
