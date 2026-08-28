@@ -31,9 +31,10 @@ jobs:
           grep -q "moria:hud:action-bar:position" src/visualQa.tsx
           grep -q "onFocusCapture={handleEnter}" src/components/Tooltip.tsx
           grep -q "data-tooltip-portal=\"true\"" src/components/Tooltip.tsx
+          grep -q "player.skills || {}" src/game/elementalScaling.ts
           grep -q "Action Bar is not visibly framed" tools/capture-moria-9-34.mjs
           grep -q "Combos reativos" tools/capture-moria-9-34.mjs
-          grep -q "corrida entre render" docs/MORIA_9_34_1_VISUAL_PROOF.md
+          grep -q "snapshot legado" docs/MORIA_9_34_1_VISUAL_PROOF.md
       - name: Verify PT-BR source coverage
         run: python tools/audit-moria-9-28-i18n.py
       - name: Validate client
@@ -82,7 +83,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/i18n/pt-BR.928.json src/components/Tooltip.tsx src/visualQa.tsx tools/capture-moria-9-34.mjs docs/MORIA_9_34_1_VISUAL_PROOF.md
+          git add src/i18n/pt-BR.928.json src/components/Tooltip.tsx src/game/elementalScaling.ts src/visualQa.tsx tools/capture-moria-9-34.mjs docs/MORIA_9_34_1_VISUAL_PROOF.md
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'fix(9.34.1): harden combat visual proof'
           git push origin HEAD:moria-9.28-character-i18n-ptbr
