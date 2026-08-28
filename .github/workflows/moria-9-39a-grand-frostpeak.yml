@@ -6,6 +6,7 @@ on:
       - 'tools/upgrade-moria-9-39a-grand-frostpeak.py'
       - 'tools/fix-moria-9-39a-terraced-snow.py'
       - 'tools/fix-moria-9-39a-client-unused.py'
+      - 'tools/fix-moria-9-39a-focused-contracts.py'
       - '.github/workflows/moria-9-39a-grand-frostpeak.yml'
 permissions:
   contents: write
@@ -24,10 +25,11 @@ jobs:
           cache: npm
       - name: Apply Mor'ia 9.39A Grand Frostpeak
         run: |
-          python -m py_compile tools/upgrade-moria-9-39a-grand-frostpeak.py tools/fix-moria-9-39a-terraced-snow.py tools/fix-moria-9-39a-client-unused.py
+          python -m py_compile tools/upgrade-moria-9-39a-grand-frostpeak.py tools/fix-moria-9-39a-terraced-snow.py tools/fix-moria-9-39a-client-unused.py tools/fix-moria-9-39a-focused-contracts.py
           python tools/upgrade-moria-9-39a-grand-frostpeak.py
           python tools/fix-moria-9-39a-terraced-snow.py
           python tools/fix-moria-9-39a-client-unused.py
+          python tools/fix-moria-9-39a-focused-contracts.py
       - name: Verify Grand Frostpeak source contract
         run: |
           set -euxo pipefail
@@ -36,6 +38,8 @@ jobs:
           grep -Fq "urbanPlan:'terraced-bastion'" server/engine/GrandFrostpeak.mjs
           grep -Fq "terracedBastionTile" server/engine/World.mjs
           grep -Fq "terracedBastionTile" src/game/maps.ts
+          grep -Fq "verticalGate" server/engine/World.mjs
+          grep -Fq "verticalGate" src/game/maps.ts
           grep -Fq "type = 'snow';" server/engine/World.mjs
           grep -Fq "type = 'snow';" src/game/maps.ts
           grep -Fq "| 'snow'" src/game/types.ts
@@ -44,7 +48,9 @@ jobs:
           grep -Fq "frostpeak_yeti_warmaster:{from:[50,69]" server/engine/GrandFrostpeak.mjs
           grep -Fq "targetMap:'ironwood'" server/engine/GrandFrostpeak.mjs
           grep -Fq "migrateGrandFrostpeakData" server/engine/ContentDB.mjs
+          test "$(grep -Fc 'migrateGrandFrostpeakData(this.data);' server/engine/ContentDB.mjs)" -ge 2
           grep -Fq "const cx=map.townCenter.x;" src/game/maps.ts
+          grep -Fq "landmarks.length,41" server/test/grand-frostpeak-9-39.test.mjs
           node --check server/engine/GrandFrostpeak.mjs
           node --check server/engine/World.mjs
           node --check server/engine/ContentDB.mjs
