@@ -1,0 +1,17 @@
+import { chromium } from 'playwright';
+import fs from 'node:fs';
+fs.mkdirSync('docs/screenshots', { recursive: true });
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+const errors = [];
+page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', e => errors.push(e.message));
+await page.goto('http://127.0.0.1:4173', { waitUntil: 'networkidle' });
+await page.screenshot({ path: 'docs/screenshots/moria-9-27-login-revamp.png' });
+await page.getByRole('button', { name: /OFFLINE QUICK PLAY/i }).click();
+await page.locator('canvas.moria-world-canvas').waitFor({ state: 'visible' });
+await page.waitForTimeout(700);
+await page.screenshot({ path: 'docs/screenshots/moria-9-27-world-day.png' });
+fs.writeFileSync('browser-console.txt', errors.join('\n'));
+await browser.close();
+if (errors.length) process.exit(2);
