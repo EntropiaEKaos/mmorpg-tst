@@ -20,6 +20,19 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Repair Mor'ia 9.34 applicator anchor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tools/upgrade-moria-9-34-combat-progression-ptbr.py')
+          text = path.read_text(encoding='utf-8')
+          bad = "    ('>{locked && <div', '>{locked && <div'),\n"
+          if bad in text:
+              text = text.replace(bad, '', 1)
+              path.write_text(text, encoding='utf-8')
+          elif "('>{locked && <div'" in text:
+              raise SystemExit('unexpected malformed 9.34 no-op anchor')
+          PY
       - name: Apply Mor'ia 9.34 combat progression PT-BR
         run: python tools/upgrade-moria-9-34-combat-progression-ptbr.py
       - name: Verify localized ownership and documentation
@@ -82,7 +95,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/i18n/pt-BR.928.json src/components/TalentTree.tsx src/components/ActionBar.tsx src/components/CastBar.tsx src/components/DPSMeter.tsx src/components/Tooltip.tsx src/visualQa.tsx tools/capture-moria-9-34.mjs docs/MORIA_9_34_COMBAT_PROGRESSION_PTBR.md
+          git add tools/upgrade-moria-9-34-combat-progression-ptbr.py src/i18n/pt-BR.928.json src/components/TalentTree.tsx src/components/ActionBar.tsx src/components/CastBar.tsx src/components/DPSMeter.tsx src/components/Tooltip.tsx src/visualQa.tsx tools/capture-moria-9-34.mjs docs/MORIA_9_34_COMBAT_PROGRESSION_PTBR.md
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'feat(9.34): localize combat progression and add visual QA'
           git push origin HEAD:moria-9.28-character-i18n-ptbr
