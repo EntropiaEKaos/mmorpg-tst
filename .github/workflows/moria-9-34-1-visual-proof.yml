@@ -33,7 +33,8 @@ jobs:
           grep -q "data-tooltip-portal=\"true\"" src/components/Tooltip.tsx
           grep -q "player.skills || {}" src/game/elementalScaling.ts
           grep -q "Action Bar is not visibly framed" tools/capture-moria-9-34.mjs
-          grep -q "Combos reativos" tools/capture-moria-9-34.mjs
+          grep -q "COMBOS REATIVOS" tools/capture-moria-9-34.mjs
+          grep -q "ATALHO:" tools/capture-moria-9-34.mjs
           grep -q "snapshot legado" docs/MORIA_9_34_1_VISUAL_PROOF.md
       - name: Verify PT-BR source coverage
         run: python tools/audit-moria-9-28-i18n.py
