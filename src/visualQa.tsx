@@ -19,6 +19,7 @@ import GrandSunreachPanorama from './components/GrandSunreachPanorama';
 import GrandIronwoodPanorama from './components/GrandIronwoodPanorama';
 import GrandFrostpeakPanorama from './components/GrandFrostpeakPanorama';
 import GrandShadowfenPanorama from './components/GrandShadowfenPanorama';
+import GrandEmberholdPanorama from './components/GrandEmberholdPanorama';
 import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge from './components/LocaleBridge';
 import { saveBook, sendSystemMail } from './game/content';
@@ -271,6 +272,29 @@ function AuthoritativeGrandShadowfenQa({ mode }: { mode: ShadowfenQaMode }) {
   return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-shadowfen-server-ready="panorama"><GrandShadowfenPanorama /></div>;
 }
 
+
+const EMBERHOLD_QA_PLAYER = { ...QA_PLAYER, mapId: 'emberhold', pos: { x: 116, y: 122 } } as unknown as Player;
+type EmberholdQaMode = 'emberhold-minimap' | 'emberhold-city-designer' | 'emberhold-panorama';
+
+function AuthoritativeGrandEmberholdQa({ mode }: { mode: EmberholdQaMode }) {
+  const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading');
+  const [error,setError]=useState('');
+  useEffect(()=>{
+    let active=true;const params=new URLSearchParams(window.location.search);const base=params.get('qaServer')||'http://127.0.0.1:3000';const token=params.get('qaToken')||'';
+    fetch(`${base}/admin/api/maps?token=${encodeURIComponent(token)}`,{cache:'no-store'}).then(async response=>{if(!response.ok)throw new Error(`Servidor de conteúdo respondeu ${response.status}`);return response.json();}).then(payload=>{
+      if(!active)return;const records=Array.isArray(payload?.items)?payload.items:[];const emberhold=records.find((record:any)=>record?.id==='emberhold');
+      if(!emberhold||Number(emberhold.width)!==160||Number(emberhold.height)!==160||emberhold.settlementClass!=='capital'||emberhold.urbanPlan!=='caldera-radials'||!Array.isArray(emberhold.landmarks)||emberhold.landmarks.length!==42)throw new Error('Grand Emberhold autoritativa 160×160 não foi recebida do servidor');
+      syncServerMaps(records);setStatus('ready');
+    }).catch(reason=>{if(!active)return;setError(reason instanceof Error?reason.message:String(reason));setStatus('error');});return()=>{active=false;};
+  },[]);
+  if(status==='loading')return <div className="relative z-10 p-8 text-orange-100" data-grand-emberhold-server-loading="true">Sincronizando Grand Emberhold com o servidor autoritativo…</div>;
+  if(status==='error')return <div className="relative z-10 p-8 text-red-200" data-grand-emberhold-server-error="true">{error}</div>;
+  const map=MAPS.emberhold;
+  if(mode==='emberhold-minimap')return <div className="relative z-10 flex min-h-screen items-center justify-center p-6"><div data-grand-emberhold-server-ready="minimap" className="rounded-xl border border-orange-300/25 bg-black/75 p-4 shadow-2xl"><div className="mb-3"><div className="text-sm font-black tracking-wider text-orange-50">GRAND EMBERHOLD · CAPITAL VULCÂNICA 160×160</div><div className="mt-1 text-[10px] text-orange-100/55">Servidor autoritativo · {map.districts.length} distritos · {map.landmarks.length} marcos · 4 acessos físicos · jogador 116,122</div></div><WorldMiniMap player={EMBERHOLD_QA_PLAYER} monsters={[]} mapId="emberhold" /></div></div>;
+  if(mode==='emberhold-city-designer')return <div className="relative z-10 p-4" data-grand-emberhold-server-ready="designer"><CityDesigner /></div>;
+  return <div className="relative z-10 flex min-h-screen items-center justify-center p-5" data-grand-emberhold-server-ready="panorama"><GrandEmberholdPanorama /></div>;
+}
+
 function VisualQa() {
   const panel = new URLSearchParams(window.location.search).get('panel') || 'library';
   const [inventory, setInventory] = useState<Item[]>([
@@ -312,6 +336,9 @@ function VisualQa() {
       {panel === 'shadowfen-minimap' && <AuthoritativeGrandShadowfenQa mode="shadowfen-minimap" />}
       {panel === 'shadowfen-city-designer' && <AuthoritativeGrandShadowfenQa mode="shadowfen-city-designer" />}
       {panel === 'shadowfen-panorama' && <AuthoritativeGrandShadowfenQa mode="shadowfen-panorama" />}
+      {panel === 'emberhold-minimap' && <AuthoritativeGrandEmberholdQa mode="emberhold-minimap" />}
+      {panel === 'emberhold-city-designer' && <AuthoritativeGrandEmberholdQa mode="emberhold-city-designer" />}
+      {panel === 'emberhold-panorama' && <AuthoritativeGrandEmberholdQa mode="emberhold-panorama" />}
     </div>
   );
 }

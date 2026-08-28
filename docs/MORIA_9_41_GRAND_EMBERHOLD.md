@@ -39,3 +39,16 @@ Coordenadas históricas de NPCs, task master, monstros, casas e node industrial 
 ## Gate 9.41A
 
 A etapa A exige: contratos de fonte, auditoria PT-BR, `npm audit`, typecheck/build do cliente, validação do servidor, teste focado de Emberhold e suíte completa. A capital **não será considerada visualmente aprovada** até a etapa 9.41B gerar screenshots reais de minimapa, City Designer e panorâmica e esses arquivos passarem por inspeção humana.
+
+
+## 9.41B — Prova visual autoritativa
+
+A prova visual sobe o servidor real, consulta `/admin/api/maps`, sincroniza `MAPS.emberhold` e renderiza a mesma topologia usada pelo gameplay com `generateMap`, `drawTile` e `drawBuilding`.
+
+O gate captura e valida:
+
+- minimapa 160×160 com 12 distritos, 42 marcos e quatro acessos físicos;
+- City Designer selecionado em Emberhold, com orçamento real `42/64 construções`;
+- panorâmica completa da área urbana, medindo lava, pontes, caminhos e massa arquitetônica.
+
+A aprovação humana exige uma caldeira central claramente legível, fissuras diagonais que realmente cortem a cidade, pontes/radiais coerentes, escala industrial convincente e identidade visual distinta das cinco capitais anteriores. Passar os asserts automáticos não basta para fechar 9.41.
