@@ -5,6 +5,7 @@ on:
     paths:
       - 'tools/upgrade-moria-9-38a-grand-ironwood.py'
       - 'tools/fix-moria-9-38a-forest-sample.py'
+      - 'tools/fix-moria-9-38a-grand-capital-legacy-test.py'
       - '.github/workflows/moria-9-38a-grand-ironwood.yml'
 permissions:
   contents: write
@@ -25,6 +26,7 @@ jobs:
         run: |
           python tools/upgrade-moria-9-38a-grand-ironwood.py
           python tools/fix-moria-9-38a-forest-sample.py
+          python tools/fix-moria-9-38a-grand-capital-legacy-test.py
       - name: Verify Grand Ironwood source contract
         run: |
           test -s server/engine/GrandIronwood.mjs
@@ -39,6 +41,7 @@ jobs:
           grep -q "migrateGrandIronwoodData" server/engine/ContentDB.mjs
           grep -q "roadToTenVersion = 1" server/engine/ContentDB.mjs
           grep -q "map.tiles\[58\]\[90\].type, 'grass'" server/test/grand-ironwood-9-38.test.mjs
+          grep -q "GRAND_CAPITAL_SCHEMA_VERSION" server/test/grand-eldoria-9-36.test.mjs
           node --check server/engine/GrandIronwood.mjs
           node --check server/engine/World.mjs
           node --check server/engine/ContentDB.mjs
@@ -65,7 +68,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add server/engine/GrandIronwood.mjs server/engine/GrandEldoria.mjs server/engine/GrandSunreach.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs server/engine/ContentStudio.mjs server/engine/ContentIntegrity.mjs src/game/maps.ts server/test/grand-ironwood-9-38.test.mjs docs/MORIA_9_38_GRAND_IRONWOOD.md
+          git add server/engine/GrandIronwood.mjs server/engine/GrandEldoria.mjs server/engine/GrandSunreach.mjs server/engine/World.mjs server/engine/AlphaContent.mjs server/engine/ContentDB.mjs server/engine/ContentStudio.mjs server/engine/ContentIntegrity.mjs src/game/maps.ts server/test/grand-ironwood-9-38.test.mjs server/test/grand-eldoria-9-36.test.mjs docs/MORIA_9_38_GRAND_IRONWOOD.md
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'feat(9.38a): build authoritative Grand Ironwood'
           git push origin HEAD:moria-9.28-character-i18n-ptbr
