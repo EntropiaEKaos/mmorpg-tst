@@ -58,3 +58,14 @@ test('9.27 fourth pass makes weather and authored lights visually reactive only'
   assert.match(city, /Ground every prop/);
   assert.doesNotMatch(fx + city, /sendOfficial|serverSync|fetch\(|WebSocket/);
 });
+
+
+test('9.27 final lighting pass strengthens authored lights only when presentation is dark', () => {
+  const city = read('src/game/cityPresentation.ts');
+  const game = read('src/components/GameScreen.tsx');
+  assert.match(city, /emissiveScale = \.55 \+ lightDarkness \* 2\.5/);
+  assert.match(city, /Night-sensitive floor bounce/);
+  assert.match(city, /darkness = 0/);
+  assert.match(game, /drawCityDecor\([^;]+legacyOverrideDarkness\(dayTimeOverrideRef\.current, worldClockRef\.current\.darkness\)\)/);
+  assert.doesNotMatch(city, /serverSync|sendOfficial|fetch\(|WebSocket/);
+});

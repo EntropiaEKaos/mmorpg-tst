@@ -2187,7 +2187,7 @@ export default function GameScreen({ account, onLogout }: Props) {
       drawBuilding(ctx, sx, sy, b, TILE_SIZE, now);
     }
 
-    drawCityDecor(ctx, MAPS[currentMapIdRef.current] || MAPS.eldoria, cam, TILE_SIZE, now);
+    drawCityDecor(ctx, MAPS[currentMapIdRef.current] || MAPS.eldoria, cam, TILE_SIZE, now, legacyOverrideDarkness(dayTimeOverrideRef.current, worldClockRef.current.darkness));
 
     // Houses and decoration are presentation-only projections of global server state.
     if (serverSync.isActive()) drawHousing(ctx, p.housing, cam, TILE_SIZE, now);

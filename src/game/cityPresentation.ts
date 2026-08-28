@@ -233,11 +233,13 @@ function drawLocalEmissiveHalo(ctx: CanvasRenderingContext2D, cx: number, cy: nu
   ctx.restore();
 }
 
-function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number, y: number, size: number, time: number, accent: string) {
+function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number, y: number, size: number, time: number, accent: string, darkness = 0) {
   const cx = x + size / 2;
   const cy = y + size * 0.70;
   const u = Math.max(1, Math.round(size / 16));
   const pulse = 0.72 + Math.sin(time / 450 + prop.x) * 0.08;
+  const lightDarkness = Math.max(0, Math.min(1, darkness));
+  const emissiveScale = .55 + lightDarkness * 2.5;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
@@ -247,24 +249,37 @@ function drawPropGlyph(ctx: CanvasRenderingContext2D, prop: CityProp, x: number,
   ctx.fillStyle = 'rgba(30,35,27,.13)';
   ctx.fillRect(x + size*.31, y + size*.75, size*.38, Math.max(1, size*.04));
 
+  // Night-sensitive floor bounce anchors authored emissive props to nearby masonry.
+  if (lightDarkness > .06 && (prop.kind === 'lamp' || prop.kind === 'brazier' || prop.kind === 'crystal')) {
+    const warm = prop.kind === 'crystal' ? '151,143,255' : prop.kind === 'brazier' ? '255,112,48' : '255,205,105';
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const floorAlpha = Math.min(.18, .035 + lightDarkness * .22);
+    ctx.fillStyle = `rgba(${warm},${floorAlpha})`;
+    ctx.fillRect(x + size*.25, y + size*.79, size*.50, Math.max(1, size*.04));
+    ctx.fillStyle = `rgba(${warm},${floorAlpha*.42})`;
+    ctx.fillRect(x + size*.34, y + size*.84, size*.32, Math.max(1, size*.03));
+    ctx.restore();
+  }
+
   switch (prop.kind) {
     case 'banner':
       pixelRect(ctx,cx-u,y+size*.18,u*2,size*.67,'#5b4028');
       pixelRect(ctx,cx+u,y+size*.20,u*5,u*6,prop.color || accent);
       ctx.fillStyle='rgba(255,255,255,.24)';ctx.fillRect(cx+u*2,y+size*.22,u,u*4); break;
     case 'lamp':
-      drawLocalEmissiveHalo(ctx,cx,y+size*.32,size*.50,'255,205,105',.16 + pulse*.07);
+      drawLocalEmissiveHalo(ctx,cx,y+size*.32,size*(.46 + lightDarkness*.16),'255,205,105',(.16 + pulse*.07)*emissiveScale);
       pixelRect(ctx,cx-u,y+size*.31,u*2,size*.52,'#42392d');
       ctx.fillStyle=`rgba(255,211,104,${pulse*.25})`;ctx.fillRect(cx-u*5,y+size*.17,u*10,u*10);
       pixelRect(ctx,cx-u*2,y+size*.21,u*4,u*5,'#e7bd5c');
       ctx.fillStyle='#fff0a7';ctx.fillRect(cx-u,y+size*.23,u*2,u*2); break;
     case 'brazier':
-      drawLocalEmissiveHalo(ctx,cx,cy-u*4,size*.58,'255,118,48',.14 + pulse*.09);
+      drawLocalEmissiveHalo(ctx,cx,cy-u*4,size*(.52 + lightDarkness*.20),'255,118,48',(.14 + pulse*.09)*emissiveScale);
       pixelRect(ctx,cx-u*4,cy,u*8,u*3,'#524438');
       ctx.fillStyle='#8f3926';ctx.fillRect(cx-u*3,cy-u*3,u*6,u*3);
       ctx.fillStyle='#ff9737';ctx.fillRect(cx-u*2,cy-u*6,u*4,u*4);ctx.fillStyle='#ffd15e';ctx.fillRect(cx-u,cy-u*7,u*2,u*4); break;
     case 'crystal':
-      drawLocalEmissiveHalo(ctx,cx,y+size*.43,size*.53,'151,143,255',.11 + pulse*.07);
+      drawLocalEmissiveHalo(ctx,cx,y+size*.43,size*(.48 + lightDarkness*.18),'151,143,255',(.11 + pulse*.07)*emissiveScale);
       ctx.fillStyle=prop.color || accent;ctx.fillRect(cx-u*2,y+size*.28,u*4,u*8);ctx.fillRect(cx-u,y+size*.18,u*2,u*12);
       ctx.fillStyle='rgba(255,255,255,.52)';ctx.fillRect(cx-u,y+size*.22,u,u*5); break;
     case 'grave':
@@ -300,6 +315,7 @@ export function drawCityDecor(
   camera: { x: number; y: number },
   tileSize: number,
   time: number,
+  darkness = 0,
 ) {
   const palette = getCityPalette({ id: map.id, style: map.cityStyle, biome: map.biome, cityAccent: map.cityAccent, roofColor: map.roofColor, wallColor: map.wallColor, roadColor: map.roadColor });
   const visualProps = [...getAmbientCityProps(map), ...map.props];
@@ -307,7 +323,7 @@ export function drawCityDecor(
     const sx = (prop.x - camera.x) * tileSize;
     const sy = (prop.y - camera.y) * tileSize;
     if (sx < -tileSize || sy < -tileSize || sx > ctx.canvas.width + tileSize || sy > ctx.canvas.height + tileSize) continue;
-    drawPropGlyph(ctx, prop, sx, sy, tileSize, time, palette.accent);
+    drawPropGlyph(ctx, prop, sx, sy, tileSize, time, palette.accent, darkness);
   }
 
   // Landmarks remain navigation anchors, but typography follows the world pixel
