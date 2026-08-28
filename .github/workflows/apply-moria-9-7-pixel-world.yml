@@ -1,0 +1,66 @@
+name: Apply Mor'ia 9.7 Pixel World Refinement
+
+on:
+  push:
+    branches:
+      - moria-9.7-reference-visual-convergence
+    paths:
+      - tools/apply-moria-9-7-pixel-world.py
+      - .github/workflows/apply-moria-9-7-pixel-world.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Refine world pixel presentation
+        run: python tools/apply-moria-9-7-pixel-world.py
+
+      - name: Install client dependencies
+        run: npm ci
+
+      - name: Audit client dependencies
+        run: npm audit
+
+      - name: Typecheck client
+        run: npm run typecheck
+
+      - name: Build client
+        run: npm run build
+
+      - name: Install server dependencies
+        run: npm ci --prefix server --no-fund
+
+      - name: Audit server dependencies
+        run: npm audit --prefix server
+
+      - name: Check server syntax
+        run: npm run check --prefix server
+
+      - name: Run server tests
+        run: npm test --prefix server
+
+      - name: Commit validated world refinement and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f tools/apply-moria-9-7-pixel-world.py
+          rm -f .github/workflows/apply-moria-9-7-pixel-world.yml
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(9.7): replace remaining vector world cues with pixel composition"
+          git push origin HEAD:moria-9.7-reference-visual-convergence
