@@ -1,9 +1,8 @@
-name: Mor'ia 9.27 Visual Capture
+name: Mor'ia 9.33 Visual Release Gate
 on:
   push:
     branches: [moria-9.27-visual-rebirth]
     paths:
-      - 'tools/moria-9-27-capture.trigger'
       - '.github/workflows/capture-moria-9-27.yml'
 permissions:
   contents: write
@@ -30,25 +29,30 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Start client
         run: |
-          python3 -m http.server 4173 -d dist >/tmp/moria927-http.log 2>&1 &
+          python3 -m http.server 4173 -d dist >/tmp/moria933-http.log 2>&1 &
           sleep 2
-      - name: Capture gameplay
+      - name: Capture final visual states
         run: node tools/capture-moria-9-27.mjs
-      - name: Validate capture
+      - name: Validate captures
         run: |
-          test -s docs/screenshots/moria-9-27-visual-rebirth-gameplay.png
-          test ! -s tmp/moria-9-27-review/browser-console.txt
+          test -s docs/screenshots/moria-9-33-visual-rebirth-day.png
+          test -s docs/screenshots/moria-9-33-visual-rebirth-night.png
+          test -s docs/screenshots/moria-9-33-visual-rebirth-character-ui.png
+          test ! -s tmp/moria-9-33-review/browser-console.txt
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: moria-9-27-visual-rebirth-review
+          name: moria-9-33-visual-rebirth-review
           path: |
-            docs/screenshots/moria-9-27-visual-rebirth-gameplay.png
-            tmp/moria-9-27-review/browser-console.txt
-      - name: Commit screenshot
+            docs/screenshots/moria-9-33-visual-rebirth-day.png
+            docs/screenshots/moria-9-33-visual-rebirth-night.png
+            docs/screenshots/moria-9-33-visual-rebirth-character-ui.png
+            tmp/moria-9-33-review/browser-console.txt
+            tmp/moria-9-33-review/manifest.json
+      - name: Commit screenshots
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/screenshots/moria-9-27-visual-rebirth-gameplay.png
-          git commit -m 'docs(9.27): add real visual rebirth gameplay capture'
+          git add docs/screenshots/moria-9-33-visual-rebirth-day.png docs/screenshots/moria-9-33-visual-rebirth-night.png docs/screenshots/moria-9-33-visual-rebirth-character-ui.png
+          git commit -m 'docs(9.33): add final visual rebirth browser evidence'
           git push origin HEAD:moria-9.27-visual-rebirth
