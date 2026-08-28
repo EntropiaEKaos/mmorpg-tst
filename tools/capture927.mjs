@@ -10,7 +10,7 @@ await page.goto('http://127.0.0.1:4173', { waitUntil: 'networkidle' });
 await page.screenshot({ path: 'docs/screenshots/moria-9-27-login-revamp.png' });
 await page.getByRole('button', { name: /OFFLINE QUICK PLAY/i }).click();
 await page.locator('canvas.moria-world-canvas').waitFor({ state: 'visible' });
-await page.waitForTimeout(900);
+await page.waitForTimeout(1000);
 await page.screenshot({ path: 'docs/screenshots/moria-9-27-world-day.png' });
 fs.writeFileSync('browser-console.txt', errors.join('\n'));
 await browser.close();
