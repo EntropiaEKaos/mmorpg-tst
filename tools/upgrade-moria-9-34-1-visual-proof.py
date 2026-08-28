@@ -37,8 +37,8 @@ old_events = """      onMouseEnter={handleEnter}
 """
 new_events = """      onPointerEnter={handleEnter}
       onPointerLeave={handleLeave}
-      onFocus={handleEnter}
-      onBlur={handleLeave}
+      onFocusCapture={handleEnter}
+      onBlurCapture={handleLeave}
       data-tooltip-trigger=\"true\"
       className=\"inline-flex\"
 """
@@ -74,7 +74,10 @@ new_action = """  if (panel === 'actionbar') {
     const triggerClass = await tooltipTrigger.getAttribute('class');
     const triggerQa = await tooltipTrigger.getAttribute('data-tooltip-trigger');
     if (!triggerClass?.includes('inline-flex') || triggerQa !== 'true') throw new Error(`Mor'ia 9.34 tooltip trigger wrapper not found: ${triggerClass} / ${triggerQa}`);
+    if (await spellSlot.isDisabled()) throw new Error("Mor'ia 9.34 spell proof slot is unexpectedly disabled");
     await spellSlot.focus();
+    const focused = await spellSlot.evaluate((node) => node === document.activeElement);
+    if (!focused) throw new Error("Mor'ia 9.34 spell proof slot did not receive focus");
     await page.locator('#__global_tooltip_root__ > div').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForTimeout(180);
     const tooltipText = await page.locator('#__global_tooltip_root__').innerText();
@@ -98,7 +101,7 @@ A inspeção humana da primeira captura 9.34 encontrou dois problemas que o gate
 1. a Árvore de Talentos ainda exibia `You have` em inglês;
 2. `actionbar.png` podia ser aceito mesmo com a barra fora do enquadramento visível.
 
-Durante o endurecimento do gate, o hover automatizado também expôs fragilidade na ativação do tooltip baseada apenas em eventos de mouse.
+Durante o endurecimento do gate, a automação também expôs fragilidade na ativação do tooltip quando o foco ocorre em um controle filho.
 
 ## Correções
 
@@ -106,10 +109,10 @@ Durante o endurecimento do gate, o hover automatizado também expôs fragilidade
 - fixa uma posição determinística da Action Bar apenas no `visual-qa.html`;
 - o capturador exige que a janela `action-bar` tenha dimensões reais e esteja completamente dentro da viewport 1440x1000;
 - o capturador valida o título `Barra de Ações` sem depender da capitalização visual aplicada pelo CSS;
-- o Tooltip real usa `pointerenter/pointerleave` e também `focus/blur`, evitando depender exclusivamente de eventos de mouse e melhorando suporte a teclado/pen;
+- o Tooltip real usa `pointerenter/pointerleave` e `focus/blur` em fase de captura, garantindo a ativação quando o foco está no botão filho e melhorando suporte a teclado/pen;
 - agendamentos de tooltip anteriores são cancelados antes de um novo timer, evitando timers concorrentes;
 - wrappers reais recebem `data-tooltip-trigger=\"true\"` para QA estrutural sem alterar regras de jogo;
-- a prova visual foca o botão real do primeiro slot de magia, exercita o mesmo Tooltip de produção pela rota de teclado, aguarda o portal visível e exige: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
+- a prova visual confirma que o slot está habilitado, recebe foco real, aguarda o portal visível e exige: `Fúria`, `Atalho:`, `Custo de Mana:`, `Recarga:` e `Combos reativos`;
 - adiciona `You have` à lista de vazamentos proibidos do print de Talentos.
 
 ## Escopo
