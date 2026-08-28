@@ -43,3 +43,8 @@ A revisão humana do primeiro panorama 9.36B detectou que a geometria monumental
 Grand Eldoria v2 passa de 16 para 36 footprints arquitetônicos autoritativos. Vinte residências de bairro são `house` reais: bloqueiam movimento e visão pela mesma geometria consumida pelo servidor, aparecem no City Designer e são renderizadas pelo jogo. Elas usam `showOnMinimap:false` para que o minimapa continue legível.
 
 A antiga camada `residentialRing` de apresentação foi desativada em Eldoria, eliminando casas visuais atravessáveis. A migração v2 só adiciona a malha residencial quando o conjunto 9.36A/B estiver exatamente intacto; qualquer arquitetura editada pelo administrador é preservada. Também foram removidos clamps 77/78 restantes de `cityPresentation.ts`, tornando edifícios e props ambientais dimension-aware para futuras capitais.
+
+
+### 9.36C.1 — acabamento do City Designer
+
+A revisão humana da prova 9.36C aprovou a densidade urbana, mas detectou compressão no rótulo **CONSTRUIR** da barra de ferramentas. A barra foi reorganizada de quatro colunas estreitas para uma grade 2×2, com alvos maiores, borda de estado e tipografia legível. A alteração é exclusivamente de apresentação do editor; IDs, ferramentas e autoridade do mapa permanecem inalterados.

@@ -150,7 +150,7 @@ export default function CityDesigner({ onApplied }: Props) {
     </section>
 
     <section className="space-y-3 rounded border border-purple-400/25 bg-black/40 p-3">
-      <div className="grid grid-cols-4 gap-1">{(['select','landmark','district','prop'] as Tool[]).map((entry) => <button key={entry} onClick={() => setTool(entry)} className={`rounded px-1 py-2 text-[8px] font-black uppercase ${tool === entry ? 'bg-purple-600 text-white' : 'bg-purple-950/50 text-purple-300'}`}>{TOOL_LABELS[entry]}</button>)}</div>
+      <div data-city-tool-grid="true" className="grid grid-cols-2 gap-2">{(['select','landmark','district','prop'] as Tool[]).map((entry) => <button key={entry} data-city-tool={entry} onClick={() => setTool(entry)} className={`min-h-9 rounded border px-2 py-2 text-[9px] font-black uppercase tracking-wide ${tool === entry ? 'border-purple-300/65 bg-purple-600 text-white' : 'border-purple-500/20 bg-purple-950/50 text-purple-300'}`}>{TOOL_LABELS[entry]}</button>)}</div>
       {tool === 'landmark' && <><TextField label="Nome da construção" value={landmarkName} onChange={setLandmarkName} /><SelectMini label="Tipo da construção" value={landmarkKind} options={LANDMARK_KINDS} onChange={(v) => setLandmarkKind(v as CityLandmark['kind'])} /><div className="text-[9px] text-cyan-100/60">Clique no mapa: casas começam em 3×3 e podem ser redimensionadas após o posicionamento.</div></>}
       {tool === 'district' && <TextField label="Nome do distrito" value={districtName} onChange={setDistrictName} />}
       {tool === 'prop' && <SelectMini label="Objeto predefinido" value={propKind} options={PROP_KINDS} onChange={(v) => setPropKind(v as CityProp['kind'])} />}
