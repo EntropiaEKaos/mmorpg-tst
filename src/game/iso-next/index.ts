@@ -5,6 +5,7 @@ export * from './environmentContract';
 export * from './euphoriaRuntime';
 export * from './fxContract';
 export * from './performanceBudget';
+export * from './PixiIsoRenderer';
 export * from './projection';
 export * from './rendererContract';
 export * from './sceneModel';
