@@ -1,0 +1,48 @@
+name: ISO Next Bootstrap
+
+on:
+  push:
+    branches:
+      - feat/moria-iso-next
+    paths:
+      - .github/workflows/iso-next-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/moria-iso-next
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install current dependency tree
+        run: npm ci
+      - name: Apply non-breaking audit fixes
+        run: npm audit fix
+      - name: Pin PixiJS
+        run: npm install --save-exact pixi.js@8.21.0
+      - name: Verify audit
+        run: npm audit
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Commit deterministic dependency update
+        run: |
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "Dependency tree already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "build(iso-next): fix audit and pin PixiJS 8.21.0"
+          git push origin HEAD:feat/moria-iso-next
