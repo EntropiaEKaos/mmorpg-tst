@@ -1,9 +1,9 @@
 name: ISO Next Bootstrap
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/moria-iso-next
+      - master
     paths:
       - .github/workflows/iso-next-bootstrap.yml
 
@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   bootstrap:
+    if: github.event.pull_request.head.ref == 'feat/moria-iso-next'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +28,7 @@ jobs:
         run: npm ci
       - name: Apply non-breaking audit fixes
         run: npm audit fix
-      - name: Pin PixiJS
+      - name: Pin PixiJS 8.21.0
         run: npm install --save-exact pixi.js@8.21.0
       - name: Verify audit
         run: npm audit
