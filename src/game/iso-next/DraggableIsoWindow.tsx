@@ -1,0 +1,11 @@
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
+
+type Point={x:number;y:number};
+const clamp=(n:number,min:number,max:number)=>Math.max(min,Math.min(max,n));
+export function DraggableIsoWindow({id,title,initial,children,width=360,onClose}:{id:string;title:string;initial:Point;children:ReactNode;width?:number;onClose?:()=>void}){
+ const storageKey=`moria:iso-window:${id}`;const[pos,setPos]=useState<Point>(()=>{try{const raw=localStorage.getItem(storageKey);return raw?JSON.parse(raw):initial}catch{return initial}});const drag=useRef<{dx:number;dy:number}|null>(null);
+ useEffect(()=>{const move=(e:PointerEvent)=>{if(!drag.current)return;setPos({x:clamp(e.clientX-drag.current.dx,0,Math.max(0,window.innerWidth-width)),y:clamp(e.clientY-drag.current.dy,0,Math.max(0,window.innerHeight-80))});};const up=()=>{drag.current=null;};window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);return()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);};},[width]);
+ useEffect(()=>{try{localStorage.setItem(storageKey,JSON.stringify(pos))}catch{}},[pos,storageKey]);
+ const shell:CSSProperties={position:'absolute',left:pos.x,top:pos.y,width,zIndex:30,borderRadius:16,background:'linear-gradient(180deg,rgba(14,20,29,.97),rgba(6,9,14,.95))',border:'1px solid rgba(238,203,126,.35)',boxShadow:'0 22px 60px rgba(0,0,0,.55)',color:'#f4e8c8',fontFamily:'system-ui',backdropFilter:'blur(14px)',overflow:'hidden'};
+ return <section data-iso-window={id} style={shell}><header onPointerDown={e=>{drag.current={dx:e.clientX-pos.x,dy:e.clientY-pos.y};e.currentTarget.setPointerCapture?.(e.pointerId);}} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 11px',cursor:'move',userSelect:'none',borderBottom:'1px solid rgba(238,203,126,.16)',background:'rgba(255,255,255,.035)'}}><strong>{title}</strong><span style={{display:'flex',gap:6}}><button title="Restaurar posição" onPointerDown={e=>e.stopPropagation()} onClick={()=>setPos(initial)}>↺</button>{onClose&&<button onPointerDown={e=>e.stopPropagation()} onClick={onClose}>×</button>}</span></header><div style={{maxHeight:'70vh',overflow:'auto'}}>{children}</div></section>;
+}
