@@ -2,6 +2,8 @@ import type { IsoVisualEntity } from './worldAdapter';
 
 export const ISO_LAYER_ORDER = ['terrain', 'structures', 'entities', 'foreground', 'lighting', 'fx'] as const;
 export type IsoLayerName = (typeof ISO_LAYER_ORDER)[number];
+export type IsoMotionState = 'idle' | 'walk';
+export type IsoFacing = 'nw' | 'ne' | 'sw' | 'se';
 
 export type IsoSceneNode = {
   id: string;
@@ -11,6 +13,9 @@ export type IsoSceneNode = {
   y: number;
   visualId?: string;
   opacity?: number;
+  motion?: IsoMotionState;
+  facing?: IsoFacing;
+  animationPhase?: number;
 };
 
 export type IsoSceneFrame = Record<IsoLayerName, IsoSceneNode[]>;
@@ -30,6 +35,9 @@ export function buildEntitySceneFrame(entities: readonly IsoVisualEntity[]): Iso
     x: entity.screen.x,
     y: entity.screen.y,
     visualId: entity.visualId,
+    motion: 'idle',
+    facing: 'se',
+    animationPhase: 0,
   }));
   return frame;
 }
