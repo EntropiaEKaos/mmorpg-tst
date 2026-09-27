@@ -20,6 +20,12 @@ export interface RenderState {
   worldClock?: any;
 }
 
+function publishIsoSnapshot(snapshot: ServerSnapshot) {
+  if (typeof window === 'undefined') return;
+  (window as Window & { __MORIA_AUTHORITATIVE_SNAPSHOT__?: ServerSnapshot }).__MORIA_AUTHORITATIVE_SNAPSHOT__ = snapshot;
+  window.dispatchEvent(new CustomEvent('moria:authoritative-snapshot', { detail: snapshot }));
+}
+
 class ServerSyncManager {
   private authed = false;
   private currentMapId = 'eldoria';
@@ -72,7 +78,7 @@ class ServerSyncManager {
   sendSocial(action: string, payload: Record<string, unknown> = {}) { if (!this.isActive() || !action) return; sendIntent({ type: 'social', payload: { action, ...payload } }); }
   sendInteraction(targetEntityId: string, kind: string) { if (!this.isActive() || !targetEntityId || !kind) return false; sendIntent({ type: 'interaction', payload: { targetEntityId, kind } }); return true; }
 
-  updateSnapshot(snap: ServerSnapshot) { this.authed = true; setSnapshot(snap); this.currentMapId = snap.player.mapId; }
+  updateSnapshot(snap: ServerSnapshot) { this.authed = true; setSnapshot(snap); this.currentMapId = snap.player.mapId; publishIsoSnapshot(snap); }
   getRenderState(): RenderState | null { const snap = getSnapshot(); if (!snap) return null; return { player: snap.player, nearbyPlayers: snap.nearbyPlayers, monsters: snap.monsters, groundItems: snap.groundItems, events: snap.events || [], official: snap.official || null, social: snap.social || null }; }
 
   processEvents(
