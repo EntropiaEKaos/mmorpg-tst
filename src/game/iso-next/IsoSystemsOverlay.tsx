@@ -7,7 +7,7 @@ import { dispatchIsoAction, selectIsoGameplaySnapshot, type IsoGameplaySnapshot 
 
 type Tab='quests'|'progress'|'world'|'social';
 const EMPTY:IsoGameplaySnapshot={inventory:[],equipment:{},groundItems:[],activeQuests:[],tasks:[],talents:[],professions:[],reputation:{},mounts:[]};
-const KEY_TO_WINDOW=new Map(ISO_LEGACY_WINDOWS.map(([id,,key])=>[`Key${key}`,id] as const));
+const KEY_TO_WINDOW:Map<string,LegacyWindowId>=new Map(ISO_LEGACY_WINDOWS.map(([id,,key])=>[`Key${key}`,id]));
 export function IsoSystemsOverlay(){
  const[state,setState]=useState<IsoGameplaySnapshot>(EMPTY);const[rawSnapshot,setRawSnapshot]=useState<any>({});const[showInventory,setShowInventory]=useState(false);const[showDock,setShowDock]=useState(false);const[open,setOpen]=useState<Set<LegacyWindowId>>(new Set());const[tab,setTab]=useState<Tab>('quests');const[targetId,setTargetId]=useState('');
  const toggle=(id:LegacyWindowId)=>setOpen(current=>{const next=new Set(current);next.has(id)?next.delete(id):next.add(id);return next;});
