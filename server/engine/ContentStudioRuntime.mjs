@@ -3,10 +3,10 @@
 // mature legacy studio without replacing or shrinking its schemas.
 export {
   CONTENT_STUDIO_SCHEMAS,
-  collectContentDiagnostics,
 } from './ContentStudio.mjs';
 
 export {
-  getContentStudioSchemaWithIso as getContentStudioSchema,
-  validateStudioRecordWithIso as validateStudioRecord,
+  getContentStudioSchema,
+  validateStudioRecord,
+  collectContentDiagnostics,
 } from './ContentStudioIsoFacade.mjs';
