@@ -1,49 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ELDORIA_ISO_FIXTURE } from './eldoriaFixture';
 import { EuphoriaPresentationRuntime } from './euphoriaRuntime';
 import { PixiIsoRenderer } from './PixiIsoRenderer';
+import type { InteractionState } from './interactionLayer';
 
-export function IsoNextPrototype() {
-  const hostRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const runtime = new EuphoriaPresentationRuntime();
-    const renderer = new PixiIsoRenderer();
-    let alive = true;
-
-    void runtime.mount(renderer, host, {
-      width: host.clientWidth || 1280,
-      height: host.clientHeight || 720,
-      devicePixelRatio: window.devicePixelRatio,
-    }).then(() => {
-      if (!alive) return;
-      runtime.updateAuthoritativeEntities(ELDORIA_ISO_FIXTURE);
-      runtime.followEntity('preview-player');
-      runtime.zoom(1.1);
-    });
-
-    const onResize = () => runtime.resize({
-      width: host.clientWidth || window.innerWidth,
-      height: host.clientHeight || window.innerHeight,
-      devicePixelRatio: window.devicePixelRatio,
-    });
-    window.addEventListener('resize', onResize);
-    return () => {
-      alive = false;
-      window.removeEventListener('resize', onResize);
-      runtime.destroy();
-    };
-  }, []);
-
-  return (
-    <section style={{ position: 'relative', width: '100%', minHeight: '720px', overflow: 'hidden', background: '#10151d' }}>
-      <div ref={hostRef} data-testid="iso-next-canvas" style={{ position: 'absolute', inset: 0 }} />
-      <div style={{ position: 'absolute', left: 20, top: 20, padding: '10px 14px', borderRadius: 12, background: 'rgba(8,12,18,.72)', color: '#f4e8c8', fontFamily: 'system-ui', pointerEvents: 'none' }}>
-        <strong>Mor'ia ISO Next</strong><br />
-        <small>Eldoria • Euphoria vertical slice</small>
-      </div>
-    </section>
-  );
+const ROLE:Record<string,string>={'npc-villager':'Habitante de Eldoria','npc-guard':'Guarda de Eldoria','npc-merchant':'Mercador','forest-wisp':'Wisp da Floresta','moss-boar':'Javali Musgoso','shadow-wolf':'Lobo das Sombras'};
+export function IsoNextPrototype(){
+ const hostRef=useRef<HTMLDivElement>(null);const runtimeRef=useRef<EuphoriaPresentationRuntime|null>(null);const[interaction,setInteraction]=useState<InteractionState>({candidate:null,inRange:false});
+ useEffect(()=>{const host=hostRef.current;if(!host)return;const runtime=new EuphoriaPresentationRuntime();runtimeRef.current=runtime;const renderer=new PixiIsoRenderer();let alive=true;void runtime.mount(renderer,host,{width:host.clientWidth||1280,height:host.clientHeight||720,devicePixelRatio:window.devicePixelRatio}).then(()=>{if(!alive)return;runtime.updateAuthoritativeEntities(ELDORIA_ISO_FIXTURE);runtime.followEntity('preview-player');runtime.zoom(1.1);setInteraction(runtime.interactionState());});const uiTimer=window.setInterval(()=>{if(alive)setInteraction(runtime.interactionState());},100);const onResize=()=>runtime.resize({width:host.clientWidth||window.innerWidth,height:host.clientHeight||window.innerHeight,devicePixelRatio:window.devicePixelRatio});window.addEventListener('resize',onResize);return()=>{alive=false;window.clearInterval(uiTimer);window.removeEventListener('resize',onResize);runtime.destroy();runtimeRef.current=null;};},[]);
+ const candidate=interaction.candidate;const onInteract=()=>{const request=runtimeRef.current?.interactionRequest();if(!request)return;window.dispatchEvent(new CustomEvent('moria:interaction-intent',{detail:request}));};
+ return <section style={{position:'relative',width:'100%',minHeight:'720px',overflow:'hidden',background:'#10151d'}}><div ref={hostRef} data-testid="iso-next-canvas" style={{position:'absolute',inset:0}}/><div style={{position:'absolute',left:20,top:20,padding:'10px 14px',borderRadius:12,background:'rgba(8,12,18,.72)',color:'#f4e8c8',fontFamily:'system-ui',pointerEvents:'none'}}><strong>Mor'ia ISO Next</strong><br/><small>Eldoria • Euphoria vertical slice</small></div>{candidate&&<div data-testid="iso-interaction-prompt" style={{position:'absolute',left:'50%',bottom:34,transform:'translateX(-50%)',minWidth:260,padding:'12px 16px',border:'1px solid rgba(238,203,126,.42)',borderRadius:14,background:'rgba(8,12,18,.9)',boxShadow:'0 12px 36px rgba(0,0,0,.35)',color:'#f4e8c8',fontFamily:'system-ui',textAlign:'center'}}><div style={{fontSize:12,opacity:.72,letterSpacing:'.08em',textTransform:'uppercase'}}>{ROLE[candidate.visualId]??'Entidade'}</div><strong style={{display:'block',margin:'3px 0 8px',fontSize:15}}>{candidate.label}</strong><button type="button" onClick={onInteract} style={{border:'1px solid rgba(238,203,126,.55)',borderRadius:9,padding:'7px 13px',background:'rgba(196,143,61,.18)',color:'#ffe4a5',cursor:'pointer'}}>E · Interagir</button></div>}</section>;
 }
