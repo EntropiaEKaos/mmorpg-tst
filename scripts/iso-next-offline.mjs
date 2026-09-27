@@ -12,6 +12,7 @@ await mkdir(evidenceDir, { recursive: true });
 const server = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'preview', '--', '--host', '127.0.0.1', '--port', String(port)], {
   stdio: ['ignore', 'pipe', 'pipe'],
   env: { ...process.env },
+  detached: process.platform !== 'win32',
 });
 
 const waitForServer = async () => {
@@ -23,6 +24,29 @@ const waitForServer = async () => {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   throw new Error(`ISO preview did not become ready at ${base}`);
+};
+
+const stopServer = async () => {
+  if (server.exitCode !== null) return;
+  if (process.platform === 'win32') {
+    server.kill('SIGTERM');
+  } else {
+    try {
+      process.kill(-server.pid, 'SIGTERM');
+    } catch {
+      server.kill('SIGTERM');
+    }
+  }
+  await Promise.race([
+    new Promise(resolve => server.once('exit', resolve)),
+    new Promise(resolve => setTimeout(resolve, 3000)),
+  ]);
+  if (server.exitCode === null) {
+    if (process.platform === 'win32') server.kill('SIGKILL');
+    else {
+      try { process.kill(-server.pid, 'SIGKILL'); } catch { server.kill('SIGKILL'); }
+    }
+  }
 };
 
 let browser;
@@ -58,5 +82,5 @@ try {
   console.log('ISO Next offline visual gate passed.');
 } finally {
   await browser?.close();
-  server.kill('SIGTERM');
+  await stopServer();
 }
