@@ -15,6 +15,7 @@ class ServerSyncManager {
   private authed=false; private currentMapId='eldoria'; private lastProcessedEvents:any[]|null=null;
   authenticate(characterOrToken:string,characterOrVocation:string){let sessionToken=characterOrToken,characterName=characterOrVocation;if(characterOrToken.length<32){sessionToken=localStorage.getItem('moria_session_token')||'';characterName=characterOrToken;}if(!sessionToken||!characterName)return;sendAuth(sessionToken,characterName);}
   handleAuthOk(){this.authed=true;} handleAuthError(){this.authed=false;this.lastProcessedEvents=null;setSnapshot(null);}
+  reset(){this.authed=false;this.currentMapId='eldoria';this.lastProcessedEvents=null;setSnapshot(null);if(pendingLoadResponse){pendingLoadResponse(null);pendingLoadResponse=null;}}
   isActive():boolean{return isAuthoritative()&&this.authed&&getSnapshot()!==null;}
   uploadSave(_player:any,_inventory:any[]){if(!this.isActive())return;net.send({kind:'save',payload:{}});}
   requestServerSave():Promise<PlayerSave|null>{return new Promise(resolve=>{pendingLoadResponse=resolve;net.send({kind:'load_request',payload:{}});setTimeout(()=>{if(pendingLoadResponse){pendingLoadResponse(null);pendingLoadResponse=null;}},3000);});}
