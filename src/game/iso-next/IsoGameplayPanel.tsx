@@ -1,5 +1,5 @@
 import { dispatchIsoAction, type IsoGameplaySnapshot } from './isoGameplayActions';
-import { IsoItemTooltip } from './IsoLegacyTooltips';
+import { IsoItemTooltip } from './IsoTooltip';
 
 type ItemLike = { id?: string; itemId?: string; name?: string; icon?: string; quantity?: number; qty?: number; slot?: string; rarity?: string; description?: string; value?: number; price?: number; level?: number; equipment?: Record<string, unknown>; stats?: Record<string, unknown> };
 type GroundLike = ItemLike & { groundId?: string };
