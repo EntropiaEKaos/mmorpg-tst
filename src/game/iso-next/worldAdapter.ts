@@ -5,16 +5,15 @@ export type AuthoritativeVisualEntity = {
   kind: 'player' | 'npc' | 'monster' | 'prop';
   world: WorldPoint;
   visualId?: string;
+  /** Presentation-only fingerprint derived from authoritative equipment. */
+  visualSignature?: string;
 };
 
 export type IsoVisualEntity = AuthoritativeVisualEntity & {
   screen: ScreenPoint;
 };
 
-/**
- * Presentation-only adapter. It does not mutate authoritative coordinates and
- * contains no movement, collision, combat, loot or targeting rules.
- */
+/** Presentation-only adapter. It never mutates server-owned gameplay data. */
 export function adaptAuthoritativeEntities(
   entities: readonly AuthoritativeVisualEntity[],
 ): IsoVisualEntity[] {
