@@ -18,8 +18,19 @@ jobs:
     if: github.event.pull_request.head.ref == 'feat/moria-iso-next'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
+    env:
+      ISO_EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Prove checkout identity
+        run: |
+          echo "Expected PR HEAD: $ISO_EXPECTED_SHA"
+          echo "Checked out HEAD: $(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "$ISO_EXPECTED_SHA"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -43,9 +54,11 @@ jobs:
           test -s docs/screenshots/iso-next/iso-next-eldoria-day.png
           test -s docs/screenshots/iso-next/iso-next-eldoria-narrow.png
           test -s docs/screenshots/iso-next/offline-report.json
-          node -e "const r=require('./docs/screenshots/iso-next/offline-report.json'); if(!r.passed || r.consoleErrors.length) process.exit(1)"
+          node -e "const r=require('./docs/screenshots/iso-next/offline-report.json'); if(!r.passed || r.consoleErrors.length || r.testedSha!==process.env.ISO_EXPECTED_SHA || !r.threeCanvasMounted) process.exit(1)"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: iso-next-visual-evidence-${{ github.event.pull_request.head.sha }}
           path: docs/screenshots/iso-next/
+          if-no-files-found: warn
           retention-days: 90
