@@ -59,8 +59,12 @@ jobs:
           test -s docs/screenshots/iso-next/character-warrior.png
           test -s docs/screenshots/iso-next/character-mage.png
           test -s docs/screenshots/iso-next/character-ranger.png
+          test -s docs/screenshots/iso-next/bestiary-alpha-shadow-wolf.png
+          test -s docs/screenshots/iso-next/bestiary-elder-forest-wisp.png
+          test -s docs/screenshots/iso-next/boss-thorn-colossus-telegraph.png
+          test -s docs/screenshots/iso-next/boss-thorn-colossus-danger.png
           test -s docs/screenshots/iso-next/offline-report.json
-          node -e "const r=require('./docs/screenshots/iso-next/offline-report.json'); if(!r.passed || r.consoleErrors.length || r.testedSha!==process.env.ISO_EXPECTED_SHA || !r.threeCanvasMounted || !Array.isArray(r.tooltipEvidence) || r.tooltipEvidence.length!==3 || !Array.isArray(r.characterEvidence) || r.characterEvidence.length!==3) process.exit(1)"
+          node -e "const r=require('./docs/screenshots/iso-next/offline-report.json'); if(!r.passed || r.consoleErrors.length || r.testedSha!==process.env.ISO_EXPECTED_SHA || !r.threeCanvasMounted || !Array.isArray(r.tooltipEvidence) || r.tooltipEvidence.length!==3 || !Array.isArray(r.characterEvidence) || r.characterEvidence.length!==3 || !Array.isArray(r.bestiaryEvidence) || r.bestiaryEvidence.length!==4 || !r.bossHudVisible || !r.dangerTelegraphVisible) process.exit(1)"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
