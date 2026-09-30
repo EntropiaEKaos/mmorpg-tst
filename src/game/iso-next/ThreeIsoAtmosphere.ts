@@ -17,20 +17,24 @@ export class ThreeIsoAtmosphere {
     canvas.dataset.testid='iso-three-atmosphere';
     canvas.dataset.rendererState='mounting';
     canvas.setAttribute('aria-label','Three.js atmospheric presentation layer');
-    Object.assign(canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',mixBlendMode:'screen',opacity:'0.82'});
+    // Pixi owns z=0. Three deliberately composites above it at z=1; React HUD remains outside this host.
+    Object.assign(canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',zIndex:'1',pointerEvents:'none',mixBlendMode:'screen',opacity:'0.82'});
     host.appendChild(canvas);
     host.dataset.threeMount='canvas-attached';
     try {
-      const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true, powerPreference:'high-performance' });
+      const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true, powerPreference:'high-performance',premultipliedAlpha:true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      renderer.setClearColor(0x000000,0);
+      renderer.autoClear=true;
       const width=host.clientWidth || 1280,height=host.clientHeight || 720;
       renderer.setSize(width,height,false);
       this.renderer=renderer;
       canvas.dataset.rendererState='active';
+      canvas.dataset.composite='pixi-under-three';
       host.dataset.threeMount='renderer-active';
       this.camera.position.z=5;
       const geometry=new THREE.PlaneGeometry(2,2);
-      const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,uniforms:{uTime:{value:0},uResolution:{value:new THREE.Vector2(width,height)}},vertexShader:'void main(){gl_Position=vec4(position,1.0);}',fragmentShader:`
+      const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uResolution:{value:new THREE.Vector2(width,height)}},vertexShader:'void main(){gl_Position=vec4(position,1.0);}',fragmentShader:`
 uniform float uTime;
 uniform vec2 uResolution;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
@@ -65,7 +69,7 @@ void main(){
  color+=violet*arcaneGlow*.11+cyan*arcaneGlow*.035;alpha+=arcaneGlow*.018;
  float edgeMist=fbm(vec2(uv.x*3.2+t*.2,uv.y*4.8-t*.12))*smoothstep(.58,.98,length(uv-.5)*1.25);
  color+=vec3(.13,.29,.23)*edgeMist*.12;alpha+=edgeMist*.022;
- gl_FragColor=vec4(color,alpha*vignette);
+ gl_FragColor=vec4(color,clamp(alpha*vignette,0.,.42));
 }`});
       this.material=material;
       this.scene.add(new THREE.Mesh(geometry,material));
