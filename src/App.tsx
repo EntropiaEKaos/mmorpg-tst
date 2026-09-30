@@ -3,6 +3,7 @@ import LoginScreen from './components/LoginScreen';
 import GameScreen from './components/GameScreen';
 import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge, { LocaleToggle } from './components/LocaleBridge';
+import { IsoNextPrototype } from './game/iso-next/IsoNextPrototype';
 import { t } from './i18n';
 import type { Account } from './game/types';
 import { logoutSession, resumeSession } from './game/auth';
@@ -10,9 +11,17 @@ import { dpsMeter } from './game/dpsMeter';
 
 dpsMeter.start();
 
+function isIsoNextPrototypeRoute() {
+  return window.location.pathname === '/prototype/isometric' || new URLSearchParams(window.location.search).get('isoNext') === '1';
+}
+
 export default function App() {
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
+
+  if (isIsoNextPrototypeRoute()) {
+    return <IsoNextPrototype />;
+  }
 
   useEffect(() => {
     let cancelled = false;

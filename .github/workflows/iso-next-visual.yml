@@ -1,0 +1,79 @@
+name: ISO Next Visual Evidence
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/game/iso-next/**'
+      - 'scripts/iso-next-offline.mjs'
+      - '.github/workflows/iso-next-visual.yml'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  visual-evidence:
+    if: github.event.pull_request.head.ref == 'feat/moria-iso-next'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      ISO_EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Prove checkout identity
+        run: |
+          echo "Expected PR HEAD: $ISO_EXPECTED_SHA"
+          echo "Checked out HEAD: $(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "$ISO_EXPECTED_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install validated client
+        run: npm ci
+      - name: Audit
+        run: npm audit
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Install Chromium harness
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Run isolated offline visual gate
+        run: npm run test:iso-offline
+      - name: Validate evidence files
+        run: |
+          test -s docs/screenshots/iso-next/iso-next-eldoria-day.png
+          test -s docs/screenshots/iso-next/iso-next-eldoria-narrow.png
+          test -s docs/screenshots/iso-next/tooltip-spell.png
+          test -s docs/screenshots/iso-next/tooltip-item.png
+          test -s docs/screenshots/iso-next/tooltip-stat.png
+          test -s docs/screenshots/iso-next/character-warrior.png
+          test -s docs/screenshots/iso-next/character-mage.png
+          test -s docs/screenshots/iso-next/character-ranger.png
+          test -s docs/screenshots/iso-next/character-identity-lineup.png
+          test -s docs/screenshots/iso-next/bestiary-alpha-shadow-wolf.png
+          test -s docs/screenshots/iso-next/bestiary-elder-forest-wisp.png
+          test -s docs/screenshots/iso-next/bestiary-briar-wolf.png
+          test -s docs/screenshots/iso-next/bestiary-mossback-boar.png
+          test -s docs/screenshots/iso-next/bestiary-verdant-marauder.png
+          test -s docs/screenshots/iso-next/bestiary-old-grove-colossus.png
+          test -s docs/screenshots/iso-next/boss-thorn-colossus-telegraph.png
+          test -s docs/screenshots/iso-next/boss-thorn-colossus-danger.png
+          test -s docs/screenshots/iso-next/offline-report.json
+          node -e "const r=require('./docs/screenshots/iso-next/offline-report.json'); if(!r.passed || r.consoleErrors.length || r.testedSha!==process.env.ISO_EXPECTED_SHA || !r.threeCanvasMounted || !Array.isArray(r.tooltipEvidence) || r.tooltipEvidence.length!==3 || !Array.isArray(r.characterEvidence) || r.characterEvidence.length!==3 || r.characterLineupEvidence!=='character-identity-lineup.png' || !Array.isArray(r.bestiaryEvidence) || r.bestiaryEvidence.length!==8 || !r.bossHudVisible || !r.dangerTelegraphVisible) process.exit(1)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iso-next-visual-evidence-${{ github.event.pull_request.head.sha }}
+          path: docs/screenshots/iso-next/
+          if-no-files-found: warn
+          retention-days: 90
