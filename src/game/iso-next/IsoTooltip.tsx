@@ -4,7 +4,7 @@ import type { Player, Spell } from '../types';
 
 type AnyRecord=Record<string,any>;
 type AnyItem={name?:string;icon?:string;description?:string;value?:number;price?:number;rarity?:string;level?:number;slot?:string;equipment?:AnyRecord;stats?:AnyRecord};
-type StatBreakdown=Array<{label:string;value:number|string}>;
+type StatBreakdown=Array<{label:string;value:number;color:string}>;
 const num=(value:unknown,fallback=0)=>Number.isFinite(Number(value))?Number(value):fallback;
 
 export function normalizeIsoItem(item:AnyItem={}){
