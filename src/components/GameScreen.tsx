@@ -2569,7 +2569,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               boxShadow: 'none',
             }}
           />
-          <LegacyEldoriaHybridOverlay state={buildLiveVisualState({player:playerRef.current,monsters:monstersRef.current,npcs:npcsRef.current,serverPlayers:serverPlayersRef.current,camera:cameraRef.current,tileSize:TILE_SIZE,width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE,daylight:worldClockRef.current.daylight,weather,visualProfile:currentMapId})} />
+          <LegacyEldoriaHybridOverlay state={buildLiveVisualState({player:playerRef.current,monsters:monstersRef.current,npcs:npcsRef.current,serverPlayers:serverPlayersRef.current,camera:cameraRef.current,tileSize:TILE_SIZE,width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE,daylight:worldClockRef.current.daylight,weather,visualProfile:currentMapId})} getState={()=>buildLiveVisualState({player:playerRef.current,monsters:monstersRef.current,npcs:npcsRef.current,serverPlayers:serverPlayersRef.current,camera:cameraRef.current,tileSize:TILE_SIZE,width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE,daylight:worldClockRef.current.daylight,weather,visualProfile:currentMapIdRef.current})} />
           <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
 
           <div className="moria-panel absolute bottom-4 right-4 z-20 flex flex-col gap-1 rounded-xl p-1.5">
