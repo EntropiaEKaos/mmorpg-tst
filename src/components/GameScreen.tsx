@@ -55,7 +55,7 @@ import { getCityBuildings, drawCityDecor, drawCityTileOverlay } from '../game/ci
 import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/render';
 import Weather from './Weather';
 import LegacyEldoriaHybridOverlay from '../visual/LegacyEldoriaHybridOverlay';
-import { buildLiveEntityVisuals } from '../visual/liveEntityVisuals';
+import { buildLiveVisualState } from '../visual/liveEntityVisuals';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawWorldCinematicPass } from '../game/worldVisualRevamp927';
@@ -2569,7 +2569,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               boxShadow: 'none',
             }}
           />
-          <LegacyEldoriaHybridOverlay state={{width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE,daylight:worldClockRef.current.daylight,raining:weather!=='clear',lightning:weather==='storm',visualProfile:currentMapId,entities:buildLiveEntityVisuals({player:playerRef.current,monsters:monstersRef.current,npcs:npcsRef.current,serverPlayers:serverPlayersRef.current,camera:cameraRef.current,tileSize:TILE_SIZE,width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE})}} />
+          <LegacyEldoriaHybridOverlay state={buildLiveVisualState({player:playerRef.current,monsters:monstersRef.current,npcs:npcsRef.current,serverPlayers:serverPlayersRef.current,camera:cameraRef.current,tileSize:TILE_SIZE,width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE,daylight:worldClockRef.current.daylight,weather,visualProfile:currentMapId})} />
           <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
 
           <div className="moria-panel absolute bottom-4 right-4 z-20 flex flex-col gap-1 rounded-xl p-1.5">
