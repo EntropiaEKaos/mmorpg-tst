@@ -4,7 +4,7 @@
 // Persistence and network orchestration stay in OfficialSystems/GameState.
 // ===================================================================
 
-import { ACHIEVEMENTS } from './OfficialCatalogs.mjs';
+import { ACHIEVEMENTS } from './OfficialAchievementsCatalog.mjs';
 
 const clamp = (value, min, max, fallback = min) => {
   const n = Number(value);
@@ -74,9 +74,18 @@ export class OfficialProgressionDomain {
     const unlocked = [];
     for (const achievement of ACHIEVEMENTS) {
       if (s.achievements.includes(achievement.id) || !achievement.test(player)) continue;
+      const reward = achievement.reward || {};
       s.achievements.push(achievement.id);
-      s.coins += achievement.coins;
-      unlocked.push({ id: achievement.id, name: achievement.name, icon: achievement.icon, coins: achievement.coins });
+      s.coins += int(achievement.coins, 0, 1_000_000, 0);
+      const xp = int(reward.xp, 0, 100_000_000, 0);
+      const gold = int(reward.gold, 0, 100_000_000, 0);
+      if (xp) player.xp = int(player.xp, 0, 1_000_000_000, 0) + xp;
+      if (gold) {
+        player.gold = int(player.gold, 0, 1_000_000_000, 0) + gold;
+        if (!player.stats || typeof player.stats !== 'object') player.stats = {};
+        player.stats.goldEarned = int(player.stats.goldEarned, 0, 1_000_000_000, 0) + gold;
+      }
+      unlocked.push({ id: achievement.id, name: achievement.name, icon: achievement.icon, coins: achievement.coins || 0, reward: { ...reward } });
     }
     return unlocked;
   }
