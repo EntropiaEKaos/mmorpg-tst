@@ -1,5 +1,5 @@
 import type { Monster, NPC, Player } from '../game/types';
-import type { LegacyEldoriaVisualEntity } from './LegacyEldoriaHybridOverlay';
+import type { LegacyEldoriaVisualEntity, LegacyEldoriaVisualState } from './LegacyEldoriaHybridOverlay';
 
 export interface VisualCamera { x: number; y: number }
 export interface VisualWorldPoint { x: number; y: number }
@@ -94,4 +94,8 @@ export function buildLiveEntityVisuals({
   }
 
   return entities;
+}
+
+export function buildLiveVisualState(input: BuildLiveEntityVisualsInput & { daylight: number; weather: string; visualProfile: string }): LegacyEldoriaVisualState {
+  return { width: input.width, height: input.height, daylight: input.daylight, raining: input.weather !== 'clear', lightning: input.weather === 'storm', visualProfile: input.visualProfile, entities: buildLiveEntityVisuals(input) };
 }
