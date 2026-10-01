@@ -21,7 +21,7 @@ export function projectLegacyEldoriaEntities(
 
   const playerPoint = project(player.pos.x, player.pos.y);
   const result: LegacyEldoriaVisualEntity[] = [{
-    id: `player:${player.id ?? 'local'}`,
+    id: 'player:local',
     kind: 'player',
     x: playerPoint.x,
     y: playerPoint.y,
