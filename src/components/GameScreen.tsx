@@ -55,6 +55,7 @@ import { getCityBuildings, drawCityDecor, drawCityTileOverlay } from '../game/ci
 import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/render';
 import Weather from './Weather';
 import LegacyEldoriaHybridOverlay from '../visual/LegacyEldoriaHybridOverlay';
+import { buildLiveEntityVisuals } from '../visual/liveEntityVisuals';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawWorldCinematicPass } from '../game/worldVisualRevamp927';
@@ -2568,17 +2569,27 @@ export default function GameScreen({ account, onLogout }: Props) {
               boxShadow: 'none',
             }}
           />
-          {currentMapId === 'eldoria' && (
-            <LegacyEldoriaHybridOverlay
-              state={{
+          <LegacyEldoriaHybridOverlay
+            state={{
+              width: VIEW_W * TILE_SIZE,
+              height: VIEW_H * TILE_SIZE,
+              daylight: worldClockRef.current.daylight,
+              raining: weather === 'rain' || weather === 'storm',
+              lightning: weather === 'storm',
+              visualProfile: currentMapId,
+              elevationSeed: (MAPS[currentMapId] || MAPS.eldoria).seed || 17,
+              entities: buildLiveEntityVisuals({
+                player: playerRef.current,
+                monsters: monstersRef.current,
+                npcs: npcsRef.current,
+                serverPlayers: serverPlayersRef.current,
+                camera: cameraRef.current,
+                tileSize: TILE_SIZE,
                 width: VIEW_W * TILE_SIZE,
                 height: VIEW_H * TILE_SIZE,
-                daylight: worldClockRef.current.daylight,
-                raining: weather === 'rain' || weather === 'storm',
-                lightning: weather === 'storm',
-              }}
-            />
-          )}
+              }),
+            }}
+          />
           <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
 
           {/* Zoom controls */}
