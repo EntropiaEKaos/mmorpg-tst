@@ -54,8 +54,7 @@ import { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeSe
 import { getCityBuildings, drawCityDecor, drawCityTileOverlay } from '../game/cityPresentation';
 import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/render';
 import Weather from './Weather';
-import LegacyEldoriaHybridOverlay from '../visual/LegacyEldoriaHybridOverlay';
-import { buildLiveVisualState } from '../visual/liveEntityVisuals';
+import LiveWorldVisualOverlay from '../visual/LiveWorldVisualOverlay';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawWorldCinematicPass } from '../game/worldVisualRevamp927';
@@ -2569,7 +2568,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               boxShadow: 'none',
             }}
           />
-          <LegacyEldoriaHybridOverlay state={buildLiveVisualState({player:playerRef.current,monsters:monstersRef.current,npcs:npcsRef.current,serverPlayers:serverPlayersRef.current,camera:cameraRef.current,tileSize:TILE_SIZE,width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE,daylight:worldClockRef.current.daylight,weather,visualProfile:currentMapId})} getState={()=>buildLiveVisualState({player:playerRef.current,monsters:monstersRef.current,npcs:npcsRef.current,serverPlayers:serverPlayersRef.current,camera:cameraRef.current,tileSize:TILE_SIZE,width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE,daylight:worldClockRef.current.daylight,weather,visualProfile:currentMapIdRef.current})} />
+          <LiveWorldVisualOverlay playerRef={playerRef} monstersRef={monstersRef} npcsRef={npcsRef} serverPlayersRef={serverPlayersRef} cameraRef={cameraRef} mapRef={currentMapIdRef} mapId={currentMapId} tileSize={TILE_SIZE} width={VIEW_W*TILE_SIZE} height={VIEW_H*TILE_SIZE} daylight={worldClockRef.current.daylight} weather={weather}/>
           <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
 
           <div className="moria-panel absolute bottom-4 right-4 z-20 flex flex-col gap-1 rounded-xl p-1.5">
