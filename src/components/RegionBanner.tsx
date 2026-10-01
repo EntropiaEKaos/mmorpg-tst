@@ -2,7 +2,6 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { GameMap } from '../game/maps';
 import { ATMOSPHERE_PROFILES, type WorldWeather } from '../game/worldAtmosphere';
 import { CINEMATIC_EVENT_NAME, type CinematicRewardDescriptor } from '../game/cinematicRewards';
-import LegacyEldoriaHybridOverlay from '../visual/LegacyEldoriaHybridOverlay';
 import { t as tr } from '../i18n';
 
 interface Props { map: GameMap; weather: WorldWeather; }
@@ -24,7 +23,6 @@ function RegionBannerInner({ map, weather }: Props) {
     return()=>{window.removeEventListener(CINEMATIC_EVENT_NAME,onCinematic);if(timerRef.current!==null)window.clearTimeout(timerRef.current);};
   },[]);
   return <>
-    {map.id !== 'eldoria' && <LegacyEldoriaHybridOverlay state={{width:992,height:608,daylight:.78,raining:weather==='rain'||weather==='storm',lightning:weather==='storm',visualProfile,elevationSeed:map.seed||17}} />}
     <div className="pointer-events-none absolute inset-0 z-[6] overflow-hidden" data-global-region-fx={visualProfile}>
       <div className="absolute inset-0 opacity-40" style={{background:`radial-gradient(circle at 50% 38%, ${map.cityAccent}22, transparent 38%), linear-gradient(180deg, ${map.cityAccent}0d, transparent 44%, rgba(0,0,0,.18))`}} />
       <div className="absolute inset-x-0 top-0 h-[28%] opacity-30" style={{background:`linear-gradient(180deg, ${map.cityAccent}24, transparent)`}} />
