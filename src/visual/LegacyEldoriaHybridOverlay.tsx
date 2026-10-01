@@ -2,135 +2,37 @@ import { useEffect, useRef } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 import * as THREE from 'three';
 
-export interface LegacyEldoriaVisualEntity {
-  id: string;
-  kind: 'player' | 'npc' | 'monster';
-  x: number;
-  y: number;
-  name?: string;
-  vocation?: string;
-  hostile?: boolean;
+export interface LegacyEldoriaVisualEntity { id:string; kind:'player'|'npc'|'monster'; x:number; y:number; name?:string; vocation?:string; hostile?:boolean }
+export interface LegacyEldoriaVisualState { width:number; height:number; daylight:number; raining:boolean; lightning:boolean; entities?:LegacyEldoriaVisualEntity[] }
+
+function drawCartoonEntity(g:Graphics,e:LegacyEldoriaVisualEntity,t:number){
+  g.clear(); const bob=Math.sin(t*.004+e.x*.07)*1.7, player=e.kind==='player', monster=e.kind==='monster';
+  const body=player?0x397de5:monster?0xa8324d:0xd79a35, trim=player?0xa8e5ff:monster?0xff8395:0xffe5a8, skin=monster?0x65434d:0xf0bf94;
+  g.ellipse(0,18,monster?16:13,5).fill({color:0x05070b,alpha:.38});
+  if(player){ g.circle(0,-2+bob,17).fill({color:0x5cc8ff,alpha:.08}); g.circle(0,-2+bob,14).stroke({width:1.5,color:0x83dcff,alpha:.24}); }
+  g.roundRect(-10,-4+bob,20,24,7).fill({color:0x111827}).stroke({width:3,color:0x080b12,alpha:.96});
+  g.roundRect(-7,-2+bob,14,18,5).fill({color:body}).stroke({width:2,color:trim,alpha:.92});
+  g.circle(0,-12+bob,monster?9:8).fill({color:skin}).stroke({width:3,color:0x080b12});
+  g.circle(-3,-13+bob,1.3).fill({color:0xffffff}); g.circle(3,-13+bob,1.3).fill({color:0xffffff});
+  if(player){ g.moveTo(-9,1+bob).lineTo(-16,13+bob).lineTo(-8,9+bob).fill({color:0x17345f}); g.moveTo(9,2+bob).lineTo(16,-8+bob).stroke({width:3,color:0xe5f4ff}); g.circle(16,-9+bob,2.5).fill({color:0x7dd3fc}); }
+  else if(monster){ g.moveTo(-7,-18+bob).lineTo(-12,-25+bob).lineTo(-2,-20+bob).fill({color:0x9b3147}); g.moveTo(7,-18+bob).lineTo(12,-25+bob).lineTo(2,-20+bob).fill({color:0x9b3147}); }
+  else { g.roundRect(-11,2+bob,5,13,2).fill({color:0x5b3a22}); }
 }
 
-/** Visual-only state resolved by the legacy game. No gameplay authority lives here. */
-export interface LegacyEldoriaVisualState {
-  width: number;
-  height: number;
-  daylight: number;
-  raining: boolean;
-  lightning: boolean;
-  entities?: LegacyEldoriaVisualEntity[];
-}
-
-function drawCartoonEntity(g: Graphics, entity: LegacyEldoriaVisualEntity, t: number) {
-  g.clear();
-  const bob = Math.sin(t * 0.004 + entity.x * 0.07) * 1.5;
-  const player = entity.kind === 'player';
-  const monster = entity.kind === 'monster';
-  const body = player ? 0x3b82f6 : monster ? 0xb73b52 : 0xd7a53b;
-  const trim = player ? 0x9bd7ff : monster ? 0xff8798 : 0xffe19a;
-  const skin = monster ? 0x73505a : 0xe8b98f;
-
-  // Soft ground shadow, bold silhouette and exaggerated proportions create the new cartoon read.
-  g.ellipse(0, 17, monster ? 15 : 12, 5).fill({ color: 0x05070b, alpha: 0.42 });
-  g.roundRect(-10, -4 + bob, 20, 24, 7).fill({ color: 0x111827 }).stroke({ width: 3, color: 0x080b12, alpha: 0.95 });
-  g.roundRect(-7, -2 + bob, 14, 18, 5).fill({ color: body }).stroke({ width: 2, color: trim, alpha: 0.9 });
-  g.circle(0, -12 + bob, monster ? 9 : 8).fill({ color: skin }).stroke({ width: 3, color: 0x080b12 });
-  g.circle(-3, -13 + bob, 1.3).fill({ color: 0xffffff });
-  g.circle(3, -13 + bob, 1.3).fill({ color: 0xffffff });
-
-  if (player) {
-    // Distinct heroic mantle + weapon silhouette. Presentation only.
-    g.moveTo(-9, 1 + bob).lineTo(-15, 12 + bob).lineTo(-8, 9 + bob).fill({ color: 0x17345f });
-    g.moveTo(9, 2 + bob).lineTo(15, -7 + bob).stroke({ width: 3, color: 0xd8e6f2 });
-    g.circle(15, -8 + bob, 2).fill({ color: 0x7dd3fc });
-  } else if (monster) {
-    g.moveTo(-7, -18 + bob).lineTo(-12, -25 + bob).lineTo(-2, -20 + bob).fill({ color: 0x9b3147 });
-    g.moveTo(7, -18 + bob).lineTo(12, -25 + bob).lineTo(2, -20 + bob).fill({ color: 0x9b3147 });
-  } else {
-    g.roundRect(-11, 2 + bob, 5, 13, 2).fill({ color: 0x5b3a22 });
-  }
-}
-
-export default function LegacyEldoriaHybridOverlay({ state }: { state: LegacyEldoriaVisualState }) {
-  const threeHostRef = useRef<HTMLDivElement>(null);
-  const pixiHostRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef(state);
-  stateRef.current = state;
-
-  useEffect(() => {
-    const threeHost = threeHostRef.current;
-    const pixiHost = pixiHostRef.current;
-    if (!threeHost || !pixiHost) return;
-
-    let disposed = false;
-    let frame = 0;
-    let pixiApp: Application | null = null;
-
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-    renderer.setSize(state.width, state.height, false);
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
-    renderer.domElement.style.pointerEvents = 'none';
-    threeHost.appendChild(renderer.domElement);
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    const uniforms = { uNight: { value: 0 }, uLightning: { value: 0 }, uTime: { value: 0 } };
-    const material = new THREE.ShaderMaterial({
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      uniforms,
-      vertexShader: 'void main(){gl_Position=vec4(position,1.0);}',
-      fragmentShader: `uniform float uNight; uniform float uLightning; uniform float uTime; void main(){ vec3 nightTint=vec3(0.035,0.075,0.18); float vignette=smoothstep(1.15,.25,length(gl_FragCoord.xy/vec2(${Math.max(1, state.width)}.0,${Math.max(1, state.height)}.0)-.5)); float alpha=uNight*(0.34+(1.0-vignette)*0.16); vec3 color=mix(nightTint,vec3(.82,.91,1.0),uLightning); gl_FragColor=vec4(color,clamp(alpha+uLightning*.20,0.0,.62)); }`,
-    });
-    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
-
-    const startPixi = async () => {
-      const app = new Application();
-      await app.init({ width: state.width, height: state.height, backgroundAlpha: 0, antialias: true, resolution: Math.min(window.devicePixelRatio || 1, 1.5), autoDensity: true });
-      if (disposed) { app.destroy(true); return; }
-      pixiApp = app;
-      app.canvas.style.width = '100%';
-      app.canvas.style.height = '100%';
-      app.canvas.style.pointerEvents = 'none';
-      pixiHost.appendChild(app.canvas);
-
-      const entityLayer = new Container();
-      const weather = new Container();
-      app.stage.addChild(entityLayer);
-      app.stage.addChild(weather);
-      const entityGraphics = new Map<string, Graphics>();
-      const drops = Array.from({ length: 72 }, (_, i) => {
-        const drop = new Graphics().moveTo(0, 0).lineTo(-5, 14).stroke({ width: 1.2, color: 0xc7e5ff, alpha: 0.48 });
-        drop.x = (i * 83) % state.width; drop.y = (i * 47) % state.height; weather.addChild(drop); return drop;
-      });
-
-      app.ticker.add((ticker) => {
-        const live = stateRef.current;
-        const now = performance.now();
-        const seen = new Set<string>();
-        for (const entity of live.entities || []) {
-          seen.add(entity.id);
-          let g = entityGraphics.get(entity.id);
-          if (!g) { g = new Graphics(); entityGraphics.set(entity.id, g); entityLayer.addChild(g); }
-          g.x = entity.x; g.y = entity.y; g.visible = entity.x > -40 && entity.y > -50 && entity.x < live.width + 40 && entity.y < live.height + 50;
-          drawCartoonEntity(g, entity, now);
-        }
-        for (const [id, g] of entityGraphics) if (!seen.has(id)) { entityLayer.removeChild(g); g.destroy(); entityGraphics.delete(id); }
-        weather.visible = live.raining;
-        if (live.raining) for (const drop of drops) { drop.y += 12 * ticker.deltaTime; drop.x -= 2.5 * ticker.deltaTime; if (drop.y > live.height + 20) drop.y = -20; if (drop.x < -20) drop.x = live.width + 20; }
-      });
-    };
-    void startPixi();
-
-    const animate = (now: number) => { if (disposed) return; const live = stateRef.current; uniforms.uNight.value = Math.max(0, Math.min(1, 1 - live.daylight)); uniforms.uLightning.value = live.lightning ? 1 : 0; uniforms.uTime.value = now / 1000; renderer.render(scene, camera); frame = requestAnimationFrame(animate); };
-    frame = requestAnimationFrame(animate);
-
-    return () => { disposed = true; cancelAnimationFrame(frame); pixiApp?.destroy(true, { children: true }); material.dispose(); renderer.dispose(); renderer.domElement.remove(); threeHost.replaceChildren(); pixiHost.replaceChildren(); };
-  }, [state.height, state.width]);
-
-  return <div data-legacy-eldoria-hybrid="true" aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden"><div ref={threeHostRef} data-three-atmosphere-layer="active" className="absolute inset-0" /><div ref={pixiHostRef} data-pixi-entity-layer="active" className="absolute inset-0" /></div>;
+export default function LegacyEldoriaHybridOverlay({state}:{state:LegacyEldoriaVisualState}){
+ const threeHostRef=useRef<HTMLDivElement>(null),pixiHostRef=useRef<HTMLDivElement>(null),stateRef=useRef(state); stateRef.current=state;
+ useEffect(()=>{ const threeHost=threeHostRef.current,pixiHost=pixiHostRef.current;if(!threeHost||!pixiHost)return;let disposed=false,frame=0,pixiApp:Application|null=null;
+  const renderer=new THREE.WebGLRenderer({alpha:true,antialias:false,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.setSize(state.width,state.height,false);Object.assign(renderer.domElement.style,{width:'100%',height:'100%',pointerEvents:'none'});threeHost.appendChild(renderer.domElement);
+  const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-1,1,1,-1,0,1),uniforms={uNight:{value:0},uLightning:{value:0},uTime:{value:0}};
+  const material=new THREE.ShaderMaterial({transparent:true,depthTest:false,depthWrite:false,uniforms,vertexShader:'void main(){gl_Position=vec4(position,1.0);}',fragmentShader:`uniform float uNight;uniform float uLightning;uniform float uTime;void main(){vec2 uv=gl_FragCoord.xy/vec2(${Math.max(1,state.width)}.0,${Math.max(1,state.height)}.0);float d=distance(uv,vec2(.5));float vignette=smoothstep(.25,.78,d);float pulse=.5+.5*sin(uTime*.22);vec3 dusk=mix(vec3(.025,.055,.15),vec3(.08,.13,.26),pulse*.12);vec3 color=mix(dusk,vec3(.84,.93,1.),uLightning);float alpha=uNight*(.27+vignette*.19);gl_FragColor=vec4(color,clamp(alpha+uLightning*.22,0.,.64));}`});scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),material));
+  const startPixi=async()=>{const app=new Application();await app.init({width:state.width,height:state.height,backgroundAlpha:0,antialias:true,resolution:Math.min(devicePixelRatio||1,1.5),autoDensity:true});if(disposed){app.destroy(true);return}pixiApp=app;Object.assign(app.canvas.style,{width:'100%',height:'100%',pointerEvents:'none'});pixiHost.appendChild(app.canvas);
+   const ambience=new Container(),entities=new Container(),weather=new Container(),foreground=new Container();app.stage.addChild(ambience,entities,weather,foreground);
+   const motes=Array.from({length:28},(_,i)=>{const m=new Graphics().circle(0,0,1+(i%3)*.45).fill({color:i%4?0xffe5a3:0x9be7ff,alpha:.22});m.x=(i*137)%state.width;m.y=(i*71)%state.height;ambience.addChild(m);return m});
+   const entityGraphics=new Map<string,Graphics>();const drops=Array.from({length:72},(_,i)=>{const d=new Graphics().moveTo(0,0).lineTo(-5,14).stroke({width:1.2,color:0xc7e5ff,alpha:.48});d.x=(i*83)%state.width;d.y=(i*47)%state.height;weather.addChild(d);return d});
+   const topGlow=new Graphics().rect(0,0,state.width,4).fill({color:0xffd37a,alpha:.08});foreground.addChild(topGlow);
+   app.ticker.add(ticker=>{const live=stateRef.current,now=performance.now(),seen=new Set<string>();ambience.alpha=.35+live.daylight*.45;for(let i=0;i<motes.length;i++){const m=motes[i];m.y-=.08*ticker.deltaTime;m.x+=Math.sin(now*.00035+i)*.06*ticker.deltaTime;if(m.y<0)m.y=live.height+4}
+    for(const e of live.entities||[]){seen.add(e.id);let g=entityGraphics.get(e.id);if(!g){g=new Graphics();entityGraphics.set(e.id,g);entities.addChild(g)}g.x=e.x;g.y=e.y;g.visible=e.x>-40&&e.y>-50&&e.x<live.width+40&&e.y<live.height+50;drawCartoonEntity(g,e,now)}for(const[id,g]of entityGraphics)if(!seen.has(id)){entities.removeChild(g);g.destroy();entityGraphics.delete(id)}weather.visible=live.raining;if(live.raining)for(const d of drops){d.y+=12*ticker.deltaTime;d.x-=2.5*ticker.deltaTime;if(d.y>live.height+20)d.y=-20;if(d.x<-20)d.x=live.width+20}topGlow.alpha=.035+live.daylight*.055;});};void startPixi();
+  const animate=(now:number)=>{if(disposed)return;const live=stateRef.current;uniforms.uNight.value=Math.max(0,Math.min(1,1-live.daylight));uniforms.uLightning.value=live.lightning?1:0;uniforms.uTime.value=now/1000;renderer.render(scene,camera);frame=requestAnimationFrame(animate)};frame=requestAnimationFrame(animate);
+  return()=>{disposed=true;cancelAnimationFrame(frame);pixiApp?.destroy(true,{children:true});material.dispose();renderer.dispose();renderer.domElement.remove();threeHost.replaceChildren();pixiHost.replaceChildren()};},[state.height,state.width]);
+ return <div data-legacy-eldoria-hybrid="true" aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden"><div ref={threeHostRef} data-three-atmosphere-layer="active" className="absolute inset-0"/><div ref={pixiHostRef} data-pixi-entity-layer="active" className="absolute inset-0"/></div>;
 }
