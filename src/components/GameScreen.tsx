@@ -54,7 +54,7 @@ import { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeSe
 import { getCityBuildings, drawCityDecor, drawCityTileOverlay } from '../game/cityPresentation';
 import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/render';
 import Weather from './Weather';
-import LegacyEldoriaHybridOverlay from '../visual/LegacyEldoriaHybridOverlay';
+import LiveWorldVisualOverlay from '../visual/LiveWorldVisualOverlay';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawWorldCinematicPass } from '../game/worldVisualRevamp927';
@@ -2568,20 +2568,9 @@ export default function GameScreen({ account, onLogout }: Props) {
               boxShadow: 'none',
             }}
           />
-          {currentMapId === 'eldoria' && (
-            <LegacyEldoriaHybridOverlay
-              state={{
-                width: VIEW_W * TILE_SIZE,
-                height: VIEW_H * TILE_SIZE,
-                daylight: worldClockRef.current.daylight,
-                raining: weather === 'rain' || weather === 'storm',
-                lightning: weather === 'storm',
-              }}
-            />
-          )}
+          <LiveWorldVisualOverlay playerRef={playerRef} monstersRef={monstersRef} npcsRef={npcsRef} serverPlayersRef={serverPlayersRef} cameraRef={cameraRef} mapRef={currentMapIdRef} mapId={currentMapId} tileSize={TILE_SIZE} width={VIEW_W*TILE_SIZE} height={VIEW_H*TILE_SIZE} daylight={worldClockRef.current.daylight} weather={weather}/>
           <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
 
-          {/* Zoom controls */}
           <div className="moria-panel absolute bottom-4 right-4 z-20 flex flex-col gap-1 rounded-xl p-1.5">
             <button onClick={() => { const nz = Math.min(2.5, zoomRef.current + 0.25); zoomRef.current = nz; setZoom(nz); }} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-base font-black">+</button>
             <div className="text-center font-mono text-[8px] text-slate-400">{Math.round(zoom * 100)}%</div>
