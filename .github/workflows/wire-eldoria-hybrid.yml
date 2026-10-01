@@ -1,0 +1,48 @@
+name: Wire Eldoria hybrid viewport
+
+on:
+  push:
+    branches:
+      - visual/legacy-eldoria-hybrid-pixi-three
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: visual/legacy-eldoria-hybrid-pixi-three
+      - name: Wire overlay without changing legacy gameplay
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/GameScreen.tsx')
+          s = p.read_text()
+          imp = "import LegacyEldoriaHybridOverlay from '../visual/LegacyEldoriaHybridOverlay';\n"
+          anchor = "import Weather from './Weather';\n"
+          if imp not in s:
+              if anchor not in s: raise SystemExit('Weather import anchor missing')
+              s = s.replace(anchor, anchor + imp, 1)
+          canvas_end = "          <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />"
+          overlay = """          {currentMapId === 'eldoria' && (\n            <LegacyEldoriaHybridOverlay\n              state={{\n                width: VIEW_W * TILE_SIZE,\n                height: VIEW_H * TILE_SIZE,\n                daylight: worldClockRef.current.daylight,\n                raining: weather === 'rain' || weather === 'storm',\n                lightning: weather === 'storm',\n              }}\n            />\n          )}\n          <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />"""
+          if 'LegacyEldoriaHybridOverlay\n              state=' not in s:
+              if canvas_end not in s: raise SystemExit('RegionBanner anchor missing')
+              s = s.replace(canvas_end, overlay, 1)
+          p.write_text(s)
+          PY
+      - name: Verify integration markers
+        run: |
+          grep -q "LegacyEldoriaHybridOverlay" src/components/GameScreen.tsx
+          grep -q "currentMapId === 'eldoria'" src/components/GameScreen.tsx
+      - name: Commit viewport integration
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/GameScreen.tsx
+          git commit -m 'feat(visual): mount Pixi Three overlay on legacy Eldoria viewport'
+          git push origin HEAD:visual/legacy-eldoria-hybrid-pixi-three
