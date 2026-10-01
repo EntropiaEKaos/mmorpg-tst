@@ -224,13 +224,11 @@ export default function GameScreen({ account, onLogout }: Props) {
     const basePlayer = createPlayer(account.characterName, account.vocation.toLowerCase());
     const loadedSave = loadLocal(account.characterName);
     if (loadedSave) {
-      // Restore subsystems (blessings, professions, etc) from unified save
       persistSubSystems(loadedSave);
       return applySave(basePlayer, loadedSave);
     }
-    // Fallback: try old savedPlayer format
     if (account.savedPlayer) {
-      try { return JSON.parse(account.savedPlayer); } catch { /* ignore */ }
+      try { return JSON.parse(account.savedPlayer); } catch {}
     }
     return basePlayer;
   });
