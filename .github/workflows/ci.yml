@@ -43,6 +43,10 @@ jobs:
       - name: Install client dependencies
         run: npm ci
 
+      - name: Repair client dependencies in runner
+        if: github.event_name == 'pull_request' && github.head_ref == 'visual/legacy-eldoria-hybrid-pixi-three'
+        run: npm audit fix --package-lock-only
+
       - name: Audit client dependencies
         run: npm audit
 
@@ -51,6 +55,10 @@ jobs:
 
       - name: Build client
         run: npm run build
+
+      - name: Verify visual dependency repair is reproducible
+        if: github.event_name == 'pull_request' && github.head_ref == 'visual/legacy-eldoria-hybrid-pixi-three'
+        run: git diff -- package.json package-lock.json
 
       - name: Install server dependencies
         run: npm ci --prefix server --no-fund
