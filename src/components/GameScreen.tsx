@@ -2571,28 +2571,20 @@ export default function GameScreen({ account, onLogout }: Props) {
           />
           <LegacyEldoriaHybridOverlay
             state={{
-              width: VIEW_W * TILE_SIZE,
-              height: VIEW_H * TILE_SIZE,
+              width: VIEW_W*TILE_SIZE, height: VIEW_H*TILE_SIZE,
               daylight: worldClockRef.current.daylight,
-              raining: weather === 'rain' || weather === 'storm',
-              lightning: weather === 'storm',
+              raining: weather==='rain'||weather==='storm', lightning: weather==='storm',
               visualProfile: currentMapId,
-              elevationSeed: (MAPS[currentMapId] || MAPS.eldoria).seed || 17,
+              elevationSeed:(MAPS[currentMapId]||MAPS.eldoria).seed||17,
               entities: buildLiveEntityVisuals({
-                player: playerRef.current,
-                monsters: monstersRef.current,
-                npcs: npcsRef.current,
-                serverPlayers: serverPlayersRef.current,
-                camera: cameraRef.current,
-                tileSize: TILE_SIZE,
-                width: VIEW_W * TILE_SIZE,
-                height: VIEW_H * TILE_SIZE,
+                player:playerRef.current, monsters:monstersRef.current, npcs:npcsRef.current,
+                serverPlayers:serverPlayersRef.current, camera:cameraRef.current, tileSize:TILE_SIZE,
+                width:VIEW_W*TILE_SIZE, height:VIEW_H*TILE_SIZE,
               }),
             }}
           />
           <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
 
-          {/* Zoom controls */}
           <div className="moria-panel absolute bottom-4 right-4 z-20 flex flex-col gap-1 rounded-xl p-1.5">
             <button onClick={() => { const nz = Math.min(2.5, zoomRef.current + 0.25); zoomRef.current = nz; setZoom(nz); }} className="moria-button flex h-8 w-8 items-center justify-center rounded-lg text-base font-black">+</button>
             <div className="text-center font-mono text-[8px] text-slate-400">{Math.round(zoom * 100)}%</div>
