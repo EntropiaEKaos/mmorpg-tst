@@ -2569,7 +2569,7 @@ export default function GameScreen({ account, onLogout }: Props) {
               boxShadow: 'none',
             }}
           />
-          <LegacyEldoriaHybridOverlay state={{width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE,daylight:worldClockRef.current.daylight,raining:weather==='rain'||weather==='storm',lightning:weather==='storm',visualProfile:currentMapId,elevationSeed:(MAPS[currentMapId]||MAPS.eldoria).seed||17,entities:buildLiveEntityVisuals({player:playerRef.current,monsters:monstersRef.current,npcs:npcsRef.current,serverPlayers:serverPlayersRef.current,camera:cameraRef.current,tileSize:TILE_SIZE,width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE})}} />
+          <LegacyEldoriaHybridOverlay state={{width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE,daylight:worldClockRef.current.daylight,raining:weather!=='clear',lightning:weather==='storm',visualProfile:currentMapId,elevationSeed:MAPS[currentMapId]?.seed||17,entities:buildLiveEntityVisuals({player:playerRef.current,monsters:monstersRef.current,npcs:npcsRef.current,serverPlayers:serverPlayersRef.current,camera:cameraRef.current,tileSize:TILE_SIZE,width:VIEW_W*TILE_SIZE,height:VIEW_H*TILE_SIZE})}} />
           <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
 
           <div className="moria-panel absolute bottom-4 right-4 z-20 flex flex-col gap-1 rounded-xl p-1.5">
