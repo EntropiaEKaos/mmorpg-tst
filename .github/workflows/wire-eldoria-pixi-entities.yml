@@ -1,0 +1,48 @@
+name: Wire Eldoria Pixi Entities
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: visual/legacy-eldoria-hybrid-pixi-three
+      - name: Wire authoritative legacy entities into visual projection
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/components/GameScreen.tsx')
+          s=p.read_text()
+          imp="import { projectLegacyEldoriaEntities } from '../visual/legacyEldoriaProjection';\n"
+          anchor="import LegacyEldoriaHybridOverlay from '../visual/LegacyEldoriaHybridOverlay';\n"
+          if imp not in s:
+              s=s.replace(anchor, anchor+imp)
+          old="""                lightning: weather === 'storm',
+              }}"""
+          new="""                lightning: weather === 'storm',
+                entities: projectLegacyEldoriaEntities(
+                  playerRef.current,
+                  npcsRef.current,
+                  serverSync.isActive() ? serverMonstersRef.current : monstersRef.current,
+                  cameraRef.current,
+                  TILE_SIZE,
+                ),
+              }}"""
+          if old not in s:
+              raise SystemExit('overlay state anchor not found; refusing unsafe edit')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Typecheck client
+        run: npm run typecheck
+      - name: Commit wiring
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/components/GameScreen.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(visual): feed live Eldoria actors into Pixi overlay"
+          git push origin HEAD:visual/legacy-eldoria-hybrid-pixi-three
