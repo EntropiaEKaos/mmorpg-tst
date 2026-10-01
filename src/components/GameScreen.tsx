@@ -54,6 +54,7 @@ import { customContentOnMap, customMonsterToRuntime, customNpcToRuntime, mergeSe
 import { getCityBuildings, drawCityDecor, drawCityTileOverlay } from '../game/cityPresentation';
 import { drawBuilding, drawBuildingOcclusion, type Building } from '../game/render';
 import Weather from './Weather';
+import LegacyEldoriaHybridOverlay from '../visual/LegacyEldoriaHybridOverlay';
 import RegionBanner from './RegionBanner';
 import { drawWorldAtmosphere, weatherForMap, type WorldWeather } from '../game/worldAtmosphere';
 import { drawWorldCinematicPass } from '../game/worldVisualRevamp927';
@@ -223,13 +224,11 @@ export default function GameScreen({ account, onLogout }: Props) {
     const basePlayer = createPlayer(account.characterName, account.vocation.toLowerCase());
     const loadedSave = loadLocal(account.characterName);
     if (loadedSave) {
-      // Restore subsystems (blessings, professions, etc) from unified save
       persistSubSystems(loadedSave);
       return applySave(basePlayer, loadedSave);
     }
-    // Fallback: try old savedPlayer format
     if (account.savedPlayer) {
-      try { return JSON.parse(account.savedPlayer); } catch { /* ignore */ }
+      try { return JSON.parse(account.savedPlayer); } catch {}
     }
     return basePlayer;
   });
@@ -2569,6 +2568,17 @@ export default function GameScreen({ account, onLogout }: Props) {
               boxShadow: 'none',
             }}
           />
+          {currentMapId === 'eldoria' && (
+            <LegacyEldoriaHybridOverlay
+              state={{
+                width: VIEW_W * TILE_SIZE,
+                height: VIEW_H * TILE_SIZE,
+                daylight: worldClockRef.current.daylight,
+                raining: weather === 'rain' || weather === 'storm',
+                lightning: weather === 'storm',
+              }}
+            />
+          )}
           <RegionBanner key={currentMapId} map={MAPS[currentMapId] || MAPS.eldoria} weather={weather} />
 
           {/* Zoom controls */}
