@@ -51,7 +51,7 @@ export function buildLiveEntityVisuals({
 
   const playerScreen = toViewport(player.pos, camera, tileSize);
   add({
-    id: `player:${player.id || player.name}`,
+    id: `player:${player.name}`,
     kind: 'player',
     x: playerScreen.x,
     y: playerScreen.y,
