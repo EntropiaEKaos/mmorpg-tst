@@ -90,8 +90,16 @@ class ServerSyncManager {
 
   sendInteraction(targetEntityId: string, kind: string) {
     if (!this.isActive() || !targetEntityId || !kind) return false;
-    sendIntent({ type: 'interaction', payload: { targetEntityId, kind } });
-    return true;
+    if (kind === 'talk' || kind === 'trade') {
+      sendIntent({ type: 'talk_npc', payload: { npcId: targetEntityId } });
+      return true;
+    }
+    if (kind === 'hostile') {
+      sendIntent({ type: 'attack', payload: { monsterId: targetEntityId } });
+      return true;
+    }
+    // Inspect is presentation-only until the authoritative protocol exposes it.
+    return kind === 'inspect';
   }
 
   sendCast(spellIndex: number, targetId?: string) {
