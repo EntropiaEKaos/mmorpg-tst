@@ -23,6 +23,8 @@ interface AuthResponse {
 }
 
 function apiBase(): string {
+  const configured = String(import.meta.env.VITE_MORIA_SERVER_URL || '').trim().replace(/\/$/, '');
+  if (configured) return configured;
   if (typeof window === 'undefined') return '';
   const { hostname, port } = window.location;
   if ((hostname === 'localhost' || hostname === '127.0.0.1') && (port === '5173' || port === '4173')) {
