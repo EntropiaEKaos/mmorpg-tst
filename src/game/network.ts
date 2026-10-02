@@ -200,6 +200,12 @@ class NetworkClient {
 
   detectServerUrl(): string | null {
     if (typeof window === 'undefined') return null;
+    const configured = String(import.meta.env.VITE_MORIA_SERVER_URL || '').trim().replace(/\/$/, '');
+    if (configured) {
+      const url = new URL(configured);
+      const wsProto = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProto}//${url.host}/ws`;
+    }
     const { protocol, hostname, port } = window.location;
     if ((hostname === 'localhost' || hostname === '127.0.0.1') && (port === '5173' || port === '4173')) {
       return `ws://${hostname}:3000/ws`;
