@@ -88,6 +88,12 @@ class ServerSyncManager {
     sendIntent({ type: 'attack', payload: { monsterId } });
   }
 
+  sendInteraction(targetEntityId: string, kind: string) {
+    if (!this.isActive() || !targetEntityId || !kind) return false;
+    sendIntent({ type: 'interaction', payload: { targetEntityId, kind } });
+    return true;
+  }
+
   sendCast(spellIndex: number, targetId?: string) {
     if (!this.isActive()) return;
     sendIntent({ type: 'cast', payload: { spellIndex, ...(targetId ? { targetId } : {}) } });
