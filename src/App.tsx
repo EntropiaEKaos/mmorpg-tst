@@ -3,6 +3,7 @@ import LoginScreen from './components/LoginScreen';
 import GameScreen from './components/GameScreen';
 import GlobalTooltipRenderer from './components/Tooltip';
 import LocaleBridge, { LocaleToggle } from './components/LocaleBridge';
+import { IsoNextPrototype } from './game/iso-next/IsoNextPrototype';
 import { t } from './i18n';
 import type { Account } from './game/types';
 import { logoutSession, resumeSession } from './game/auth';
@@ -10,13 +11,12 @@ import { dpsMeter } from './game/dpsMeter';
 
 dpsMeter.start();
 
-export default function App() {
+function LegacyClient() {
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    // Legacy versions stored plaintext credentials in these keys. Never reuse them.
     localStorage.removeItem('tibia_accounts');
     localStorage.removeItem('tibia_current');
 
@@ -56,6 +56,20 @@ export default function App() {
     <>
       <LocaleBridge />
       <GameScreen account={account} onLogout={handleLogout} />
+      <GlobalTooltipRenderer />
+    </>
+  );
+}
+
+export default function App() {
+  const legacy = window.location.pathname === '/legacy' || new URLSearchParams(window.location.search).get('legacy') === '1';
+
+  if (legacy) return <LegacyClient />;
+
+  return (
+    <>
+      <LocaleBridge />
+      <IsoNextPrototype />
       <GlobalTooltipRenderer />
     </>
   );
