@@ -71,6 +71,21 @@ jobs:
             package-lock.json
             server/package-lock.json
 
+      # Temporary Cycle 1 repair step: resolve and commit the audited dependency graph.
+      # Remove this one-time step after package-lock.json has been regenerated.
+      - name: Regenerate audited lockfile for Cycle 1 PR
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/moria-cycle1-iso-ci-node22'
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          npm audit fix --package-lock-only --ignore-scripts
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "fix(deps): regenerate audited client lockfile"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
       - name: Install client dependencies
         run: npm ci
 
