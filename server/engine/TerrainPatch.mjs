@@ -27,9 +27,29 @@ export function buildTerrainPatch(map, playerX, playerY, radius = 20) {
     }
     rows.push(row);
   }
+  // Rectangle footprints come directly from the WorldManager / Studio config.
+  // The renderer uses these ONLY for visuals; the server owns collisions.
+  const landmarks = (Array.isArray(map.landmarks) ? map.landmarks : [])
+    .filter(entry => entry && Number.isInteger(entry.x) && Number.isInteger(entry.y)
+      && Number.isInteger(entry.w) && Number.isInteger(entry.h)
+      && entry.w > 0 && entry.h > 0
+      && entry.x < x1 + 3 && entry.y < y1 + 3
+      && entry.x + entry.w > x0 - 2 && entry.y + entry.h > y0 - 2)
+    .slice(0, 24)
+    .map(entry => ({
+      id: String(entry.id || '').slice(0, 60),
+      name: String(entry.name || '').slice(0, 70),
+      kind: String(entry.kind || 'house').slice(0, 20),
+      x: entry.x, y: entry.y, w: entry.w, h: entry.h,
+    }));
+  const color = value => /^#[0-9a-fA-F]{6}$/.test(String(value || '')) ? value : undefined;
   return {
     version: 1, mapId: String(map.id || ''), biome: String(map.biome || 'plains'),
     originX: x0, originY: y0, rows,
+    cityStyle: String(map.cityStyle || 'royal').slice(0, 24),
+    roofColor: color(map.roofColor),
+    wallColor: color(map.wallColor),
+    landmarks,
   };
 }
 
