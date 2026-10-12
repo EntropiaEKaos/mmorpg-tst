@@ -56,6 +56,19 @@ export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch,detail:City
   const n=at(l.x,l.y),e=at(l.x+l.w,l.y),s=at(l.x+l.w,l.y+l.h),w=at(l.x,l.y+l.h);
   // Walled courtyard marks the full collision footprint; it adds no walkable tiles.
   g.poly(coords(n,e,s,w)).fill({color:0x05090e,alpha:.38});
+  // Quiet courtyard highlights live inside the SERVER-owned footprint.
+  // There are no client-created obstacles or decorative entities with gameplay state.
+  if(!compact){
+    const courtyard=between(n,s);
+    g.ellipse(courtyard.x,courtyard.y-1,Math.max(10,Math.min(l.w*18,110)),Math.max(7,Math.min(l.h*9,55)))
+      .fill({color:0xe9c88d,alpha:.045});
+    for(let step=0;step<3;step++){
+      const t=(step+1)/4;
+      const a=between(n,w,t),b=between(e,s,t);
+      g.moveTo(a.x*.91,a.y*.91).lineTo(b.x*.91,b.y*.91)
+        .stroke({width:1,color:shade(wall,.55),alpha:.13});
+    }
+  }
   g.poly(coords(down(e,-14),down(s,-14),s,e)).fill(shade(wall,.76));
   g.poly(coords(down(s,-14),down(w,-14),w,s)).fill(shade(wall,.94));
   g.poly(coords(down(n,-14),down(e,-14),down(s,-14),down(w,-14)))
@@ -76,12 +89,32 @@ export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch,detail:City
     ?modules.filter((_,i)=>(i+seed)%11!==4&&(!compact||(i+seed)%5!==2))
     :modules;
   renderModules.forEach((m,i)=>{
+    // Spend ornate geometry only on the first prominent buildings per compound.
+    // Repeated roof modules retain their silhouette without expensive detailing.
+    const ornate=!compact&&i<7;
     const height=(isKeep?62:isSacred?55:isMarket?29:isArena?24:44)+(i%3)*8;
     const rn=at(m.x,m.y),re=at(m.x+m.w,m.y),rs=at(m.x+m.w,m.y+m.h),rw=at(m.x,m.y+m.h);
     const tn=down(rn,-height),te=down(re,-height),ts=down(rs,-height),tw=down(rw,-height);
     const variant=shade(roof,[.84,.94,1.12,1.03][i%4]);
     g.poly(coords(re,rs,ts,te)).fill(shade(wall,.69)).stroke({width:1.3,color:shade(wall,.42)});
     g.poly(coords(rs,rw,tw,ts)).fill(shade(wall,.88)).stroke({width:1.3,color:shade(wall,.48)});
+    // Light catching the southwest facade makes the walls readable from above.
+    g.moveTo(tw.x,tw.y+1).lineTo(rw.x,rw.y)
+      .stroke({width:2.4,color:shade(wall,1.32),alpha:.24});
+    if(ornate){
+      // Structural timber beams and handcrafted masonry, all within the cached Graphic.
+      for(let beam=1;beam<=2;beam++){
+        const t=beam/3;
+        const upper=between(ts,tw,t),lower=between(rs,rw,t);
+        g.moveTo(upper.x,upper.y).lineTo(lower.x,lower.y)
+          .stroke({width:2.1,color:shade(wall,.41),alpha:.55});
+      }
+      const a=between(ts,tw,.25),b=between(rs,rw,.75);
+      g.moveTo(a.x,a.y+2).lineTo(b.x,b.y-2)
+        .stroke({width:1.25,color:shade(wall,.45),alpha:.27});
+      g.moveTo(ts.x,ts.y-8).lineTo(tw.x,tw.y-8)
+        .stroke({width:.85,color:shade(wall,1.25),alpha:.36});
+    }
     // Distinct gabled roofs, slate/tile planes and open-air market awnings.
     // Depth never changes collision: these are cached presentation polygons.
     const pitched=!isArena&&(!isMarket||(i+seed)%3!==0);
@@ -96,6 +129,17 @@ export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch,detail:City
     }else{
       g.poly(coords(tn,te,ts,tw)).fill(variant)
         .stroke({width:1.6,color:shade(roof,.47)});
+    }
+    if(ornate){
+      // Sparse roof-slate brush strokes produce a material impression without
+      // allocating textures or adding more children to Pixi's display list.
+      for(let tile=0;tile<3;tile++){
+        const t=(tile+1)/4;
+        const a=between(tn,tw,t),b=between(ridgeA,ridgeB,t);
+        g.moveTo(a.x*.82+b.x*.18,a.y*.82+b.y*.18)
+          .lineTo(a.x*.42+b.x*.58,a.y*.42+b.y*.58)
+          .stroke({width:.8,color:shade(roof,1.42),alpha:.22});
+      }
     }
     if(!compact){
       const courses=pitched?2:3;
@@ -138,12 +182,34 @@ export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch,detail:City
       g.moveTo(cross.x,cross.y-6).lineTo(cross.x,cross.y-29).stroke({width:3,color:trim});
       g.moveTo(cross.x-9,cross.y-19).lineTo(cross.x+9,cross.y-19).stroke({width:3,color:trim});
     }
+    // Window trim and restrained illumination: no dynamic shadows or bloom pass.
+    if(ornate&&!isArena&&i%3===0){
+      const light=between(rs,rw,.64);
+      const ly=light.y-height*.55;
+      g.circle(light.x,ly,15).fill({color:isForge?0xfaa05a:0xffdf91,alpha:.07});
+      g.rect(light.x-6,ly-7,12,14)
+        .fill({color:0xffe3a1,alpha:.50})
+        .stroke({width:1.4,color:shade(wall,.40)});
+      g.moveTo(light.x,ly-7).lineTo(light.x,ly+7)
+        .stroke({width:1.5,color:shade(wall,.45)});
+    }
     // Carved ground-floor entries make buildings legible at play scale.
     if((i+seed)%4===0&&!isArena){
       const door=between(rs,rw,.35);
       g.roundRect(door.x-8,door.y-23,16,23,2)
         .fill(shade(wall,.30)).stroke({width:1.3,color:trim,alpha:.68});
-      if(!compact)g.circle(door.x+4,door.y-10,1.6).fill(trim);
+      if(ornate){
+        g.circle(door.x+4,door.y-10,1.6).fill(trim);
+        // Wall-mounted lantern frames the entrance without runtime particles.
+        const lampX=door.x+12,lampY=door.y-31;
+        g.moveTo(lampX,lampY-10).lineTo(lampX,lampY)
+          .stroke({width:2,color:shade(wall,.44)});
+        g.circle(lampX,lampY+3,12)
+          .fill({color:0xffc677,alpha:.09});
+        g.roundRect(lampX-4,lampY-2,8,11,2)
+          .fill({color:0xf5cb86,alpha:.76})
+          .stroke({width:1.2,color:shade(wall,.37)});
+      }
     }
     if(!compact&&isKeep&&i===0){
       const flag=down(ridgeA,-43);
