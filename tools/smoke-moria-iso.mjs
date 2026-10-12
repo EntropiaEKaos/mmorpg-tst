@@ -167,6 +167,20 @@ try {
         || (three.dataset.biome === 'plains' && three.dataset.worldAtmosphere === 'server-biome'));
   }, null, {timeout:10000});
   report.push('Online Visual 2.2: material and atmospheric shader follow authoritative plains biome');
+  await online.waitForFunction(()=>{
+    const canvas=document.querySelector('canvas[data-testid="iso-pixi-canvas"]');
+    return canvas?.dataset.presentationScheduler==='snapshot-on-demand'
+      && Number(canvas.dataset.drawnFrames)>0;
+  },null,{timeout:12000});
+  const desktopCounters=await online.evaluate(()=>{
+    const pixi=document.querySelector('canvas[data-testid="iso-pixi-canvas"]');
+    const three=document.querySelector('canvas[data-testid="iso-three-atmosphere"]');
+    return {mode:pixi?.dataset.presentationScheduler,pixiFrames:Number(pixi?.dataset.drawnFrames),
+      shaderProfile:three?.dataset.shaderProfile,scale:three?.dataset.renderScale};
+  });
+  assert.ok(desktopCounters.pixiFrames>=1,'Online renderer must submit GPU frames on demand');
+  if(desktopCounters.shaderProfile)assert.equal(desktopCounters.shaderProfile,'desktop-full');
+  report.push(`Visual 2.5 desktop: Pixi snapshot-on-demand (${desktopCounters.pixiFrames} manual frames), Three ${desktopCounters.shaderProfile}`);
   await online.screenshot({ path: `${output}/online.png`, fullPage: false });
   // Diagnostic-only FPS sample. CI software WebGL is slower than real GPUs,
   // so retain actual statistics rather than imposing a misleading hard FPS gate.
@@ -244,6 +258,17 @@ try {
   });
   assert.equal(await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-frame-cap'), '30',
     'Mobile Pixi ticker should cap redraw at 30fps while authoritative simulation stays unchanged');
+  assert.equal(await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-presentation-scheduler'),
+    'snapshot-on-demand','Mobile Pixi must not redraw scene blindly on every ticker');
+  const mobileShader=await mobileOnline.locator('canvas[data-testid="iso-three-atmosphere"]').evaluate(canvas=>({
+    state:canvas.dataset.rendererState,profile:canvas.dataset.shaderProfile,scale:Number(canvas.dataset.renderScale)
+  }));
+  if(mobileShader.state==='active'){
+    assert.equal(mobileShader.profile,'mobile-lite','Mobile must render reduced-cost atmosphere');
+    assert.ok(mobileShader.scale<=.7&&mobileShader.scale>=.5);
+  }
+  const beforeTouchPaint=Number(await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-drawn-frames'));
+  assert.ok(beforeTouchPaint>0,'Mobile online scene must submit at least one GPU draw');
   assert.equal(mobileParity.mapId, 'eldoria');
   assert.equal(mobileParity.biome, 'plains');
   assert.ok(mobileParity.cityLandmarks >= 1);
@@ -291,7 +316,9 @@ try {
   }
   await mobileOnline.waitForFunction(()=>
     document.querySelector('[data-testid="iso-touch-dpad"]')?.getAttribute('data-touch-active')==='none');
-  report.push('Online mobile: native finger-down/up drives real server movement and releases cleanly');
+  const afterTouchPaint=Number(await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-drawn-frames'));
+  assert.ok(afterTouchPaint>beforeTouchPaint,'Authoritative touch movement must submit new GPU scene frames');
+  report.push(`Online mobile: touch moves authoritative player with ${afterTouchPaint-beforeTouchPaint} new on-demand scene draws and clean release`);
   await writeFile(`${output}/online-mobile-parity.json`, JSON.stringify(mobileParity,null,2));
   report.push(`Online mobile: same character/server city as desktop, ${mobileParity.cityLandmarks} real buildings, HUD fit and camera tracked`);
   await mobileOnline.getByRole('button', { name:'Sair', exact:true }).click();
