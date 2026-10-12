@@ -136,7 +136,38 @@ try {
   const buildings = Number(await online.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-city-landmarks'));
   assert.ok(buildings >= 1 && buildings <= 24, `Landmark count must be bounded, got ${buildings}`);
   report.push(`Online architecture: ${buildings} server-owned buildings depth-sorted with actors`);
+  await online.waitForFunction(() => {
+    const terrain = document.querySelector('canvas[data-testid="iso-pixi-canvas"]');
+    const three = document.querySelector('canvas[data-testid="iso-three-atmosphere"]');
+    return terrain?.dataset.terrainBiome === 'plains'
+      && (!three || three.dataset.rendererState !== 'active'
+        || (three.dataset.biome === 'plains' && three.dataset.worldAtmosphere === 'server-biome'));
+  }, null, {timeout:10000});
+  report.push('Online Visual 2.2: material and atmospheric shader follow authoritative plains biome');
   await online.screenshot({ path: `${output}/online.png`, fullPage: false });
+  // Diagnostic-only FPS sample. CI software WebGL is slower than real GPUs,
+  // so retain actual statistics rather than imposing a misleading hard FPS gate.
+  const frameSample = await online.evaluate(async () => new Promise(resolve => {
+    const frames = [];
+    let start = 0;
+    let last = 0;
+    const measure = time => {
+      if (!start) start = time;
+      if (last) frames.push(time - last);
+      last = time;
+      if (time - start < 1100) requestAnimationFrame(measure);
+      else {
+        const sorted = frames.slice().sort((a, b) => a - b);
+        resolve({ samples:frames.length,
+          avgFrameMs:frames.reduce((sum,v)=>sum+v,0)/Math.max(1,frames.length),
+          p95FrameMs:sorted[Math.floor(sorted.length*.95)]||0,
+          estimatedFps:1000/(frames.reduce((sum,v)=>sum+v,0)/Math.max(1,frames.length)) });
+      }
+    };
+    requestAnimationFrame(measure);
+  }));
+  await writeFile(`${output}/render-performance.json`,JSON.stringify({engine:'CI Chromium software WebGL',frameSample},null,2));
+  report.push(`Visual performance sample: ${frameSample.samples} frames, ~${frameSample.estimatedFps.toFixed(1)} FPS (CI software renderer)`);
   report.push('Online: real HTTP login, character ownership, WebSocket auth, server snapshot, Pixi mount');
   await online.getByRole('button', { name: 'Sair', exact: true }).click();
   await online.getByRole('button', { name: /JOGO RÁPIDO OFFLINE/i }).waitFor({ state: 'visible' });
