@@ -59,6 +59,24 @@ async function demo(page, suffix) {
     await page.keyboard.up('ArrowUp');
   }
   assert.equal(await page.locator('[data-testid="iso-action-bar"]').count(), 0, 'Inert duplicate action bar must not return');
+  if (suffix === 'mobile') {
+    const dpad=page.locator('[data-testid="iso-touch-dpad"]');
+    await dpad.waitFor({state:'visible'});
+    const before=await page.evaluate(()=>window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.pos);
+    const left=await page.locator('[data-testid="iso-touch-ArrowLeft"]').boundingBox();
+    assert.ok(left,'Offline mobile must expose an accessible pointer D-pad');
+    await page.mouse.move(left.x+left.width/2,left.y+left.height/2);
+    await page.mouse.down();
+    try {
+      await page.waitForFunction(x=>window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.pos?.x<x,before.x,{timeout:12000});
+      assert.equal(await dpad.getAttribute('data-touch-active'),'ArrowLeft','Touch input should become active while held');
+    }finally{
+      await page.mouse.up();
+    }
+    await page.waitForFunction(()=>document.querySelector('[data-testid="iso-touch-dpad"]')?.getAttribute('data-touch-active')==='none');
+    await page.locator('[data-testid="iso-touch-interact"]').waitFor({state:'visible'});
+    report.push('Quick Play mobile: pointer-held D-pad moves character and stops on release');
+  }
   await page.screenshot({ path: `${output}/quick-play-${suffix}.png`, fullPage: false });
   report.push(`Quick Play ${suffix}: renderer mounted, hero visible, keyboard movement worked`);
 }
@@ -253,6 +271,27 @@ try {
   assert.ok(mobileBoxes.bar.bottom<=mobileBoxes.height+3,
     'Mobile action bar must stay inside the viewport');
   await mobileOnline.screenshot({ path:`${output}/online-mobile.png`, fullPage:false });
+  // Native touch (not synthesized keyboard) must use the authoritative movement
+  // path; release on finger-up and never leave the character walking forever.
+  const touchDpad=mobileOnline.locator('[data-testid="iso-touch-ArrowUp"]');
+  const touchRect=await touchDpad.boundingBox();
+  assert.ok(touchRect,'Online mobile needs a visible D-pad');
+  const point={x:touchRect.x+touchRect.width/2,y:touchRect.y+touchRect.height/2};
+  const touchSession=await mobileOnline.context().newCDPSession(mobileOnline);
+  const firstY=mobileParity.heroY;
+  await touchSession.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+  try{
+    await mobileOnline.waitForFunction(y=>
+      Number(window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.y)<y,firstY,{timeout:16000});
+    assert.equal(await mobileOnline.locator('[data-testid="iso-touch-dpad"]').getAttribute('data-touch-active'),'ArrowUp');
+    await mobileOnline.screenshot({path:`${output}/online-mobile-moving.png`,fullPage:false});
+  }finally{
+    await touchSession.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    await touchSession.detach();
+  }
+  await mobileOnline.waitForFunction(()=>
+    document.querySelector('[data-testid="iso-touch-dpad"]')?.getAttribute('data-touch-active')==='none');
+  report.push('Online mobile: native finger-down/up drives real server movement and releases cleanly');
   await writeFile(`${output}/online-mobile-parity.json`, JSON.stringify(mobileParity,null,2));
   report.push(`Online mobile: same character/server city as desktop, ${mobileParity.cityLandmarks} real buildings, HUD fit and camera tracked`);
   await mobileOnline.getByRole('button', { name:'Sair', exact:true }).click();
