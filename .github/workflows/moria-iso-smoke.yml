@@ -2,6 +2,12 @@ name: Mor'ia ISO Browser Smoke
 
 on:
   workflow_dispatch:
+    inputs:
+      include_mobile:
+        description: 'Run full desktop+mobile frozen regression (for release/manual QA)'
+        required: false
+        default: true
+        type: boolean
   pull_request:
     branches: [master]
     paths:
@@ -13,6 +19,7 @@ on:
       - 'src/game/ServerSync.ts'
       - 'server/server.js'
       - 'tools/smoke-moria-iso.mjs'
+      - 'docs/MORIA_DESKTOP_RELEASE_TRACK.md'
       - '.github/workflows/moria-iso-smoke.yml'
 
 permissions:
@@ -57,7 +64,9 @@ jobs:
           done
           cat "$RUNNER_TEMP/moria-qa-server.log"
           exit 1
-      - name: Smoke desktop, mobile, legacy, HTTP and WebSocket
+      - name: Smoke desktop release, legacy, HTTP and WebSocket
+        env:
+          MORIA_DESKTOP_ONLY: ${{ github.event_name == 'pull_request' || inputs.include_mobile == false && '1' || '0' }}
         run: node tools/smoke-moria-iso.mjs
       - name: Print server log on failure
         if: failure()
