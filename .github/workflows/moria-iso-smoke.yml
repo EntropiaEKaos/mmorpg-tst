@@ -6,6 +6,7 @@ on:
     branches: [master]
     paths:
       - 'src/game/iso-next/**'
+      - 'src/App.tsx'
       - 'src/components/LoginScreen.tsx'
       - 'src/components/GameScreen.tsx'
       - 'src/game/network.ts'
