@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from 'pixi.js';
 import type { IsoCameraState } from './camera';
 import { isoTileColor, parseIsoTerrainPatch, type IsoTerrainPatch } from './terrainPresentation';
 import { buildIsoLandmark, visibleLandmarks } from './cityArchitecture';
+import { drawBiomeTileDetails } from './biomeScenery';
 import { ISO_LAYER_ORDER, type IsoSceneFrame, type IsoSceneNode } from './sceneModel';
 import type { IsoRenderer, IsoViewport } from './rendererContract';
 import { drawArcanePulse, drawEldoriaLivingWorld } from './livingWorldPass';
@@ -104,19 +105,22 @@ private drawGround(l:Container){
 private drawAuthoritativeGround(l:Container,patch:IsoTerrainPatch){
  const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
  const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
- if(this.app){this.app.canvas.dataset.terrainMode='authoritative';this.app.canvas.dataset.terrainMap=patch.mapId;this.app.canvas.dataset.groundCenter=`${cx},${cy}`;this.app.canvas.dataset.terrainTiles=String(patch.rows.length*patch.rows[0].length);}
+ if(this.app){
+  this.app.canvas.dataset.terrainMode='authoritative';
+  this.app.canvas.dataset.terrainMap=patch.mapId;
+  this.app.canvas.dataset.terrainBiome=patch.biome;
+  this.app.canvas.dataset.groundCenter=`${cx},${cy}`;
+  this.app.canvas.dataset.terrainTiles=String(patch.rows.length*patch.rows[0].length);
+ }
  const minX=Math.max(patch.originX,cx-13),maxX=Math.min(patch.originX+patch.rows[0].length-1,cx+13);
  const minY=Math.max(patch.originY,cy-13),maxY=Math.min(patch.originY+patch.rows.length-1,cy+13);
  for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
   const type=patch.rows[y-patch.originY]?.[x-patch.originX]||'?';
   const p=this.iso(x,y),color=isoTileColor(type,patch.biome);
-  const g=new Graphics().poly([0,-24,48,0,0,24,-48,0]).fill(color).stroke({width:.7,color:0x15181e,alpha:.38});
-  if(type==='a'){g.moveTo(-28,1).lineTo(20,-1).stroke({width:2,color:0x8bbdc1,alpha:.25});}
-  if(type==='l'){g.poly([-25,0,-8,-6,18,5]).stroke({width:2,color:0xffb36c,alpha:.65});}
-  if(type==='p'||type==='b'){g.moveTo(-28,3).lineTo(27,3).stroke({width:1.5,color:0xd2c2a5,alpha:.23});}
-  if(type==='t'){g.rect(-4,-31,8,31).fill(0x493a2f).circle(-10,-30,18).fill(color).circle(7,-39,16).fill({color:0x6a9e64,alpha:.36});}
-  if(type==='r'||type==='o'){g.poly([-17,-5,-7,-20,9,-22,18,-5,7,3]).fill({color:0xaab3ae,alpha:.35});}
-  if(type==='w'){g.poly([-48,0,0,-24,48,0,48,-14,0,-38,-48,-14]).fill({color:0xc0b4a2,alpha:.25});}
+  const alternate=((x*7+y*13)&3)===0;
+  const g=new Graphics().poly([0,-24,48,0,0,24,-48,0]).fill(color)
+    .stroke({width:.65,color:alternate?0x33423a:0x101922,alpha:.3});
+  drawBiomeTileDetails(g,type,patch.biome,patch.cityStyle,x,y);
   g.position.set(p.x,p.y);l.addChild(g);
  }
 }
