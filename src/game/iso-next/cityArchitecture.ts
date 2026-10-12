@@ -3,6 +3,8 @@ import { projectIso } from './projection';
 import type { IsoLandmark, IsoTerrainPatch } from './terrainPresentation';
 
 type XY = { x: number; y: number };
+export type CityDetailLevel = 'full' | 'compact';
+const idSeed=(id:string)=>[...id].reduce((sum,c)=>(Math.imul(sum,33)+c.charCodeAt(0))>>>0,5381);
 const color = (hex: string | undefined, fallback: number) =>
   hex && /^#[0-9a-f]{6}$/i.test(hex) ? Number.parseInt(hex.slice(1),16) : fallback;
 const shade = (hex: number, multiplier: number) => {
@@ -34,7 +36,9 @@ export function visibleLandmarks(patch:IsoTerrainPatch,cx:number,cy:number,radiu
 /** Presentation art only. The compound's base uses the exact server footprint.
  * Large 10x14 areas become smaller buildings/courtyards rather than a screen-sized roof.
  */
-export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch):Graphics{
+export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch,detail:CityDetailLevel='full'):Graphics{
+  const compact=detail==='compact';
+  const seed=idSeed(l.id);
   const theme=THEMES[patch.cityStyle||'']||THEMES.royal;
   const wall=color(patch.wallColor,theme.stone);
   const roof=color(patch.roofColor,theme.roof);
@@ -66,40 +70,66 @@ export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch):Graphics{
   }
   if(!modules.length)modules.push({x:l.x+.15,y:l.y+.15,w:Math.max(.7,l.w-.3),h:Math.max(.7,l.h-.3)});
   modules.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
-  modules.forEach((m,i)=>{
+  // Real server footprint remains intact. Only the decorative modules vary,
+  // with courtyards between structures instead of a uniform sea of roofs.
+  const renderModules=modules.length>=7
+    ?modules.filter((_,i)=>(i+seed)%11!==4&&(!compact||(i+seed)%5!==2))
+    :modules;
+  renderModules.forEach((m,i)=>{
     const height=(isKeep?62:isSacred?55:isMarket?29:isArena?24:44)+(i%3)*8;
     const rn=at(m.x,m.y),re=at(m.x+m.w,m.y),rs=at(m.x+m.w,m.y+m.h),rw=at(m.x,m.y+m.h);
     const tn=down(rn,-height),te=down(re,-height),ts=down(rs,-height),tw=down(rw,-height);
     const variant=shade(roof,[.84,.94,1.12,1.03][i%4]);
     g.poly(coords(re,rs,ts,te)).fill(shade(wall,.69)).stroke({width:1.3,color:shade(wall,.42)});
     g.poly(coords(rs,rw,tw,ts)).fill(shade(wall,.88)).stroke({width:1.3,color:shade(wall,.48)});
-    g.poly(coords(tn,te,ts,tw)).fill(variant).stroke({width:1.8,color:shade(roof,.47)});
-    // Deterministic roof-tile courses and carved masonry, grouped in the same
-    // cached Graphics object rather than allocating per-tile sprites.
-    for(let course=1;course<=3;course++){
-      const t=course/4;
-      const a=between(tn,tw,t),b=between(te,ts,t);
-      g.moveTo(a.x,a.y).lineTo(b.x,b.y)
-        .stroke({width:1.4,color:shade(roof,.54),alpha:.48});
+    // Distinct gabled roofs, slate/tile planes and open-air market awnings.
+    // Depth never changes collision: these are cached presentation polygons.
+    const pitched=!isArena&&(!isMarket||(i+seed)%3!==0);
+    const ridgeLift=(isKeep?22:isSacred?19:14)+((seed+i)%3)*3;
+    const ridgeA=down(between(tn,te),-ridgeLift);
+    const ridgeB=down(between(tw,ts),-ridgeLift);
+    if(pitched){
+      g.poly(coords(tn,ridgeA,ridgeB,tw))
+        .fill(shade(variant,.91)).stroke({width:1.4,color:shade(roof,.46)});
+      g.poly(coords(ridgeA,te,ts,ridgeB))
+        .fill(shade(variant,1.08)).stroke({width:1.4,color:shade(roof,.51)});
+    }else{
+      g.poly(coords(tn,te,ts,tw)).fill(variant)
+        .stroke({width:1.6,color:shade(roof,.47)});
     }
-    for(let course=1;course<=2;course++){
-      const t=course/3;
-      const a=between(rs,rw,t),b=between(ts,tw,t);
-      g.moveTo(a.x,a.y-3).lineTo(b.x,b.y+3)
-        .stroke({width:1,color:shade(wall,.49),alpha:.31});
+    if(!compact){
+      const courses=pitched?2:3;
+      for(let course=1;course<=courses;course++){
+        const t=course/(courses+1);
+        const a=between(tn,tw,t),b=between(te,ts,t);
+        if(pitched){
+          const ridge=between(ridgeA,ridgeB,t);
+          g.moveTo(a.x,a.y).lineTo(ridge.x,ridge.y).lineTo(b.x,b.y)
+            .stroke({width:1.05,color:shade(roof,.53),alpha:.42});
+        }else{
+          g.moveTo(a.x,a.y).lineTo(b.x,b.y)
+            .stroke({width:1.05,color:shade(roof,.53),alpha:.37});
+        }
+      }
+      for(let course=1;course<=2;course++){
+        const t=course/3;
+        const a=between(rs,rw,t),b=between(ts,tw,t);
+        g.moveTo(a.x,a.y-3).lineTo(b.x,b.y+3)
+          .stroke({width:1,color:shade(wall,.52),alpha:.22});
+      }
     }
-    const ridgeA=between(tn,te),ridgeB=between(tw,ts);
-    g.moveTo(ridgeA.x,ridgeA.y-5).lineTo(ridgeB.x,ridgeB.y-5)
-      .stroke({width:2,color:trim,alpha:.62});
+
+    g.moveTo(ridgeA.x,ridgeA.y).lineTo(ridgeB.x,ridgeB.y)
+      .stroke({width:pitched?2.6:1.2,color:trim,alpha:pitched?.73:.3});
     // Lit windows draw a readable miniature townscape at game camera scale.
-    if(!isArena){
+    if(!isArena&&(!compact||i%2===0)){
       const window=between(rs,rw);
       g.poly([window.x-7,window.y-height*.68,window.x+7,window.y-height*.68,
         window.x+7,window.y-height*.34,window.x-7,window.y-height*.34])
         .fill({color:isForge?0xff934d:isSacred?0x9fdaeb:0xf9d89c,alpha:.76})
         .stroke({width:2,color:shade(wall,.45)});
     }
-    if(isKeep&&(i===0||i===modules.length-1)){
+    if(isKeep&&(i===0||i===renderModules.length-1)){
       g.rect(tn.x-10,tn.y-24,20,26).fill(shade(wall,.75)).stroke({width:1.4,color:trim,alpha:.5});
       g.poly([tn.x-15,tn.y-23,tn.x,tn.y-39,tn.x+15,tn.y-23]).fill(variant);
     }
@@ -108,13 +138,35 @@ export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch):Graphics{
       g.moveTo(cross.x,cross.y-6).lineTo(cross.x,cross.y-29).stroke({width:3,color:trim});
       g.moveTo(cross.x-9,cross.y-19).lineTo(cross.x+9,cross.y-19).stroke({width:3,color:trim});
     }
+    // Carved ground-floor entries make buildings legible at play scale.
+    if((i+seed)%4===0&&!isArena){
+      const door=between(rs,rw,.35);
+      g.roundRect(door.x-8,door.y-23,16,23,2)
+        .fill(shade(wall,.30)).stroke({width:1.3,color:trim,alpha:.68});
+      if(!compact)g.circle(door.x+4,door.y-10,1.6).fill(trim);
+    }
+    if(!compact&&isKeep&&i===0){
+      const flag=down(ridgeA,-43);
+      g.moveTo(flag.x,flag.y+47).lineTo(flag.x,flag.y).stroke({width:2,color:trim});
+      g.poly([flag.x,flag.y+1,flag.x+21,flag.y+8,flag.x,flag.y+16])
+        .fill(shade(roof,1.25));
+    }
     if(isForge&&i===0){
       g.rect(tn.x-12,tn.y-28,24,32).fill(shade(wall,.55));
       g.circle(tn.x,tn.y-34,10).fill({color:0xffa86a,alpha:.26});
     }
     if(isMarket){
       g.poly([tw.x,tw.y,ts.x,ts.y,ts.x,ts.y+11,tw.x,tw.y+11])
-        .fill({color:i%2?trim:0xf0dfac,alpha:.7});
+        .fill({color:i%2?trim:0xf0dfac,alpha:.77});
+      if(!compact){
+        // Hanging merchant sign is part of the existing cached landmark.
+        const sign=between(ts,tw,.55);
+        g.moveTo(sign.x,sign.y+5).lineTo(sign.x,sign.y+19)
+          .stroke({width:1.5,color:shade(wall,.4)});
+        g.roundRect(sign.x-12,sign.y+18,24,14,2)
+          .fill(shade(wall,.52)).stroke({width:1.4,color:trim});
+        g.circle(sign.x,sign.y+25,3).fill(trim);
+      }
     }
   });
   g.position.set(center.x,center.y);
