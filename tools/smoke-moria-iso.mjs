@@ -25,6 +25,7 @@ async function readyIso(page) {
 }
 async function demo(page, suffix) {
   await page.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
+  if (suffix === 'desktop') await page.screenshot({ path: `${output}/login-desktop.png`, fullPage: false });
   await page.getByRole('button', { name: /JOGO RÁPIDO OFFLINE/i }).click();
   await readyIso(page);
   await page.locator('[data-testid="iso-player-hud"]').waitFor({ state: 'visible' });
@@ -102,6 +103,15 @@ try {
   await online.locator('[data-testid="iso-player-hud"]').waitFor({ state: 'visible' });
   await online.screenshot({ path: `${output}/online.png`, fullPage: false });
   report.push('Online: real HTTP login, character ownership, WebSocket auth, server snapshot, Pixi mount');
+  await online.getByRole('button', { name: 'Sair', exact: true }).click();
+  await online.getByRole('button', { name: /JOGO RÁPIDO OFFLINE/i }).waitFor({ state: 'visible' });
+  const afterLogout = await online.evaluate(() => ({
+    token: localStorage.getItem('moria_session_token'),
+    snapshot: window.__MORIA_AUTHORITATIVE_SNAPSHOT__
+  }));
+  assert.equal(afterLogout.token, null, 'Logout must clear stored session');
+  assert.equal(afterLogout.snapshot, undefined, 'Logout must clear stale authoritative snapshot');
+  report.push('Online logout: session and cached world snapshot cleared');
 
   if (issues.length) throw new Error(`Browser runtime errors:\n${issues.join('\n')}`);
   console.log('MOR\'IA ISO SMOKE PASS:\n' + report.join('\n'));
