@@ -2,7 +2,6 @@ import { Graphics } from 'pixi.js';
 import { projectIso } from './projection';
 import type { IsoLandmark, IsoTerrainPatch } from './terrainPresentation';
 
-type Polygon = readonly number[];
 const intColor = (value: string | undefined, fallback: number): number =>
   value && /^#[a-f0-9]{6}$/i.test(value) ? Number.parseInt(value.slice(1), 16) : fallback;
 const shade = (hex: number, multiplier: number): number => {
