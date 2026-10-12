@@ -233,6 +233,25 @@ try {
     'Mobile camera must follow the actual authoritative character');
   assert.ok(mobileParity.pageWidth <= mobileParity.width + 2,
     'Online mobile layout must not overflow the viewport');
+  const mobileBoxes = await mobileOnline.evaluate(() => {
+    const rect = selector => { const r=document.querySelector(selector)?.getBoundingClientRect();
+      return r?{top:r.top,bottom:r.bottom,left:r.left,right:r.right}:null; };
+    return {
+      header:rect('[data-testid="iso-status-header"]'),
+      menu:rect('[data-testid="iso-shortcuts-toggle"]'),
+      stats:rect('[data-testid="iso-authoritative-stats"]'),
+      bar:rect('[data-iso-window="authoritative-action-bar"]'),
+      height:innerHeight
+    };
+  });
+  assert.ok(mobileBoxes.header&&mobileBoxes.menu&&mobileBoxes.stats&&mobileBoxes.bar,
+    'Mobile must show status header, menu, compact stats and action bar');
+  assert.ok(mobileBoxes.header.bottom+3<=mobileBoxes.menu.top,
+    'Mobile menu must not cover the status header');
+  assert.ok(mobileBoxes.stats.bottom+3<=mobileBoxes.bar.top,
+    'Mobile stats must not cover the action bar');
+  assert.ok(mobileBoxes.bar.bottom<=mobileBoxes.height+3,
+    'Mobile action bar must stay inside the viewport');
   await mobileOnline.screenshot({ path:`${output}/online-mobile.png`, fullPage:false });
   await writeFile(`${output}/online-mobile-parity.json`, JSON.stringify(mobileParity,null,2));
   report.push(`Online mobile: same character/server city as desktop, ${mobileParity.cityLandmarks} real buildings, HUD fit and camera tracked`);
