@@ -40,3 +40,31 @@ test('terrain patches transmit on first snapshot, travel and new movement chunks
   assert.equal(shouldSendTerrainPatch(first.key, { mapId: 'frostpeak', x: 40, y: 40 }).send, true);
   assert.equal(shouldSendTerrainPatch(first.key, { mapId: 'eldoria', x: Infinity, y: 0 }).send, false);
 });
+
+test('landmark footprints in terrain patches exactly match server collision geometry', () => {
+  for (const mapId of ['eldoria','sunreach_coast','ironwood','frostpeak','shadowfen','emberhold','crystal_deep','stormwatch_isle']) {
+    const map = WORLD.getMap(mapId);
+    assert.ok(map && Array.isArray(map.landmarks), mapId);
+    const patch = buildTerrainPatch(map, map.townCenter.x, map.townCenter.y);
+    assert.ok(patch.landmarks.length > 0, `${mapId} must project authored architecture`);
+    assert.ok(patch.landmarks.length <= 24);
+    assert.equal(patch.cityStyle, map.cityStyle);
+    for (const landmark of patch.landmarks) {
+      const source = map.landmarks.find(candidate => candidate.id === landmark.id);
+      assert.ok(source, `${mapId}: ${landmark.id}`);
+      for (const field of ['x','y','w','h','kind','name']) assert.equal(landmark[field], source[field], `${landmark.id}.${field}`);
+      assert.equal(map.tiles[landmark.y]?.[landmark.x]?.type, 'wall', 'server collider must occupy the footprint');
+    }
+  }
+});
+
+test('Studio-updated architecture flows through projections without modifying World tiles', () => {
+  const original = WORLD.getMap('eldoria');
+  const landmark = { id:'studio_qa_house',name:'Casa do Estúdio',kind:'house',x:36,y:37,w:3,h:4 };
+  const map = { ...original, landmarks:[...original.landmarks,landmark] };
+  const previous = original.tiles[landmark.y][landmark.x].type;
+  const patch = buildTerrainPatch(map,landmark.x,landmark.y);
+  const fromPatch = patch.landmarks.find(item => item.id === landmark.id);
+  assert.deepEqual(fromPatch,{id:landmark.id,name:landmark.name,kind:landmark.kind,x:landmark.x,y:landmark.y,w:landmark.w,h:landmark.h});
+  assert.equal(original.tiles[landmark.y][landmark.x].type,previous);
+});
