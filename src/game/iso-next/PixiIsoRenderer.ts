@@ -27,7 +27,13 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
   // Snapshot/terrain can arrive before asynchronous Pixi.mount has completed.
   // Apply the same on-demand policy to early cached terrain as to live patches.
   if(this.terrain){app.ticker.stop();app.canvas.dataset.presentationScheduler='snapshot-on-demand';}
-  app.stage.addChild(this.world);for(const n of ISO_LAYER_ORDER){const l=new Container();l.label=`iso-${n}`;this.layers.set(n,l);this.world.addChild(l);}this.assets.warmManifest(ISO_ASSET_MANIFEST);app.ticker.add(t=>{this.elapsedMs+=t.deltaMS;this.motion=sampleEnvironmentMotion(this.elapsedMs);if(this.frame)this.paint(this.frame,false);});this.applyCamera();}resize(v:IsoViewport){if(this.app){this.app.ticker.maxFPS=v.width<720?30:60;this.app.canvas.dataset.frameCap=String(this.app.ticker.maxFPS);this.app.renderer.resize(v.width,v.height);}this.applyCamera();}setCamera(c:Readonly<IsoCameraState>){this.camera={...c};this.applyCamera();}render(frame:Readonly<IsoSceneFrame>){
+  app.stage.addChild(this.world);for(const n of ISO_LAYER_ORDER){const l=new Container();l.label=`iso-${n}`;this.layers.set(n,l);this.world.addChild(l);}this.assets.warmManifest(ISO_ASSET_MANIFEST);app.ticker.add(t=>{this.elapsedMs+=t.deltaMS;this.motion=sampleEnvironmentMotion(this.elapsedMs);if(this.frame)this.paint(this.frame,false);});this.applyCamera();}resize(v:IsoViewport){if(this.app){this.app.ticker.maxFPS=v.width<720?30:60;this.app.canvas.dataset.frameCap=String(this.app.ticker.maxFPS);
+    const previousDetail=this.app.renderer.screen.width<720?'compact':'full';
+    const nextDetail=v.width<720?'compact':'full';
+    // Cached server landmarks contain different polygons for each LOD.
+    if(previousDetail!==nextDetail)this.landmarkGraphics.clear();
+    this.terrainPaintKey='';
+    this.app.renderer.resize(v.width,v.height);}this.applyCamera();}setCamera(c:Readonly<IsoCameraState>){this.camera={...c};this.applyCamera();}render(frame:Readonly<IsoSceneFrame>){
  this.frame=frame;this.paint(frame,true);
  if(this.terrain&&this.app){
   this.app.renderer.render(this.app.stage);
@@ -143,6 +149,7 @@ private drawAuthoritativeGround(l:Container,patch:IsoTerrainPatch){
   this.app.canvas.dataset.terrainBiome=patch.biome;
   this.app.canvas.dataset.groundCenter=`${cx},${cy}`;
   this.app.canvas.dataset.terrainTiles=String(patch.rows.length*patch.rows[0].length);
+  this.app.canvas.dataset.terrainMaterialLevel=this.app.renderer.screen.width<720?'compact':'full';
  }
  // Iso viewport extents depend on BOTH height and width. Small mobile viewports
  // draw far fewer tiles while large desktop views get enough edge coverage.
@@ -162,7 +169,7 @@ private drawAuthoritativeGround(l:Container,patch:IsoTerrainPatch){
   // checkerboard grid across every street and market square.
   const g=new Graphics().poly([0,-24,48,0,0,24,-48,0]).fill(color)
     .stroke({width:paved?.45:.65,color:alternate?0x33423a:0x101922,alpha:paved?.085:.25});
-  drawBiomeTileDetails(g,type,patch.biome,patch.cityStyle,x,y);
+  drawBiomeTileDetails(g,type,patch.biome,patch.cityStyle,x,y,(this.app?.renderer.screen.width??window.innerWidth)<720);
   g.position.set(p.x,p.y);l.addChild(g);
  }
 }
