@@ -2,6 +2,8 @@ import { serverSync } from '../ServerSync';
 
 export type IsoAction =
   | { kind: 'attack'; targetId: string }
+  | { kind: 'quest-accept'; questId: string }
+  | { kind: 'quest-complete'; questId: string }
   | { kind: 'cast'; spellIndex: number; targetId?: string }
   | { kind: 'use-item'; itemId: string }
   | { kind: 'equip'; itemId: string }
@@ -21,6 +23,8 @@ export function dispatchIsoAction(action: IsoAction): boolean {
   if (!serverSync.isActive()) return false;
   switch (action.kind) {
     case 'attack': serverSync.sendAttack(action.targetId); break;
+    case 'quest-accept': serverSync.sendQuestAccept(action.questId); break;
+    case 'quest-complete': serverSync.sendQuestComplete(action.questId); break;
     case 'cast': serverSync.sendCast(action.spellIndex, action.targetId); break;
     case 'use-item': serverSync.sendUseItem(action.itemId); break;
     case 'equip': serverSync.sendEquip(action.itemId); break;
@@ -57,7 +61,7 @@ export function selectIsoGameplaySnapshot(snapshot: any): IsoGameplaySnapshot {
     inventory: Array.isArray(player.inventory) ? player.inventory : [],
     equipment: player.equipment && typeof player.equipment === 'object' ? player.equipment : {},
     groundItems: Array.isArray(snapshot?.groundItems) ? snapshot.groundItems : [],
-    activeQuests: Array.isArray(player.activeQuests) ? player.activeQuests : [],
+    activeQuests: Array.isArray(player.quests?.active) ? player.quests.active : Array.isArray(player.activeQuests) ? player.activeQuests : [],
     tasks: Array.isArray(player.tasks) ? player.tasks : Array.isArray(snapshot?.tasks) ? snapshot.tasks : [],
     talents: Array.isArray(player.talents) ? player.talents : [],
     professions: Array.isArray(player.professions) ? player.professions : [],
