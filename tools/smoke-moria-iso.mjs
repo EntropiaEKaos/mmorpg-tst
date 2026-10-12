@@ -136,6 +136,11 @@ try {
   const buildings = Number(await online.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-city-landmarks'));
   assert.ok(buildings >= 1 && buildings <= 24, `Landmark count must be bounded, got ${buildings}`);
   report.push(`Online architecture: ${buildings} server-owned buildings depth-sorted with actors`);
+  assert.equal(
+    await online.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-entity-update-mode'),
+    'snapshot-driven',
+    'Online actors must update on authoritative presentation changes, not 60Hz ticker allocation'
+  );
   await online.waitForFunction(() => {
     const terrain = document.querySelector('canvas[data-testid="iso-pixi-canvas"]');
     const three = document.querySelector('canvas[data-testid="iso-three-atmosphere"]');
