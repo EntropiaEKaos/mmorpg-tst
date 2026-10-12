@@ -158,6 +158,17 @@ try {
     .getAttribute('data-city-detail-level'),'full',
     'Desktop must use complete medieval roof and facade geometry');
   report.push('Visual 2.6 desktop: detailed roofs, doors, parapets and masonry render at full geometry');
+  assert.equal(await online.locator('canvas[data-testid="iso-pixi-canvas"]')
+    .getAttribute('data-terrain-material-level'),'full',
+    'Desktop must retain full terrain material detail');
+  const desktopGeometry=await online.locator('canvas[data-testid="iso-pixi-canvas"]').evaluate(c=>({
+    visible:Number(c.dataset.terrainVisibleTiles),buildMs:Number(c.dataset.terrainBuildMs),
+    total:Number(c.dataset.terrainTiles)
+  }));
+  assert.ok(desktopGeometry.visible>0&&desktopGeometry.visible<=desktopGeometry.total,
+    'Desktop tile geometry must be bounded by authoritative terrain patch');
+  assert.ok(Number.isFinite(desktopGeometry.buildMs));
+  report.push(`Visual 2.7 desktop: ${desktopGeometry.visible} visible server tiles; material detail full`);
   assert.equal(
     await online.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-entity-update-mode'),
     'snapshot-driven',
@@ -186,6 +197,8 @@ try {
   if(desktopCounters.shaderProfile)assert.equal(desktopCounters.shaderProfile,'desktop-full');
   report.push(`Visual 2.5 desktop: Pixi snapshot-on-demand (${desktopCounters.pixiFrames} manual frames), Three ${desktopCounters.shaderProfile}`);
   await online.screenshot({ path: `${output}/online.png`, fullPage: false });
+  await online.locator('canvas[data-testid="iso-pixi-canvas"]')
+    .screenshot({path:`${output}/online-city-canvas.png`});
   // Diagnostic-only FPS sample. CI software WebGL is slower than real GPUs,
   // so retain actual statistics rather than imposing a misleading hard FPS gate.
   const frameSample = await online.evaluate(async () => new Promise(resolve => {
@@ -276,6 +289,17 @@ try {
     .getAttribute('data-city-detail-level'),'compact',
     'Mobile should keep the server buildings with cheaper medieval facade geometry');
   report.push('Visual 2.6 mobile: compact city mesh detail with identical server footprint');
+  assert.equal(await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]')
+    .getAttribute('data-terrain-material-level'),'compact',
+    'Mobile terrain decorative details must respect the compact budget');
+  const mobileGeometry=await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]').evaluate(c=>({
+    visible:Number(c.dataset.terrainVisibleTiles),buildMs:Number(c.dataset.terrainBuildMs),
+    total:Number(c.dataset.terrainTiles)
+  }));
+  assert.ok(mobileGeometry.visible>0&&mobileGeometry.visible<=mobileGeometry.total,
+    'Mobile terrain tile count must stay bounded');
+  assert.ok(Number.isFinite(mobileGeometry.buildMs));
+  report.push(`Visual 2.7 mobile: ${mobileGeometry.visible} visible server tiles; material detail compact`);
   assert.equal(mobileParity.mapId, 'eldoria');
   assert.equal(mobileParity.biome, 'plains');
   assert.ok(mobileParity.cityLandmarks >= 1);
