@@ -130,6 +130,31 @@ export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch,detail:City
       g.poly(coords(tn,te,ts,tw)).fill(variant)
         .stroke({width:1.6,color:shade(roof,.47)});
     }
+    if(ornate&&pitched){
+      // Visible roof identity at normal isometric camera zoom. Dormers and
+      // chimneys are fixed decoration on a server-owned building, never props.
+      if((i+seed)%3===1){
+        const dormer=between(ridgeB,ts,.52);
+        g.poly([dormer.x-12,dormer.y+5,dormer.x,dormer.y-12,
+          dormer.x+12,dormer.y+5]).fill(shade(roof,.66))
+          .stroke({width:1.5,color:trim,alpha:.58});
+        g.roundRect(dormer.x-6,dormer.y+3,12,12,2)
+          .fill(shade(wall,.63)).stroke({width:1.6,color:shade(wall,.35)});
+        g.rect(dormer.x-3,dormer.y+5,6,7)
+          .fill({color:isSacred?0xa9dfed:0xf6c67f,alpha:.78});
+      }
+      if((i+seed)%5===0){
+        const stack=between(ridgeA,ridgeB,.32);
+        const chimney=down(stack,1);
+        g.rect(chimney.x-7,chimney.y-23,14,26)
+          .fill(shade(wall,.72)).stroke({width:1.4,color:shade(wall,.45)});
+        g.poly([chimney.x-10,chimney.y-23,chimney.x+10,chimney.y-23,
+          chimney.x+8,chimney.y-28,chimney.x-8,chimney.y-28])
+          .fill(shade(wall,.42));
+        g.moveTo(chimney.x-5,chimney.y-23).lineTo(chimney.x+5,chimney.y-23)
+          .stroke({width:1.1,color:trim,alpha:.5});
+      }
+    }
     if(ornate){
       // Sparse roof-slate brush strokes produce a material impression without
       // allocating textures or adding more children to Pixi's display list.
