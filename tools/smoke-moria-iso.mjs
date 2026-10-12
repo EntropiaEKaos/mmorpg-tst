@@ -28,7 +28,13 @@ async function demo(page, suffix) {
   if (suffix === 'desktop') await page.screenshot({ path: `${output}/login-desktop.png`, fullPage: false });
   await page.getByRole('button', { name: /JOGO RÁPIDO OFFLINE/i }).click();
   await readyIso(page);
-  await page.locator('[data-testid="iso-player-hud"]').waitFor({ state: 'visible' });
+  await page.locator('[data-testid="iso-authoritative-stats"]').waitFor({ state: 'visible' });
+  if (suffix === 'desktop') await page.locator('[data-testid="iso-player-hud"]').waitFor({ state: 'visible' });
+  if (suffix === 'mobile') {
+    await page.locator('[data-testid="iso-shortcuts-toggle"]').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('[data-iso-window="authoritative-minimap"]').count(), 0, 'Mobile minimap should begin collapsed');
+    assert.equal(await page.locator('[data-testid="iso-player-hud"]').count(), 0, 'Mobile should show one status HUD');
+  }
   await page.getByText('Jogo Rápido • LOCAL').waitFor({ state: 'visible' });
   const initial = await page.evaluate(() => window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.pos);
   assert.ok(initial && typeof initial.x === 'number', 'Quick Play authoritative-shaped snapshot must expose a position');
@@ -101,6 +107,13 @@ try {
   await readyIso(online);
   await online.getByText('Servidor autoritativo • LIVE').waitFor({ state: 'visible', timeout: 16000 });
   await online.locator('[data-testid="iso-player-hud"]').waitFor({ state: 'visible' });
+  await online.waitForFunction(() => {
+    const pos = window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.pos;
+    const center = document.querySelector('canvas[data-testid="iso-pixi-canvas"]')?.getAttribute('data-ground-center');
+    if (!pos || !center) return false;
+    const [x, y] = center.split(',').map(Number);
+    return Math.abs(x - pos.x) <= 1 && Math.abs(y - pos.y) <= 1;
+  }, null, { timeout: 10000 });
   await online.screenshot({ path: `${output}/online.png`, fullPage: false });
   report.push('Online: real HTTP login, character ownership, WebSocket auth, server snapshot, Pixi mount');
   await online.getByRole('button', { name: 'Sair', exact: true }).click();
