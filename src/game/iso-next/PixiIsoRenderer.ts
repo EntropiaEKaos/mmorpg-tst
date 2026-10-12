@@ -16,12 +16,15 @@ import { ISO_ASSET_MANIFEST } from './assetPipeline';import { PixiIsoAssetRuntim
 const TILE_W=96,TILE_H=48;
 export class PixiIsoRenderer implements IsoRenderer{private app:Application|null=null;private world=new Container();private layers=new Map<string,Container>();private camera:IsoCameraState={x:0,y:0,zoom:1};private frame:Readonly<IsoSceneFrame>|null=null;private motion:EnvironmentMotionSample=sampleEnvironmentMotion(0);private elapsedMs=0;private assets=new PixiIsoAssetRuntime();private combatOffset={x:0,y:0,zoom:0};private terrain:IsoTerrainPatch|null=null;private terrainMapId='';private terrainPaintKey='';private landmarkGraphics=new Map<string,Graphics>();
 setTerrainPatch(value:unknown,mapId:string){if(mapId!==this.terrainMapId){this.terrainMapId=mapId;this.terrain=null;this.terrainPaintKey='';this.landmarkGraphics.clear();}const parsed=parseIsoTerrainPatch(value,mapId);if(parsed){this.terrain=parsed;this.terrainPaintKey='';this.landmarkGraphics.clear();if(this.app){this.app.canvas.dataset.terrainMode='authoritative';this.app.canvas.dataset.terrainMap=mapId;}}}
-async mount(host:HTMLElement){const app=new Application();await app.init({resizeTo:host,antialias:true,background:'#091017',preference:'webgl'});app.canvas.dataset.testid='iso-pixi-canvas';Object.assign(app.canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',zIndex:'0'});host.appendChild(app.canvas);this.app=app;app.stage.addChild(this.world);for(const n of ISO_LAYER_ORDER){const l=new Container();l.label=`iso-${n}`;this.layers.set(n,l);this.world.addChild(l);}this.assets.warmManifest(ISO_ASSET_MANIFEST);app.ticker.add(t=>{this.elapsedMs+=t.deltaMS;this.motion=sampleEnvironmentMotion(this.elapsedMs);if(this.frame)this.paint(this.frame);});this.applyCamera();}resize(v:IsoViewport){this.app?.renderer.resize(v.width,v.height);this.applyCamera();}setCamera(c:Readonly<IsoCameraState>){this.camera={...c};this.applyCamera();}render(frame:Readonly<IsoSceneFrame>){this.frame=frame;this.paint(frame);}private paint(frame:Readonly<IsoSceneFrame>){
+async mount(host:HTMLElement){const app=new Application();await app.init({resizeTo:host,antialias:true,background:'#091017',preference:'webgl'});app.canvas.dataset.testid='iso-pixi-canvas';Object.assign(app.canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',zIndex:'0'});host.appendChild(app.canvas);this.app=app;app.stage.addChild(this.world);for(const n of ISO_LAYER_ORDER){const l=new Container();l.label=`iso-${n}`;this.layers.set(n,l);this.world.addChild(l);}this.assets.warmManifest(ISO_ASSET_MANIFEST);app.ticker.add(t=>{this.elapsedMs+=t.deltaMS;this.motion=sampleEnvironmentMotion(this.elapsedMs);if(this.frame)this.paint(this.frame,false);});this.applyCamera();}resize(v:IsoViewport){this.app?.renderer.resize(v.width,v.height);this.applyCamera();}setCamera(c:Readonly<IsoCameraState>){this.camera={...c};this.applyCamera();}render(frame:Readonly<IsoSceneFrame>){this.frame=frame;this.paint(frame,true);}private paint(frame:Readonly<IsoSceneFrame>,refreshEntities:boolean){
  const juice=aggregateCombatJuice(frame.entities);
  this.combatOffset={x:juice.shakeX,y:juice.shakeY,zoom:juice.zoomKick};
  this.applyCamera();
  for(const n of ISO_LAYER_ORDER){
   const l=this.layers.get(n);if(!l)continue;
+  // Living entities are rebuilt on authoritative presentation changes (10-20Hz),
+  // not the Pixi 60Hz ticker; this avoids constant sprite creation/destruction.
+  if(n==='entities'&&!refreshEntities&&this.terrain)continue;
   if(n==='terrain'){
    const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
    const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
@@ -57,7 +60,7 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
    const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
    const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
    const buildings=visibleLandmarks(this.terrain,cx,cy);
-   if(this.app){this.app.canvas.dataset.cityLandmarks=String(buildings.length);this.app.canvas.dataset.cityStyle=this.terrain.cityStyle||'royal';}
+   if(this.app){this.app.canvas.dataset.cityLandmarks=String(buildings.length);this.app.canvas.dataset.cityStyle=this.terrain.cityStyle||'royal';this.app.canvas.dataset.entityUpdateMode='snapshot-driven';}
    const ordered=[
     ...frame.entities.map(node=>({depth:node.depth,id:node.id,draw:()=>this.drawNode(node)})),
     ...buildings.map(building=>({depth:building.x+building.y+building.w+building.h-.01,id:`landmark:${building.id}`,draw:()=>{
