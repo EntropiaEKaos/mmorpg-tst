@@ -69,7 +69,7 @@ try {
   const characterName = `SmokeHero${stamp.slice(-6)}`;
   const password = `MoriaSmokeStrong-${stamp}`;
   const registered = await fetch(`${base}/api/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
-  assert.equal(registered.status, 201, `register: ${await registered.text()}`);
+  if (registered.status !== 201) throw new Error(`register ${registered.status}: ${await registered.text()}`);
   const registration = await registered.json();
   const created = await fetch(`${base}/api/characters`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${registration.sessionToken}` }, body: JSON.stringify({ name: characterName, vocation: 'knight' }) });
   assert.equal(created.status, 201, `character creation: ${await created.text()}`);
