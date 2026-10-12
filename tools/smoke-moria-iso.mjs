@@ -118,6 +118,16 @@ try {
     const [x, y] = center.split(',').map(Number);
     return Math.abs(x - playerX) <= 1 && Math.abs(y - playerY) <= 1;
   }, null, { timeout: 10000 });
+  await online.waitForFunction(() => {
+    const canvas = document.querySelector('canvas[data-testid="iso-pixi-canvas"]');
+    return canvas?.getAttribute('data-terrain-mode') === 'authoritative'
+      && canvas?.getAttribute('data-terrain-map') === 'eldoria'
+      && Number(canvas?.getAttribute('data-terrain-tiles')) > 0;
+  }, null, { timeout: 10000 });
+  // Patches are deltas; the terrain must survive later snapshots without one.
+  await online.waitForTimeout(400);
+  assert.equal(await online.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-terrain-mode'), 'authoritative');
+  report.push('Online: terrain is rendered from bounded authoritative server tiles');
   await online.screenshot({ path: `${output}/online.png`, fullPage: false });
   report.push('Online: real HTTP login, character ownership, WebSocket auth, server snapshot, Pixi mount');
   await online.getByRole('button', { name: 'Sair', exact: true }).click();
