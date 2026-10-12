@@ -108,11 +108,15 @@ try {
   await online.getByText('Servidor autoritativo • LIVE').waitFor({ state: 'visible', timeout: 16000 });
   await online.locator('[data-testid="iso-player-hud"]').waitFor({ state: 'visible' });
   await online.waitForFunction(() => {
-    const pos = window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.pos;
+    const player = window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player;
     const center = document.querySelector('canvas[data-testid="iso-pixi-canvas"]')?.getAttribute('data-ground-center');
-    if (!pos || !center) return false;
+    if (!player || !center) return false;
+    // The authoritative presentation adapter reads top-level x/y; "pos" is legacy.
+    const playerX = Number.isFinite(player.x) ? player.x : player.pos?.x;
+    const playerY = Number.isFinite(player.y) ? player.y : player.pos?.y;
+    if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) return false;
     const [x, y] = center.split(',').map(Number);
-    return Math.abs(x - pos.x) <= 1 && Math.abs(y - pos.y) <= 1;
+    return Math.abs(x - playerX) <= 1 && Math.abs(y - playerY) <= 1;
   }, null, { timeout: 10000 });
   await online.screenshot({ path: `${output}/online.png`, fullPage: false });
   report.push('Online: real HTTP login, character ownership, WebSocket auth, server snapshot, Pixi mount');
