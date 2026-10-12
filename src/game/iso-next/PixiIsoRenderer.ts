@@ -13,8 +13,8 @@ import { depthScale, resolveOcclusionAlpha } from './depthOcclusion';
 import { deterministicMote, sampleEnvironmentMotion, type EnvironmentMotionSample } from './environmentMotion';
 import { ISO_ASSET_MANIFEST } from './assetPipeline';import { PixiIsoAssetRuntime } from './pixiAssetRuntime';import { drawEuphoriaProcedural } from './euphoriaProceduralPass';import { drawShadowWolfProcedural } from './shadowWolfProceduralPass';import { drawAmbientEntityProcedural } from './ambientEntityProceduralPass';import { drawCharacterVisual } from './characterVisualSystem';import { drawMonsterVisual } from './monsterVisualSystem';import { drawDangerTelegraph } from './dangerTelegraphPass';import { aggregateCombatJuice, sampleCombatJuice } from './combatJuice';
 const TILE_W=96,TILE_H=48;
-export class PixiIsoRenderer implements IsoRenderer{private app:Application|null=null;private world=new Container();private layers=new Map<string,Container>();private camera:IsoCameraState={x:0,y:0,zoom:1};private frame:Readonly<IsoSceneFrame>|null=null;private motion:EnvironmentMotionSample=sampleEnvironmentMotion(0);private elapsedMs=0;private assets=new PixiIsoAssetRuntime();private combatOffset={x:0,y:0,zoom:0};private terrain:IsoTerrainPatch|null=null;private terrainMapId='';private terrainPaintKey='';
-setTerrainPatch(value:unknown,mapId:string){if(mapId!==this.terrainMapId){this.terrainMapId=mapId;this.terrain=null;this.terrainPaintKey='';}const parsed=parseIsoTerrainPatch(value,mapId);if(parsed){this.terrain=parsed;this.terrainPaintKey='';if(this.app){this.app.canvas.dataset.terrainMode='authoritative';this.app.canvas.dataset.terrainMap=mapId;}}}
+export class PixiIsoRenderer implements IsoRenderer{private app:Application|null=null;private world=new Container();private layers=new Map<string,Container>();private camera:IsoCameraState={x:0,y:0,zoom:1};private frame:Readonly<IsoSceneFrame>|null=null;private motion:EnvironmentMotionSample=sampleEnvironmentMotion(0);private elapsedMs=0;private assets=new PixiIsoAssetRuntime();private combatOffset={x:0,y:0,zoom:0};private terrain:IsoTerrainPatch|null=null;private terrainMapId='';private terrainPaintKey='';private landmarkGraphics=new Map<string,Graphics>();
+setTerrainPatch(value:unknown,mapId:string){if(mapId!==this.terrainMapId){this.terrainMapId=mapId;this.terrain=null;this.terrainPaintKey='';}const parsed=parseIsoTerrainPatch(value,mapId);if(parsed){this.terrain=parsed;this.terrainPaintKey='';this.landmarkGraphics.clear();if(this.app){this.app.canvas.dataset.terrainMode='authoritative';this.app.canvas.dataset.terrainMap=mapId;}}}
 async mount(host:HTMLElement){const app=new Application();await app.init({resizeTo:host,antialias:true,background:'#091017',preference:'webgl'});app.canvas.dataset.testid='iso-pixi-canvas';Object.assign(app.canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',zIndex:'0'});host.appendChild(app.canvas);this.app=app;app.stage.addChild(this.world);for(const n of ISO_LAYER_ORDER){const l=new Container();l.label=`iso-${n}`;this.layers.set(n,l);this.world.addChild(l);}this.assets.warmManifest(ISO_ASSET_MANIFEST);app.ticker.add(t=>{this.elapsedMs+=t.deltaMS;this.motion=sampleEnvironmentMotion(this.elapsedMs);if(this.frame)this.paint(this.frame);});this.applyCamera();}resize(v:IsoViewport){this.app?.renderer.resize(v.width,v.height);this.applyCamera();}setCamera(c:Readonly<IsoCameraState>){this.camera={...c};this.applyCamera();}render(frame:Readonly<IsoSceneFrame>){this.frame=frame;this.paint(frame);}private paint(frame:Readonly<IsoSceneFrame>){
  const juice=aggregateCombatJuice(frame.entities);
  this.combatOffset={x:juice.shakeX,y:juice.shakeY,zoom:juice.zoomKick};
@@ -30,7 +30,10 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
    if(key===this.terrainPaintKey)continue;
    this.terrainPaintKey=key;
   }
-  l.removeChildren().forEach(c=>c.destroy());
+  // Landmark Graphics are immutable across frames until the next terrain patch.
+  // Reuse the expensive polygons instead of rebuilding the entire city at 60fps.
+  const cityCache=n==='entities'?new Set(this.landmarkGraphics.values()):null;
+  l.removeChildren().forEach(c=>{if(!cityCache?.has(c as Graphics))c.destroy();});
   if(n==='terrain'){
    this.drawGround(l);
    for(const e of frame.entities){const telegraph=drawDangerTelegraph(e);if(telegraph)l.addChild(telegraph);}
@@ -56,7 +59,11 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
    if(this.app){this.app.canvas.dataset.cityLandmarks=String(buildings.length);this.app.canvas.dataset.cityStyle=this.terrain.cityStyle||'royal';}
    const ordered=[
     ...frame.entities.map(node=>({depth:node.depth,id:node.id,draw:()=>this.drawNode(node)})),
-    ...buildings.map(building=>({depth:building.x+building.y+building.w+building.h-.01,id:`landmark:${building.id}`,draw:()=>buildIsoLandmark(building,this.terrain!)})),
+    ...buildings.map(building=>({depth:building.x+building.y+building.w+building.h-.01,id:`landmark:${building.id}`,draw:()=>{
+      let art=this.landmarkGraphics.get(building.id);
+      if(!art){art=buildIsoLandmark(building,this.terrain!);this.landmarkGraphics.set(building.id,art);}
+      return art;
+    }})),
    ].sort((a,b)=>a.depth-b.depth||a.id.localeCompare(b.id));
    for(const item of ordered)l.addChild(item.draw());
    continue;
@@ -64,7 +71,7 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
   for(const node of frame[n])l.addChild(this.drawNode(node));
  }
 }
-destroy(){this.frame=null;this.assets.destroy();this.app?.destroy(true,{children:true});this.app=null;this.layers.clear();}private applyCamera(){if(!this.app)return;const z=Math.max(.5,this.camera.zoom+this.combatOffset.zoom);this.world.scale.set(z);this.world.position.set(this.app.renderer.width/2-this.camera.x*z+this.combatOffset.x,this.app.renderer.height/2-this.camera.y*z+this.combatOffset.y);}private iso(x:number,y:number){return{x:(x-y)*TILE_W/2,y:(x+y)*TILE_H/2};}
+destroy(){this.frame=null;for(const art of this.landmarkGraphics.values()){if(!art.parent)art.destroy();}this.landmarkGraphics.clear();this.assets.destroy();this.app?.destroy(true,{children:true});this.app=null;this.layers.clear();}private applyCamera(){if(!this.app)return;const z=Math.max(.5,this.camera.zoom+this.combatOffset.zoom);this.world.scale.set(z);this.world.position.set(this.app.renderer.width/2-this.camera.x*z+this.combatOffset.x,this.app.renderer.height/2-this.camera.y*z+this.combatOffset.y);}private iso(x:number,y:number){return{x:(x-y)*TILE_W/2,y:(x+y)*TILE_H/2};}
 /** Presentation-only fallback: keep a terrain patch around the authoritative camera
  * while a map-specific ISO tile adapter is developed. Outside the Eldoria fixture,
  * never fabricate roads, water or landmarks as though they came from the server. */
