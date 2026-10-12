@@ -141,6 +141,7 @@ private drawGround(l:Container){
   }
 }
 private drawAuthoritativeGround(l:Container,patch:IsoTerrainPatch){
+ const geometryStarted=performance.now();
  const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
  const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
  if(this.app){
@@ -171,6 +172,10 @@ private drawAuthoritativeGround(l:Container,patch:IsoTerrainPatch){
     .stroke({width:paved?.45:.65,color:alternate?0x33423a:0x101922,alpha:paved?.085:.25});
   drawBiomeTileDetails(g,type,patch.biome,patch.cityStyle,x,y,(this.app?.renderer.screen.width??window.innerWidth)<720);
   g.position.set(p.x,p.y);l.addChild(g);
+ }
+ if(this.app){
+  this.app.canvas.dataset.terrainVisibleTiles=String(l.children.length);
+  this.app.canvas.dataset.terrainBuildMs=(performance.now()-geometryStarted).toFixed(2);
  }
 }
 private drawStructures(l:Container){drawEldoriaArchitecture(l);const p=this.iso(8,8),f=new Graphics().ellipse(0,9,52,24).fill(0x4c575d).ellipse(0,3,41,17).fill(0x2c7890).ellipse(0,1,32,11).fill({color:0x75c1cc,alpha:.5}).rect(-6,-39,12,44).fill(0x727e83).circle(0,-43,10).fill(0x9aa5a7);f.position.set(p.x,p.y);l.addChild(f);}
