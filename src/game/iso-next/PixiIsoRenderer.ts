@@ -1,6 +1,7 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import type { IsoCameraState } from './camera';
 import { isoTileColor, parseIsoTerrainPatch, type IsoTerrainPatch } from './terrainPresentation';
+import { buildIsoLandmark, visibleLandmarks } from './cityArchitecture';
 import { ISO_LAYER_ORDER, type IsoSceneFrame, type IsoSceneNode } from './sceneModel';
 import type { IsoRenderer, IsoViewport } from './rendererContract';
 import { drawArcanePulse, drawEldoriaLivingWorld } from './livingWorldPass';
@@ -47,6 +48,18 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
    this.drawAtmosphere(l);
    if(!this.terrain)drawArcanePulse(l);
    for(const e of frame.entities)this.drawCombatFx(l,e);
+  }
+  if(n==='entities'&&this.terrain){
+   const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
+   const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
+   const buildings=visibleLandmarks(this.terrain,cx,cy);
+   if(this.app){this.app.canvas.dataset.cityLandmarks=String(buildings.length);this.app.canvas.dataset.cityStyle=this.terrain.cityStyle||'royal';}
+   const ordered=[
+    ...frame.entities.map(node=>({depth:node.depth,id:node.id,draw:()=>this.drawNode(node)})),
+    ...buildings.map(building=>({depth:building.x+building.y+building.w+building.h-.01,id:`landmark:${building.id}`,draw:()=>buildIsoLandmark(building,this.terrain!)})),
+   ].sort((a,b)=>a.depth-b.depth||a.id.localeCompare(b.id));
+   for(const item of ordered)l.addChild(item.draw());
+   continue;
   }
   for(const node of frame[n])l.addChild(this.drawNode(node));
  }
