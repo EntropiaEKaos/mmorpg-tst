@@ -17,13 +17,13 @@ const palettes:Record<string,{foliage:number,light:number,dark:number,detail:num
 };
 
 /** Drawn into the *existing tile Graphics* — zero extra display-list items. */
-export function drawBiomeTileDetails(g:Graphics,code:string,biome:string,cityStyle:string|undefined,x:number,y:number):void{
+export function drawBiomeTileDetails(g:Graphics,code:string,biome:string,cityStyle:string|undefined,x:number,y:number,compact=false):void{
  const b=palettes[biome]||palettes.plains;
  const v=hash(x,y);
  const shift=(hash(x,y,3)-.5)*22;
  if(code==='g'||code==='u'||code==='d'||code==='s'){
   // Ground grains/grass are small, camera-scale-aware accents.
-  for(let k=0;k<3;k++){
+  for(let k=0;k<(compact?1:3);k++){
    const a=hash(x+k*13,y+k*7,2),px=(a-.5)*54,py=(hash(y+k*5,x,5)-.5)*19;
    g.moveTo(px,py).lineTo(px+3+a*3,py-2-a*3)
     .stroke({width:1.5,color:b.light,alpha:.18+.19*a});
@@ -32,7 +32,7 @@ export function drawBiomeTileDetails(g:Graphics,code:string,biome:string,citySty
  if(code==='p'||code==='f'||code==='h'||code==='b'){
   // Only a fraction of paved tiles need mortar seams: continuous five-line
   // hatching made the capital look like a grid and hurt software WebGL.
-  if(((x*7+y*3)&3)===0){
+  if(((x*7+y*3)&(compact?7:3))===0){
    const yy=(v-.5)*12;
    g.moveTo(-25,yy).lineTo(-1,yy-1).stroke({width:1,color:b.dark,alpha:.22});
    g.moveTo(9,yy+7).lineTo(29,yy+6).stroke({width:1,color:b.dark,alpha:.16});
