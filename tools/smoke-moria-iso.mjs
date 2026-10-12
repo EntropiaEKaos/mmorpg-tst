@@ -125,6 +125,24 @@ try {
 
   const online = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   instrument(online, 'online');
+  // Observe real outbound WebSocket frames WITHOUT mocking, intercepting or
+  // changing any server traffic. This distinguishes an intent from a reward.
+  const desktopIntents=[];
+  online.on('websocket',socket=>socket.on('framesent',frame=>{
+    try {
+      const packet=JSON.parse(String(frame.payload));
+      if(packet.kind==='intent')desktopIntents.push(packet.payload);
+    }catch{}
+  }));
+  const waitForIntent=async(type,start,timeout=12000)=>{
+    const began=Date.now();
+    while(Date.now()-began<timeout){
+      const intent=desktopIntents.slice(start).find(x=>x?.type===type);
+      if(intent)return intent;
+      await new Promise(resolve=>setTimeout(resolve,130));
+    }
+    throw new Error(`No server-bound ${type} intent sent from desktop UI`);
+  };
   await online.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
   await online.locator('[autocomplete="username"]').fill(username);
   await online.locator('[autocomplete="current-password"]').fill(password);
@@ -230,6 +248,56 @@ try {
   await writeFile(`${output}/render-performance.json`,JSON.stringify({engine:'CI Chromium software WebGL',frameSample},null,2));
   report.push(`Visual performance sample: ${frameSample.samples} frames, ~${frameSample.estimatedFps.toFixed(1)} FPS (CI software renderer)`);
   report.push('Online: real HTTP login, character ownership, WebSocket auth, server snapshot, Pixi mount');
+  // Desktop gameplay contract: quest progress is owned by player.quests,
+  // catalog by content_sync. The UI must use these real data sources.
+  await online.waitForFunction(()=>{
+    const q=window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.quests;
+    return q&&Array.isArray(q.active)&&Array.isArray(q.completed);
+  },null,{timeout:12000});
+  await online.locator('[data-testid="iso-hotbar-slots"][data-desktop-hotkeys="enabled"]').waitFor({state:'visible'});
+  await online.keyboard.press('i');
+  await online.locator('[data-iso-window="inventory-equipment-loot"]').waitFor({state:'visible'});
+  const inventoryPanel=online.locator('[data-iso-window="inventory-equipment-loot"] [data-testid="iso-gameplay-panel"]');
+  await inventoryPanel.waitFor({state:'visible'});
+  const inventoryShellBounds=await online.locator('[data-iso-window="inventory-equipment-loot"]').boundingBox();
+  const inventoryInnerBounds=await inventoryPanel.boundingBox();
+  assert.ok(inventoryShellBounds&&inventoryInnerBounds&&
+    inventoryInnerBounds.x>=inventoryShellBounds.x&&
+    inventoryInnerBounds.x+inventoryInnerBounds.width<=inventoryShellBounds.x+inventoryShellBounds.width+2,
+    'Inventory must fit inside its draggable desktop window');
+  await online.screenshot({path:`${output}/online-desktop-inventory.png`,fullPage:false});
+  await online.keyboard.press('i');
+  await online.locator('[data-iso-window="inventory-equipment-loot"]').waitFor({state:'hidden'});
+  await online.keyboard.press('q');
+  const questLog=online.locator('[data-iso-window="legacy-quests"] [data-testid="iso-authoritative-quest-log"]');
+  await questLog.waitFor({state:'visible'});
+  await online.waitForFunction(()=>{
+    const e=document.querySelector('[data-testid="iso-quest-available-count"]');
+    return e&&Number(e.textContent?.split('·').pop())>0;
+  },null,{timeout:12000});
+  const questButton=online.locator('[data-testid="iso-quest-accept"]:not([disabled])').first();
+  await questButton.waitFor({state:'visible'});
+  const questId=await questButton.getAttribute('data-quest-id');
+  assert.ok(questId,'Server quest catalog must expose a stable quest ID');
+  await online.screenshot({path:`${output}/online-desktop-quests.png`,fullPage:false});
+  const questStart=desktopIntents.length;
+  await questButton.click();
+  const acceptedIntent=await waitForIntent('quest_accept',questStart);
+  assert.equal(acceptedIntent.payload.questId,questId,
+    'Quest UI must route to quest_accept, not the unrelated Tibia task channel');
+  report.push(`Desktop quest diary: authenticated server catalog, player.quests state and official quest_accept intent (${questId})`);
+  await online.keyboard.press('q');
+  await questLog.waitFor({state:'hidden'});
+  // Spells use the SAME authoritative cast intent through mouse and 1..0 keys.
+  const enabledSpell=online.locator('[data-testid^="iso-spell-slot-"]:not([disabled])').first();
+  await enabledSpell.waitFor({state:'visible'});
+  const slot=Number((await enabledSpell.getAttribute('data-testid')).split('-').pop());
+  assert.ok(Number.isInteger(slot)&&slot>=0&&slot<10);
+  const castStart=desktopIntents.length;
+  await online.keyboard.press(slot===9?'0':String(slot+1));
+  const cast=await waitForIntent('cast',castStart);
+  assert.equal(cast.payload.spellIndex,slot);
+  report.push(`Desktop numbered hotbar: keyboard slot ${slot+1} sent official server-bound cast intent`);
   await online.getByRole('button', { name: 'Sair', exact: true }).click();
   await online.getByRole('button', { name: /JOGO RÁPIDO OFFLINE/i }).waitFor({ state: 'visible' });
   const afterLogout = await online.evaluate(() => ({
