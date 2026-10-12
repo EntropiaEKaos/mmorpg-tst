@@ -14,6 +14,7 @@ import { playerDB } from './engine/PlayerDB.mjs';
 import { contentDB } from './engine/ContentDB.mjs';
 import { VOCATIONS } from './engine/Vocations.mjs';
 import { WORLD } from './engine/World.mjs';
+import { buildTerrainPatch, shouldSendTerrainPatch } from './engine/TerrainPatch.mjs';
 import { questEngine } from './engine/QuestEngine.mjs';
 import { adventureEngine } from './engine/AdventureEngine.mjs';
 import { tibiaTaskEngine } from './engine/TibiaTaskEngine.mjs';
@@ -785,6 +786,16 @@ setInterval(() => {
     if (snapshot) {
       const vocData = VOCATIONS[snapshot.player.vocation];
       if (vocData) snapshot.player.spells = engine.getSpellList(snapshot.player.vocation);
+      // Read-only terrain window is emitted only when the player changes 4-tile
+      // cells or maps. The client holds the last patch across 20Hz snapshots.
+      const terrain = shouldSendTerrainPatch(entry.lastTerrainKey, snapshot.player);
+      if (terrain.send) {
+        const patch = buildTerrainPatch(WORLD.getMap(snapshot.player.mapId), snapshot.player.x, snapshot.player.y);
+        if (patch) {
+          snapshot.terrainPatch = patch;
+          entry.lastTerrainKey = terrain.key;
+        }
+      }
       entry.ws.send(JSON.stringify({ kind: 'snapshot', payload: snapshot, time: Date.now() }));
       mapsDelivered.add(snapshot.player.mapId);
     }
