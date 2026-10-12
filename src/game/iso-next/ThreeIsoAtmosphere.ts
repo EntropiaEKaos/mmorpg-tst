@@ -109,7 +109,7 @@ void main(){
         }
         this.raf=requestAnimationFrame(animate);
       };
-      animate();
+      this.raf=requestAnimationFrame(animate);
     } catch (error) {
       canvas.dataset.rendererState='unavailable';
       host.dataset.threeMount='renderer-unavailable';
