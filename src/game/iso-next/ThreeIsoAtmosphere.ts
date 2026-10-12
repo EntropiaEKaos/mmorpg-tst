@@ -39,7 +39,7 @@ export class ThreeIsoAtmosphere {
     const canvas=document.createElement('canvas');
     this.canvas=canvas;
     this.mobileProfile=host.clientWidth<720;
-    this.renderScale=this.mobileProfile?.65:1;
+    this.renderScale=this.mobileProfile ? 0.65 : 1;
     canvas.dataset.shaderProfile=this.mobileProfile?'mobile-lite':'desktop-full';
     canvas.dataset.renderScale=String(this.renderScale);
     canvas.dataset.testid='iso-three-atmosphere';
