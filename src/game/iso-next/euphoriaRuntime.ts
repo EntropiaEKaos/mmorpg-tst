@@ -18,7 +18,7 @@ export class EuphoriaPresentationRuntime{
   // for offline input and explicit user-controlled camera changes.
   if(focusEntityId){
     const focus=adaptAuthoritativeEntities(entities).find(e=>e.id===focusEntityId);
-    if(focus){this.camera.follow(focus.x,focus.y);this.renderer?.setCamera(this.camera.snapshot());}
+    if(focus){this.camera.follow(focus.screen.x,focus.screen.y);this.renderer?.setCamera(this.camera.snapshot());}
   }
   this.renderCurrent();
  }
