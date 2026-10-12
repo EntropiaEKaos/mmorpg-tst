@@ -224,6 +224,8 @@ try {
       heroX:snap?.player?.x, heroY:snap?.player?.y,
       width:innerWidth, pageWidth:document.documentElement.scrollWidth };
   });
+  assert.equal(await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-frame-cap'), '30',
+    'Mobile Pixi ticker should cap redraw at 30fps while authoritative simulation stays unchanged');
   assert.equal(mobileParity.mapId, 'eldoria');
   assert.equal(mobileParity.biome, 'plains');
   assert.ok(mobileParity.cityLandmarks >= 1);
