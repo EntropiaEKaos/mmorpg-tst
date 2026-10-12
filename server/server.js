@@ -804,6 +804,8 @@ setInterval(() => {
 }, 50);
 
 function broadcastContentUpdate() {
+  // Invalidate cached terrain when Studio content changes, including footprint edits.
+  for (const entry of wsClients.values()) entry.lastTerrainKey = null;
   const data = JSON.stringify({ kind: 'content_sync', payload: contentDB.getAllContent(), time: Date.now() });
   for (const [, entry] of wsClients) if (entry.ws.readyState === WebSocket.OPEN) entry.ws.send(data);
   console.log('📡 Content update broadcast to all clients');
