@@ -9,6 +9,10 @@ export class ThreeIsoAtmosphere {
   private start = typeof performance !== 'undefined' ? performance.now() : 0;
   private canvas: HTMLCanvasElement | null = null;
   private material: THREE.ShaderMaterial | null = null;
+  private renderScale = 1;
+  private lastPaint = 0;
+  private renderedFrames = 0;
+  private mobileProfile = false;
   private biome = 'plains';
   private biomeActive = false;
   private readonly biomeColors:Record<string,{color:number,mist:number}>={
@@ -34,6 +38,10 @@ export class ThreeIsoAtmosphere {
     host.dataset.threeMount='starting';
     const canvas=document.createElement('canvas');
     this.canvas=canvas;
+    this.mobileProfile=host.clientWidth<720;
+    this.renderScale=this.mobileProfile?.65:1;
+    canvas.dataset.shaderProfile=this.mobileProfile?'mobile-lite':'desktop-full';
+    canvas.dataset.renderScale=String(this.renderScale);
     canvas.dataset.testid='iso-three-atmosphere';
     canvas.dataset.rendererState='mounting';
     canvas.setAttribute('aria-label','Three.js atmospheric presentation layer');
@@ -43,26 +51,27 @@ export class ThreeIsoAtmosphere {
     host.dataset.threeMount='canvas-attached';
     try {
       const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true, powerPreference:'high-performance',premultipliedAlpha:true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.innerWidth<720?1:1.25));
+      renderer.setPixelRatio(this.mobileProfile?1:Math.min(window.devicePixelRatio||1,1.25));
       renderer.setClearColor(0x000000,0);
       renderer.autoClear=true;
       const width=host.clientWidth || 1280,height=host.clientHeight || 720;
-      renderer.setSize(width,height,false);
+      renderer.setSize(Math.max(1,Math.round(width*this.renderScale)),Math.max(1,Math.round(height*this.renderScale)),false);
       this.renderer=renderer;
       canvas.dataset.rendererState='active';
       canvas.dataset.composite='pixi-under-three';
       host.dataset.threeMount='renderer-active';
       this.camera.position.z=5;
       const geometry=new THREE.PlaneGeometry(2,2);
-      const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uResolution:{value:new THREE.Vector2(width,height)},uBiomeTint:{value:new THREE.Color(0x6da47a)},uWorldActive:{value:0},uMistStrength:{value:.7}},vertexShader:'void main(){gl_Position=vec4(position,1.0);}',fragmentShader:`
+      const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uResolution:{value:new THREE.Vector2(Math.max(1,Math.round(width*this.renderScale)),Math.max(1,Math.round(height*this.renderScale)))},uBiomeTint:{value:new THREE.Color(0x6da47a)},uWorldActive:{value:0},uMistStrength:{value:.7},uMobileQuality:{value:this.mobileProfile?1:0}},vertexShader:'void main(){gl_Position=vec4(position,1.0);}',fragmentShader:`
 uniform float uTime;
 uniform vec2 uResolution;
 uniform vec3 uBiomeTint;
 uniform float uWorldActive;
 uniform float uMistStrength;
+uniform float uMobileQuality;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
-float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*noise(p);p=p*2.03+vec2(17.1,9.2);a*=.5;}return v;}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){if(uMobileQuality>.5&&i>=3)break;v+=a*noise(p);p=p*2.03+vec2(17.1,9.2);a*=.5;}return v;}
 float orb(vec2 uv,vec2 center,float radius){return 1.-smoothstep(radius*.25,radius,length(uv-center));}
 void main(){
  vec2 uv=gl_FragCoord.xy/max(uResolution,vec2(1.));
@@ -70,7 +79,7 @@ void main(){
  vec2 suv=vec2((uv.x-.5)*aspect+.5,uv.y);
  float t=uTime*.035;
  float mist=fbm(uv*vec2(5.8,3.2)+vec2(t,-t*.42));
- float fine=fbm(uv*vec2(14.,8.)+vec2(-t*.6,t*.25));
+ float fine=uMobileQuality>.5?0.:fbm(uv*vec2(14.,8.)+vec2(-t*.6,t*.25));
  float ground=smoothstep(.2,.95,1.-uv.y);
  float horizon=exp(-pow((uv.y-.47)*5.2,2.));
  float vignette=smoothstep(.95,.25,length(uv-.5));
@@ -91,21 +100,22 @@ void main(){
  color+=cyan*archiveGlow*.052*localGlow;alpha+=archiveGlow*.008*localGlow;
  color+=ember*guildGlow*.05*localGlow;alpha+=guildGlow*.007*localGlow;
  color+=(violet*arcaneGlow*.11+cyan*arcaneGlow*.035)*localGlow;alpha+=arcaneGlow*.018*localGlow;
- float edgeMist=fbm(vec2(uv.x*3.2+t*.2,uv.y*4.8-t*.12))*smoothstep(.58,.98,length(uv-.5)*1.25);
+ float edgeMist=uMobileQuality>.5?0.:fbm(vec2(uv.x*3.2+t*.2,uv.y*4.8-t*.12))*smoothstep(.58,.98,length(uv-.5)*1.25);
  color+=vec3(.13,.29,.23)*edgeMist*.12;alpha+=edgeMist*.022;
  gl_FragColor=vec4(color,clamp(alpha*vignette,0.,.42));
 }`});
       this.material=material;
       this.setBiome(this.biome,this.biomeActive);
       this.scene.add(new THREE.Mesh(geometry,material));
-      let lastPaint=0;
       const animate=(now:number)=>{
         if(!this.renderer)return;
-        const interval=window.innerWidth<720?33:16;
-        if(now-lastPaint>=interval){
+        const interval=this.mobileProfile?66:33;
+        if(document.hidden){this.lastPaint=now;this.raf=requestAnimationFrame(animate);return;}
+        if(now-this.lastPaint>=interval){
           material.uniforms.uTime.value=(now-this.start)/1000;
           renderer.render(this.scene,this.camera);
-          lastPaint=now;
+          this.lastPaint=now;
+          canvas.dataset.renderedFrames=String(++this.renderedFrames);
         }
         this.raf=requestAnimationFrame(animate);
       };
@@ -118,7 +128,11 @@ void main(){
     }
   }
 
-  resize(width:number,height:number){this.renderer?.setSize(width,height,false);this.material?.uniforms.uResolution.value.set(width,height)}
+  resize(width:number,height:number){
+    const w=Math.max(1,Math.round(width*this.renderScale)),h=Math.max(1,Math.round(height*this.renderScale));
+    this.renderer?.setSize(w,h,false);
+    this.material?.uniforms.uResolution.value.set(w,h);
+  }
 
   destroy(){cancelAnimationFrame(this.raf);this.material?.dispose();this.material=null;if(this.renderer){this.renderer.dispose();this.renderer=null;}this.canvas?.remove();this.canvas=null;this.scene.clear();}
 }
