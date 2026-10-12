@@ -26,6 +26,12 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
   // not the Pixi 60Hz ticker; this avoids constant sprite creation/destruction.
   if(n==='entities'&&!refreshEntities&&this.terrain)continue;
   if(this.terrain&&(n==='structures'||n==='foreground'||n==='lighting'))continue;
+  // No world-anchored fake Eldoria glows in authoritative maps.
+  // In idle multiplayer scenes, do not rebuild an empty FX layer at all.
+  if(this.terrain&&n==='fx'&&!frame.fx.length&&!frame.entities.some(e=>e.combatCue&&e.combatCue!=='none')){
+    if(l.children.length)l.removeChildren().forEach(c=>c.destroy());
+    continue;
+  }
   if(this.terrain&&n==='fx'&&!refreshEntities&&this.elapsedMs-this.lastFxPaintMs<95)continue;
   if(this.terrain&&n==='fx')this.lastFxPaintMs=this.elapsedMs;
   if(n==='terrain'){
@@ -56,8 +62,7 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
   if(n==='lighting'&&!this.terrain)this.drawLighting(l);
   if(n==='fx'){
    if(this.app)this.app.canvas.dataset.fxPaintCount=String(++this.fxPaintCount);
-   this.drawAtmosphere(l);
-   if(!this.terrain)drawArcanePulse(l);
+   if(!this.terrain){this.drawAtmosphere(l);drawArcanePulse(l);}
    for(const e of frame.entities)this.drawCombatFx(l,e);
   }
   if(n==='entities'&&this.terrain){
@@ -120,8 +125,15 @@ private drawAuthoritativeGround(l:Container,patch:IsoTerrainPatch){
   this.app.canvas.dataset.groundCenter=`${cx},${cy}`;
   this.app.canvas.dataset.terrainTiles=String(patch.rows.length*patch.rows[0].length);
  }
- const minX=Math.max(patch.originX,cx-13),maxX=Math.min(patch.originX+patch.rows[0].length-1,cx+13);
- const minY=Math.max(patch.originY,cy-13),maxY=Math.min(patch.originY+patch.rows.length-1,cy+13);
+ // Iso viewport extents depend on BOTH height and width. Small mobile viewports
+ // draw far fewer tiles while large desktop views get enough edge coverage.
+ const z=Math.max(.5,this.camera.zoom+this.combatOffset.zoom);
+ const halfW=(this.app?.renderer.width||1280)/2;
+ const halfH=(this.app?.renderer.height||720)/2;
+ const radius=Math.max(8,Math.min(20,Math.ceil((halfW/(48*z)+halfH/(24*z))/2)+2));
+ if(this.app)this.app.canvas.dataset.terrainViewRadius=String(radius);
+ const minX=Math.max(patch.originX,cx-radius),maxX=Math.min(patch.originX+patch.rows[0].length-1,cx+radius);
+ const minY=Math.max(patch.originY,cy-radius),maxY=Math.min(patch.originY+patch.rows.length-1,cy+radius);
  for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
   const type=patch.rows[y-patch.originY]?.[x-patch.originX]||'?';
   const p=this.iso(x,y),color=isoTileColor(type,patch.biome);
