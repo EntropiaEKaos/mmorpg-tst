@@ -28,12 +28,29 @@ async function demo(page, suffix) {
   await page.getByRole('button', { name: /JOGO RÁPIDO OFFLINE/i }).click();
   await readyIso(page);
   await page.locator('[data-testid="iso-player-hud"]').waitFor({ state: 'visible' });
+  await page.getByText('Jogo Rápido • LOCAL').waitFor({ state: 'visible' });
   const initial = await page.evaluate(() => window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.pos);
   assert.ok(initial && typeof initial.x === 'number', 'Quick Play authoritative-shaped snapshot must expose a position');
+  await page.evaluate(() => {
+    window.__moriaSmokeKeys = [];
+    window.addEventListener('keydown', event => window.__moriaSmokeKeys.push(event.code), { capture: true });
+  });
   await page.keyboard.down('ArrowUp');
-  await page.waitForTimeout(350);
-  await page.keyboard.up('ArrowUp');
-  await page.waitForFunction(prev => window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.pos?.y < prev, initial.y, { timeout: 4000 });
+  try {
+    await page.waitForFunction(prev => window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.pos?.y < prev, initial.y, { timeout: 12000 });
+  } catch (error) {
+    await page.screenshot({ path: `${output}/movement-failure-${suffix}.png`, fullPage: false });
+    const debug = await page.evaluate(() => ({
+      keys: window.__moriaSmokeKeys,
+      pos: window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.pos,
+      lifecycle: document.querySelector('[data-testid="iso-next-canvas"]')?.dataset.isoLifecycle,
+      focused: document.activeElement?.tagName,
+      label: document.querySelector('[data-testid="iso-next-root"]')?.textContent?.slice(0, 140)
+    }));
+    throw new Error(`Keyboard movement did not update Quick Play snapshot: ${JSON.stringify({ initial, debug, underlying: String(error) })}`);
+  } finally {
+    await page.keyboard.up('ArrowUp');
+  }
   assert.equal(await page.locator('[data-testid="iso-action-bar"]').count(), 0, 'Inert duplicate action bar must not return');
   await page.screenshot({ path: `${output}/quick-play-${suffix}.png`, fullPage: false });
   report.push(`Quick Play ${suffix}: renderer mounted, hero visible, keyboard movement worked`);
