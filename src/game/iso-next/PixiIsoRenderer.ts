@@ -1,5 +1,6 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import type { IsoCameraState } from './camera';
+import { isoTileColor, parseIsoTerrainPatch, type IsoTerrainPatch } from './terrainPresentation';
 import { ISO_LAYER_ORDER, type IsoSceneFrame, type IsoSceneNode } from './sceneModel';
 import type { IsoRenderer, IsoViewport } from './rendererContract';
 import { drawArcanePulse, drawEldoriaLivingWorld } from './livingWorldPass';
@@ -11,11 +12,52 @@ import { depthScale, resolveOcclusionAlpha } from './depthOcclusion';
 import { deterministicMote, sampleEnvironmentMotion, type EnvironmentMotionSample } from './environmentMotion';
 import { ISO_ASSET_MANIFEST } from './assetPipeline';import { PixiIsoAssetRuntime } from './pixiAssetRuntime';import { drawEuphoriaProcedural } from './euphoriaProceduralPass';import { drawShadowWolfProcedural } from './shadowWolfProceduralPass';import { drawAmbientEntityProcedural } from './ambientEntityProceduralPass';import { drawCharacterVisual } from './characterVisualSystem';import { drawMonsterVisual } from './monsterVisualSystem';import { drawDangerTelegraph } from './dangerTelegraphPass';import { aggregateCombatJuice, sampleCombatJuice } from './combatJuice';
 const TILE_W=96,TILE_H=48;
-export class PixiIsoRenderer implements IsoRenderer{private app:Application|null=null;private world=new Container();private layers=new Map<string,Container>();private camera:IsoCameraState={x:0,y:0,zoom:1};private frame:Readonly<IsoSceneFrame>|null=null;private motion:EnvironmentMotionSample=sampleEnvironmentMotion(0);private elapsedMs=0;private assets=new PixiIsoAssetRuntime();private combatOffset={x:0,y:0,zoom:0};async mount(host:HTMLElement){const app=new Application();await app.init({resizeTo:host,antialias:true,background:'#091017',preference:'webgl'});app.canvas.dataset.testid='iso-pixi-canvas';Object.assign(app.canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',zIndex:'0'});host.appendChild(app.canvas);this.app=app;app.stage.addChild(this.world);for(const n of ISO_LAYER_ORDER){const l=new Container();l.label=`iso-${n}`;this.layers.set(n,l);this.world.addChild(l);}this.assets.warmManifest(ISO_ASSET_MANIFEST);app.ticker.add(t=>{this.elapsedMs+=t.deltaMS;this.motion=sampleEnvironmentMotion(this.elapsedMs);if(this.frame)this.paint(this.frame);});this.applyCamera();}resize(v:IsoViewport){this.app?.renderer.resize(v.width,v.height);this.applyCamera();}setCamera(c:Readonly<IsoCameraState>){this.camera={...c};this.applyCamera();}render(frame:Readonly<IsoSceneFrame>){this.frame=frame;this.paint(frame);}private paint(frame:Readonly<IsoSceneFrame>){const juice=aggregateCombatJuice(frame.entities);this.combatOffset={x:juice.shakeX,y:juice.shakeY,zoom:juice.zoomKick};this.applyCamera();for(const n of ISO_LAYER_ORDER){const l=this.layers.get(n);if(!l)continue;l.removeChildren().forEach(c=>c.destroy());if(n==='terrain'){this.drawGround(l);for(const e of frame.entities){const telegraph=drawDangerTelegraph(e);if(telegraph)l.addChild(telegraph);}}if(n==='structures')this.drawStructures(l);if(n==='foreground'){this.drawForeground(l,frame.entities);drawEldoriaLivingWorld(l);drawEldoriaDistricts(l);drawEldoriaLife(l,this.elapsedMs);drawEldoriaMicroEvents(l,this.elapsedMs);}if(n==='lighting')this.drawLighting(l);if(n==='fx'){this.drawAtmosphere(l);drawArcanePulse(l);for(const e of frame.entities)this.drawCombatFx(l,e);}for(const node of frame[n])l.addChild(this.drawNode(node));}}destroy(){this.frame=null;this.assets.destroy();this.app?.destroy(true,{children:true});this.app=null;this.layers.clear();}private applyCamera(){if(!this.app)return;const z=Math.max(.5,this.camera.zoom+this.combatOffset.zoom);this.world.scale.set(z);this.world.position.set(this.app.renderer.width/2-this.camera.x*z+this.combatOffset.x,this.app.renderer.height/2-this.camera.y*z+this.combatOffset.y);}private iso(x:number,y:number){return{x:(x-y)*TILE_W/2,y:(x+y)*TILE_H/2};}
+export class PixiIsoRenderer implements IsoRenderer{private app:Application|null=null;private world=new Container();private layers=new Map<string,Container>();private camera:IsoCameraState={x:0,y:0,zoom:1};private frame:Readonly<IsoSceneFrame>|null=null;private motion:EnvironmentMotionSample=sampleEnvironmentMotion(0);private elapsedMs=0;private assets=new PixiIsoAssetRuntime();private combatOffset={x:0,y:0,zoom:0};private terrain:IsoTerrainPatch|null=null;private terrainMapId='';private terrainPaintKey='';
+setTerrainPatch(value:unknown,mapId:string){if(mapId!==this.terrainMapId){this.terrainMapId=mapId;this.terrain=null;this.terrainPaintKey='';}const parsed=parseIsoTerrainPatch(value,mapId);if(parsed){this.terrain=parsed;this.terrainPaintKey='';if(this.app){this.app.canvas.dataset.terrainMode='authoritative';this.app.canvas.dataset.terrainMap=mapId;}}}
+async mount(host:HTMLElement){const app=new Application();await app.init({resizeTo:host,antialias:true,background:'#091017',preference:'webgl'});app.canvas.dataset.testid='iso-pixi-canvas';Object.assign(app.canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',zIndex:'0'});host.appendChild(app.canvas);this.app=app;app.stage.addChild(this.world);for(const n of ISO_LAYER_ORDER){const l=new Container();l.label=`iso-${n}`;this.layers.set(n,l);this.world.addChild(l);}this.assets.warmManifest(ISO_ASSET_MANIFEST);app.ticker.add(t=>{this.elapsedMs+=t.deltaMS;this.motion=sampleEnvironmentMotion(this.elapsedMs);if(this.frame)this.paint(this.frame);});this.applyCamera();}resize(v:IsoViewport){this.app?.renderer.resize(v.width,v.height);this.applyCamera();}setCamera(c:Readonly<IsoCameraState>){this.camera={...c};this.applyCamera();}render(frame:Readonly<IsoSceneFrame>){this.frame=frame;this.paint(frame);}private paint(frame:Readonly<IsoSceneFrame>){
+ const juice=aggregateCombatJuice(frame.entities);
+ this.combatOffset={x:juice.shakeX,y:juice.shakeY,zoom:juice.zoomKick};
+ this.applyCamera();
+ for(const n of ISO_LAYER_ORDER){
+  const l=this.layers.get(n);if(!l)continue;
+  if(n==='terrain'){
+   const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
+   const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
+   const p=this.terrain;
+   const danger=frame.entities.filter(e=>e.dangerShape).map(e=>`${e.id}:${e.x}:${e.y}:${e.dangerProgress||0}`).join('|');
+   const key=`${p?.mapId||'fixture'}:${p?.originX||0}:${p?.originY||0}:${cx}:${cy}:${danger}`;
+   if(key===this.terrainPaintKey)continue;
+   this.terrainPaintKey=key;
+  }
+  l.removeChildren().forEach(c=>c.destroy());
+  if(n==='terrain'){
+   this.drawGround(l);
+   for(const e of frame.entities){const telegraph=drawDangerTelegraph(e);if(telegraph)l.addChild(telegraph);}
+  }
+  if(n==='structures'&&!this.terrain)this.drawStructures(l);
+  if(n==='foreground'&&!this.terrain){
+   this.drawForeground(l,frame.entities);
+   drawEldoriaLivingWorld(l);
+   drawEldoriaDistricts(l);
+   drawEldoriaLife(l,this.elapsedMs);
+   drawEldoriaMicroEvents(l,this.elapsedMs);
+  }
+  if(n==='lighting'&&!this.terrain)this.drawLighting(l);
+  if(n==='fx'){
+   this.drawAtmosphere(l);
+   if(!this.terrain)drawArcanePulse(l);
+   for(const e of frame.entities)this.drawCombatFx(l,e);
+  }
+  for(const node of frame[n])l.addChild(this.drawNode(node));
+ }
+}
+destroy(){this.frame=null;this.assets.destroy();this.app?.destroy(true,{children:true});this.app=null;this.layers.clear();}private applyCamera(){if(!this.app)return;const z=Math.max(.5,this.camera.zoom+this.combatOffset.zoom);this.world.scale.set(z);this.world.position.set(this.app.renderer.width/2-this.camera.x*z+this.combatOffset.x,this.app.renderer.height/2-this.camera.y*z+this.combatOffset.y);}private iso(x:number,y:number){return{x:(x-y)*TILE_W/2,y:(x+y)*TILE_H/2};}
 /** Presentation-only fallback: keep a terrain patch around the authoritative camera
  * while a map-specific ISO tile adapter is developed. Outside the Eldoria fixture,
  * never fabricate roads, water or landmarks as though they came from the server. */
 private drawGround(l:Container){
+  if(this.terrain){this.drawAuthoritativeGround(l,this.terrain);return;}
+  if(this.app){this.app.canvas.dataset.terrainMode='fixture';this.app.canvas.dataset.terrainMap='eldoria';}
   const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
   const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
   if(this.app)this.app.canvas.dataset.groundCenter=`${cx},${cy}`;
@@ -38,6 +80,25 @@ private drawGround(l:Container){
     }
     g.position.set(p.x,p.y);l.addChild(g);
   }
+}
+private drawAuthoritativeGround(l:Container,patch:IsoTerrainPatch){
+ const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
+ const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
+ if(this.app){this.app.canvas.dataset.groundCenter=`${cx},${cy}`;this.app.canvas.dataset.terrainTiles=String(patch.rows.length*patch.rows[0].length);}
+ const minX=Math.max(patch.originX,cx-13),maxX=Math.min(patch.originX+patch.rows[0].length-1,cx+13);
+ const minY=Math.max(patch.originY,cy-13),maxY=Math.min(patch.originY+patch.rows.length-1,cy+13);
+ for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
+  const type=patch.rows[y-patch.originY]?.[x-patch.originX]||'?';
+  const p=this.iso(x,y),color=isoTileColor(type,patch.biome);
+  const g=new Graphics().poly([0,-24,48,0,0,24,-48,0]).fill(color).stroke({width:.7,color:0x15181e,alpha:.38});
+  if(type==='a'){g.moveTo(-28,1).lineTo(20,-1).stroke({width:2,color:0x8bbdc1,alpha:.25});}
+  if(type==='l'){g.poly([-25,0,-8,-6,18,5]).stroke({width:2,color:0xffb36c,alpha:.65});}
+  if(type==='p'||type==='b'){g.moveTo(-28,3).lineTo(27,3).stroke({width:1.5,color:0xd2c2a5,alpha:.23});}
+  if(type==='t'){g.rect(-4,-31,8,31).fill(0x493a2f).circle(-10,-30,18).fill(color).circle(7,-39,16).fill({color:0x6a9e64,alpha:.36});}
+  if(type==='r'||type==='o'){g.poly([-17,-5,-7,-20,9,-22,18,-5,7,3]).fill({color:0xaab3ae,alpha:.35});}
+  if(type==='w'){g.poly([-48,0,0,-24,48,0,48,-14,0,-38,-48,-14]).fill({color:0xc0b4a2,alpha:.25});}
+  g.position.set(p.x,p.y);l.addChild(g);
+ }
 }
 private drawStructures(l:Container){drawEldoriaArchitecture(l);const p=this.iso(8,8),f=new Graphics().ellipse(0,9,52,24).fill(0x4c575d).ellipse(0,3,41,17).fill(0x2c7890).ellipse(0,1,32,11).fill({color:0x75c1cc,alpha:.5}).rect(-6,-39,12,44).fill(0x727e83).circle(0,-43,10).fill(0x9aa5a7);f.position.set(p.x,p.y);l.addChild(f);}
 private drawForeground(l:Container,entities:readonly IsoSceneNode[]){for(const[x,y,s]of[[3,5,1],[5,13,1.15],[12,4,1.1],[14,12,1.25],[2,11,.82],[15,8,.9]]as const){const p=this.iso(x,y),g=new Graphics(),sway=this.motion.foliage*4*s;g.ellipse(0,13,31*s,11*s).fill({color:0,alpha:.24});g.poly([-6*s,12*s,-4*s+sway*.2,-37*s,7*s+sway*.2,-34*s,6*s,12*s]).fill(0x513624);g.circle(-17*s+sway,-43*s,25*s).fill(0x244b31);g.circle(15*s+sway*.75,-49*s,29*s).fill(0x32653c);g.circle(sway*.55,-70*s,27*s).fill(0x43804a);const nearby=entities.some(e=>Math.abs(e.x-p.x)<58*s&&e.y>p.y-75*s&&e.y<p.y+30*s);g.alpha=nearby?.43:1;g.position.set(p.x,p.y);l.addChild(g);}}
