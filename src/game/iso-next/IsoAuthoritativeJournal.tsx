@@ -37,7 +37,7 @@ export function IsoAuthoritativeQuestLog({snapshot}:{snapshot:any}){
         <b>{q.title||q.name||id}</b>
         {q.description&&<div style={{fontSize:11,opacity:.7}}>{q.description}</div>}
         <div style={{fontSize:11,marginTop:4}}>{current}/{needed} · {ready?'Objetivo concluído':'Em andamento'}</div>
-        <button data-testid="iso-quest-complete" disabled={!id||!ready}
+        <button data-testid="iso-quest-complete" data-quest-id={id} disabled={!id||!ready}
           onClick={()=>dispatchIsoAction({kind:'quest-complete',questId:id})}>
           {ready?'Entregar ao NPC':'Complete o objetivo para entregar'}
         </button>
@@ -51,7 +51,7 @@ export function IsoAuthoritativeQuestLog({snapshot}:{snapshot:any}){
       return <div key={id||i} data-testid="iso-quest-available" style={{padding:9,marginTop:6,border:'1px solid rgba(105,206,147,.18)',borderRadius:9}}>
         <b>{q.title||q.name||id}</b>{q.description&&<div style={{fontSize:11,opacity:.7}}>{q.description}</div>}
         <div style={{fontSize:11,marginTop:3,opacity:.72}}>Nível {required} · Aceitação depende de proximidade e pré-requisitos no servidor</div>
-        <button data-testid="iso-quest-accept" disabled={!id||locked}
+        <button data-testid="iso-quest-accept" data-quest-id={id} disabled={!id||locked}
           onClick={()=>dispatchIsoAction({kind:'quest-accept',questId:id})}>
           {locked?`Requer nível ${required}`:'Aceitar com NPC próximo'}
         </button>
