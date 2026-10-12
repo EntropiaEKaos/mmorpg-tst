@@ -2,18 +2,18 @@ import { Graphics } from 'pixi.js';
 import { projectIso } from './projection';
 import type { IsoLandmark, IsoTerrainPatch } from './terrainPresentation';
 
-const intColor = (value: string | undefined, fallback: number): number =>
-  value && /^#[a-f0-9]{6}$/i.test(value) ? Number.parseInt(value.slice(1), 16) : fallback;
-const shade = (hex: number, multiplier: number): number => {
-  const channel = (offset: number) => Math.min(255, Math.max(0, Math.round(((hex >> offset) & 255) * multiplier)));
-  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
-};
 type XY = { x: number; y: number };
-const plus = (p: XY, dy: number): XY => ({ x: p.x, y: p.y + dy });
-const flat = (...points: readonly XY[]): number[] => points.flatMap(p => [p.x, p.y]);
-const midpoint = (a: XY, b: XY): XY => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+const color = (hex: string | undefined, fallback: number) =>
+  hex && /^#[0-9a-f]{6}$/i.test(hex) ? Number.parseInt(hex.slice(1),16) : fallback;
+const shade = (hex: number, multiplier: number) => {
+  const c=(shift:number)=>Math.min(255,Math.max(0,Math.round(((hex>>shift)&255)*multiplier)));
+  return (c(16)<<16)|(c(8)<<8)|c(0);
+};
+const down = (p:XY, delta:number):XY => ({x:p.x,y:p.y+delta});
+const coords=(...points:XY[])=>points.flatMap(p=>[p.x,p.y]);
+const between=(a:XY,b:XY,t=.5):XY=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
 
-const THEMES: Record<string, { roof: number; stone: number; trim: number }> = {
+const THEMES: Record<string,{roof:number;stone:number;trim:number}>={
   royal:{roof:0x8a3c46,stone:0xb9a787,trim:0xe0c47c},
   harbor:{roof:0x38677c,stone:0xb4b6a5,trim:0x79cade},
   ironwood:{roof:0x58402e,stone:0x948977,trim:0xc9a163},
@@ -26,87 +26,83 @@ const THEMES: Record<string, { roof: number; stone: number; trim: number }> = {
   nightfall:{roof:0x392535,stone:0x615461,trim:0xe38ba0},
 };
 
-export function visibleLandmarks(patch: IsoTerrainPatch, cx: number, cy: number, radius = 19): IsoLandmark[] {
-  return (patch.landmarks || []).filter(l =>
-    l.x <= cx + radius && l.x + l.w >= cx - radius &&
-    l.y <= cy + radius && l.y + l.h >= cy - radius);
+export function visibleLandmarks(patch:IsoTerrainPatch,cx:number,cy:number,radius=19):IsoLandmark[]{
+  return (patch.landmarks||[]).filter(l=>
+    l.x<=cx+radius&&l.x+l.w>=cx-radius&&l.y<=cy+radius&&l.y+l.h>=cy-radius);
 }
 
-export function buildIsoLandmark(landmark: IsoLandmark, patch: IsoTerrainPatch): Graphics {
-  const theme = THEMES[patch.cityStyle || ''] || THEMES.royal;
-  const stone = intColor(patch.wallColor, theme.stone);
-  const roof = intColor(patch.roofColor, theme.roof);
-  const trim = theme.trim;
-  const isKeep = ['keep','tower','gate'].includes(landmark.kind);
-  const isSacred = ['temple','obelisk','library'].includes(landmark.kind);
-  const isMarket = landmark.kind === 'market';
-  const isForge = landmark.kind === 'forge';
-  const isArena = landmark.kind === 'arena';
-  const height = isKeep ? 92 : isSacred ? 74 : isMarket ? 38 : isArena ? 31 : 58;
-  const centerX = landmark.x + landmark.w / 2;
-  const centerY = landmark.y + landmark.h / 2;
-  const origin = projectIso({ x: centerX, y: centerY });
-  const rel = (x: number, y: number): XY => {
-    const p = projectIso({ x, y });
-    return { x: p.x - origin.x, y: p.y - origin.y };
+/** Presentation art only. The compound's base uses the exact server footprint.
+ * Large 10x14 areas become smaller buildings/courtyards rather than a screen-sized roof.
+ */
+export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch):Graphics{
+  const theme=THEMES[patch.cityStyle||'']||THEMES.royal;
+  const wall=color(patch.wallColor,theme.stone);
+  const roof=color(patch.roofColor,theme.roof);
+  const trim=theme.trim;
+  const isKeep=['keep','tower','gate'].includes(l.kind);
+  const isSacred=['temple','library','obelisk'].includes(l.kind);
+  const isMarket=l.kind==='market';
+  const isForge=l.kind==='forge';
+  const isArena=l.kind==='arena';
+  const center=projectIso({x:l.x+l.w/2,y:l.y+l.h/2});
+  const at=(x:number,y:number):XY=>{
+    const p=projectIso({x,y});return{x:p.x-center.x,y:p.y-center.y};
   };
-  const north = rel(landmark.x, landmark.y);
-  const east = rel(landmark.x + landmark.w, landmark.y);
-  const south = rel(landmark.x + landmark.w, landmark.y + landmark.h);
-  const west = rel(landmark.x, landmark.y + landmark.h);
-  const n = plus(north, -height), e = plus(east, -height), s = plus(south, -height), w = plus(west, -height);
-  const g = new Graphics();
-  g.poly(flat(north,east,south,west)).fill({ color:0x08090c,alpha:.38 });
-  // South-facing stone/wood walls and roofs use the *exact* WorldManager footprint.
-  g.poly(flat(east,south,s,e)).fill(shade(stone,.71)).stroke({ width:2,color:shade(stone,.46),alpha:.9 });
-  g.poly(flat(south,west,w,s)).fill(shade(stone,.9)).stroke({ width:2,color:shade(stone,.47),alpha:.9 });
-  if (isArena) {
-    g.poly(flat(n,e,s,w)).fill(shade(stone,.56)).stroke({width:6,color:trim,alpha:.75});
-    g.poly(flat(plus(n,10),plus(e,10),plus(s,10),plus(w,10))).fill(0x252b32).stroke({width:4,color:shade(stone,1.22)});
-  } else {
-    g.poly(flat(n,e,s,w)).fill(shade(roof,.8)).stroke({width:3,color:shade(roof,.48),alpha:.95});
-    const ridgeA = midpoint(n,e),ridgeB = midpoint(w,s);
-    g.poly(flat(n,ridgeA,midpoint(e,s),s)).fill({color:shade(roof,1.2),alpha:.45});
-    g.moveTo(ridgeA.x,ridgeA.y-11).lineTo(ridgeB.x,ridgeB.y-11).stroke({width:3,color:trim,alpha:.56});
-    // Small ridges/panels make the structure read as a multi-roof medieval complex.
-    for(let step=1;step<Math.min(8,landmark.w);step++){
-      const t=step/Math.min(8,landmark.w);
-      const q1={x:n.x+(e.x-n.x)*t,y:n.y+(e.y-n.y)*t};
-      const q2={x:w.x+(s.x-w.x)*t,y:w.y+(s.y-w.y)*t};
-      g.moveTo(q1.x,q1.y).lineTo(q2.x,q2.y).stroke({width:1.5,color:shade(roof,.52),alpha:.42});
-    }
+  const g=new Graphics();
+  const n=at(l.x,l.y),e=at(l.x+l.w,l.y),s=at(l.x+l.w,l.y+l.h),w=at(l.x,l.y+l.h);
+  // Walled courtyard marks the full collision footprint; it adds no walkable tiles.
+  g.poly(coords(n,e,s,w)).fill({color:0x05090e,alpha:.38});
+  g.poly(coords(down(e,-14),down(s,-14),s,e)).fill(shade(wall,.76));
+  g.poly(coords(down(s,-14),down(w,-14),w,s)).fill(shade(wall,.94));
+  g.poly(coords(down(n,-14),down(e,-14),down(s,-14),down(w,-14)))
+    .fill({color:shade(wall,.82),alpha:.5}).stroke({width:3,color:trim,alpha:.42});
+  // A building is composed of small roofs placed inside its actual footprint.
+  // This preserves visual streets and the character's silhouette at normal zoom.
+  const modules:Array<{x:number;y:number;w:number;h:number}>= [];
+  for(let dx=.35;dx<l.w-.4;dx+=3.5)for(let dy=.35;dy<l.h-.4;dy+=3.5){
+    const mw=Math.min(2.75,l.w-.7-dx);
+    const mh=Math.min(2.75,l.h-.7-dy);
+    if(mw>=.65&&mh>=.65)modules.push({x:l.x+dx,y:l.y+dy,w:mw,h:mh});
   }
-  // Windows/archways on exposed facade, kept decorative (never passability).
-  for(let i=1;i<=3;i++){
-    const t=i/4;
-    const face={x:south.x+(west.x-south.x)*t,y:south.y+(west.y-south.y)*t};
-    const light= isForge?0xff914b:isSacred?0xa1dcff:0xf9d994;
-    g.poly([face.x-10,face.y-height*.62,face.x+10,face.y-height*.62,face.x+10,face.y-height*.29,face.x-10,face.y-height*.29])
-      .fill({color:light,alpha:.68}).stroke({width:3,color:shade(stone,.38)});
-  }
-  if(isKeep){
-    for(const corner of [n,e,w]){
-      g.rect(corner.x-13,corner.y-44,26,46).fill(shade(stone,.8)).stroke({width:2,color:shade(stone,.4)});
-      g.poly([corner.x-20,corner.y-43,corner.x,corner.y-60,corner.x+20,corner.y-43]).fill(shade(roof,1.1));
+  if(!modules.length)modules.push({x:l.x+.15,y:l.y+.15,w:Math.max(.7,l.w-.3),h:Math.max(.7,l.h-.3)});
+  modules.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
+  modules.forEach((m,i)=>{
+    const height=(isKeep?62:isSacred?55:isMarket?29:isArena?24:44)+(i%3)*8;
+    const rn=at(m.x,m.y),re=at(m.x+m.w,m.y),rs=at(m.x+m.w,m.y+m.h),rw=at(m.x,m.y+m.h);
+    const tn=down(rn,-height),te=down(re,-height),ts=down(rs,-height),tw=down(rw,-height);
+    const variant=shade(roof,[.84,.94,1.12,1.03][i%4]);
+    g.poly(coords(re,rs,ts,te)).fill(shade(wall,.69)).stroke({width:1.3,color:shade(wall,.42)});
+    g.poly(coords(rs,rw,tw,ts)).fill(shade(wall,.88)).stroke({width:1.3,color:shade(wall,.48)});
+    g.poly(coords(tn,te,ts,tw)).fill(variant).stroke({width:1.8,color:shade(roof,.47)});
+    const ridgeA=between(tn,te),ridgeB=between(tw,ts);
+    g.moveTo(ridgeA.x,ridgeA.y-5).lineTo(ridgeB.x,ridgeB.y-5)
+      .stroke({width:2,color:trim,alpha:.62});
+    // Lit windows draw a readable miniature townscape at game camera scale.
+    if(!isArena){
+      const window=between(rs,rw);
+      g.poly([window.x-7,window.y-height*.68,window.x+7,window.y-height*.68,
+        window.x+7,window.y-height*.34,window.x-7,window.y-height*.34])
+        .fill({color:isForge?0xff934d:isSacred?0x9fdaeb:0xf9d89c,alpha:.76})
+        .stroke({width:2,color:shade(wall,.45)});
     }
-  }else if(isSacred){
-    const top=midpoint(n,s);
-    g.moveTo(top.x,top.y-6).lineTo(top.x,top.y-49).stroke({width:5,color:trim,alpha:.84});
-    g.moveTo(top.x-13,top.y-36).lineTo(top.x+13,top.y-36).stroke({width:4,color:trim,alpha:.84});
-  }else if(isMarket){
-    g.poly([west.x,west.y-height-4,south.x,south.y-height-4,south.x,south.y-height+14,west.x,west.y-height+14])
-      .fill({color:trim,alpha:.66});
-    for(let i=0;i<7;i++){
-      const t=i/7;
-      const wx=west.x+(south.x-west.x)*t,wy=west.y+(south.y-west.y)*t-height;
-      g.moveTo(wx,wy).lineTo(wx,wy+14).stroke({width:5,color:i%2?shade(roof,1.4):0xf6deb8,alpha:.85});
+    if(isKeep&&(i===0||i===modules.length-1)){
+      g.rect(tn.x-10,tn.y-24,20,26).fill(shade(wall,.75)).stroke({width:1.4,color:trim,alpha:.5});
+      g.poly([tn.x-15,tn.y-23,tn.x,tn.y-39,tn.x+15,tn.y-23]).fill(variant);
     }
-  }else if(isForge){
-    const chimney=midpoint(n,e);
-    g.rect(chimney.x-18,chimney.y-55,36,58).fill(shade(stone,.7)).stroke({width:3,color:shade(stone,.42)});
-    g.circle(chimney.x,chimney.y-67,13).fill({color:0xf98c49,alpha:.32});
-  }
-  // Camera/painter uses the furthest south ground edge as occlusion depth.
-  g.position.set(origin.x,origin.y);
+    if(isSacred&&i===Math.floor(modules.length/2)){
+      const cross=between(tn,ts);
+      g.moveTo(cross.x,cross.y-6).lineTo(cross.x,cross.y-29).stroke({width:3,color:trim});
+      g.moveTo(cross.x-9,cross.y-19).lineTo(cross.x+9,cross.y-19).stroke({width:3,color:trim});
+    }
+    if(isForge&&i===0){
+      g.rect(tn.x-12,tn.y-28,24,32).fill(shade(wall,.55));
+      g.circle(tn.x,tn.y-34,10).fill({color:0xffa86a,alpha:.26});
+    }
+    if(isMarket){
+      g.poly([tw.x,tw.y,ts.x,ts.y,ts.x,ts.y+11,tw.x,tw.y+11])
+        .fill({color:i%2?trim:0xf0dfac,alpha:.7});
+    }
+  });
+  g.position.set(center.x,center.y);
   return g;
 }
