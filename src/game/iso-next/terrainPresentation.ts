@@ -1,6 +1,11 @@
 /** Bounded, presentation-only decoding of the server's terrain projection.
  * The client never uses this data to decide collision, combat or travel.
  */
+export type IsoLandmark = Readonly<{
+  id: string; name: string; kind: string;
+  x: number; y: number; w: number; h: number;
+}>;
+
 export type IsoTerrainPatch = Readonly<{
   version: 1;
   mapId: string;
@@ -8,6 +13,10 @@ export type IsoTerrainPatch = Readonly<{
   originX: number;
   originY: number;
   rows: readonly string[];
+  cityStyle?: string;
+  roofColor?: string;
+  wallColor?: string;
+  landmarks?: readonly IsoLandmark[];
 }>;
 
 export function parseIsoTerrainPatch(value: unknown, expectedMapId: string): IsoTerrainPatch | null {
@@ -20,10 +29,25 @@ export function parseIsoTerrainPatch(value: unknown, expectedMapId: string): Iso
   const rows = p.rows as unknown[];
   const width = typeof rows[0] === 'string' ? rows[0].length : 0;
   if (width < 1 || width > 45 || !rows.every(row => typeof row === 'string' && row.length === width && /^[gfpwatrslboduh?]+$/.test(row))) return null;
+  const hex = (x: unknown): string | undefined => typeof x === 'string' && /^#[a-f\d]{6}$/i.test(x) ? x : undefined;
+  const finiteInt = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x);
+  const landmarks: IsoLandmark[] = Array.isArray(p.landmarks) ? p.landmarks.slice(0, 24).flatMap((v: unknown) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return [];
+    const l = v as Record<string, unknown>;
+    if (typeof l.id !== 'string' || l.id.length > 60
+      || typeof l.name !== 'string' || l.name.length > 70
+      || typeof l.kind !== 'string' || l.kind.length > 20
+      || !finiteInt(l.x) || !finiteInt(l.y) || !finiteInt(l.w) || !finiteInt(l.h)
+      || l.x < 0 || l.y < 0 || l.w < 1 || l.h < 1 || l.w > 24 || l.h > 24) return [];
+    return [{ id:l.id, name:l.name, kind:l.kind, x:l.x, y:l.y, w:l.w, h:l.h }];
+  }) : [];
   return {
     version: 1, mapId: expectedMapId, biome: p.biome,
     originX: p.originX as number, originY: p.originY as number,
     rows: rows as string[],
+    cityStyle: typeof p.cityStyle === 'string' ? p.cityStyle.slice(0, 24) : undefined,
+    roofColor: hex(p.roofColor), wallColor: hex(p.wallColor),
+    landmarks,
   };
 }
 
