@@ -74,6 +74,20 @@ export function buildIsoLandmark(l:IsoLandmark,patch:IsoTerrainPatch):Graphics{
     g.poly(coords(re,rs,ts,te)).fill(shade(wall,.69)).stroke({width:1.3,color:shade(wall,.42)});
     g.poly(coords(rs,rw,tw,ts)).fill(shade(wall,.88)).stroke({width:1.3,color:shade(wall,.48)});
     g.poly(coords(tn,te,ts,tw)).fill(variant).stroke({width:1.8,color:shade(roof,.47)});
+    // Deterministic roof-tile courses and carved masonry, grouped in the same
+    // cached Graphics object rather than allocating per-tile sprites.
+    for(let course=1;course<=3;course++){
+      const t=course/4;
+      const a=between(tn,tw,t),b=between(te,ts,t);
+      g.moveTo(a.x,a.y).lineTo(b.x,b.y)
+        .stroke({width:1.4,color:shade(roof,.54),alpha:.48});
+    }
+    for(let course=1;course<=2;course++){
+      const t=course/3;
+      const a=between(rs,rw,t),b=between(ts,tw,t);
+      g.moveTo(a.x,a.y-3).lineTo(b.x,b.y+3)
+        .stroke({width:1,color:shade(wall,.49),alpha:.31});
+    }
     const ridgeA=between(tn,te),ridgeB=between(tw,ts);
     g.moveTo(ridgeA.x,ridgeA.y-5).lineTo(ridgeB.x,ridgeB.y-5)
       .stroke({width:2,color:trim,alpha:.62});
