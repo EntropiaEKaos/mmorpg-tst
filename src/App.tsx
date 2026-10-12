@@ -7,6 +7,7 @@ import { IsoNextPrototype } from './game/iso-next/IsoNextPrototype';
 import { t } from './i18n';
 import type { Account } from './game/types';
 import { logoutSession, resumeSession } from './game/auth';
+import { net, serverSync } from './game/ServerSync';
 import { dpsMeter } from './game/dpsMeter';
 
 dpsMeter.start();
@@ -27,7 +28,12 @@ export default function App() {
   }, []);
 
   const handleLogout = () => {
-    const token = (account as any)?.sessionToken as string | undefined;
+    const token = account?.sessionToken;
+    // The socket, snapshot and auth state belong to the departing character.
+    // Reconnecting with a different account must never reuse them.
+    net.disconnect();
+    serverSync.reset();
+    delete (window as Window & { __MORIA_AUTHORITATIVE_SNAPSHOT__?: unknown }).__MORIA_AUTHORITATIVE_SNAPSHOT__;
     void logoutSession(token);
     setAccount(null);
   };
