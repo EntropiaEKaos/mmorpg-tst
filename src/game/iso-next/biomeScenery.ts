@@ -30,13 +30,16 @@ export function drawBiomeTileDetails(g:Graphics,code:string,biome:string,citySty
   }
  }
  if(code==='p'||code==='f'||code==='h'||code==='b'){
-  for(let k=-2;k<=2;k++){
-   const yy=k*7+(v-.5)*2;
-   g.moveTo(-35+Math.abs(k)*5,yy).lineTo(35-Math.abs(k)*5,yy)
-    .stroke({width:1,color:b.dark,alpha:code==='p'?.29:.16});
+  // Only a fraction of paved tiles need mortar seams: continuous five-line
+  // hatching made the capital look like a grid and hurt software WebGL.
+  if(((x*7+y*3)&3)===0){
+   const yy=(v-.5)*12;
+   g.moveTo(-25,yy).lineTo(-1,yy-1).stroke({width:1,color:b.dark,alpha:.22});
+   g.moveTo(9,yy+7).lineTo(29,yy+6).stroke({width:1,color:b.dark,alpha:.16});
   }
-  if(code==='b'){
-   for(let k=-3;k<=3;k++)g.moveTo(k*10,-11).lineTo(k*10,11).stroke({width:1.5,color:0x30291f,alpha:.34});
+  if(code==='b'&&((x+y)&1)===0){
+   g.moveTo(-12,-6).lineTo(-12,6).stroke({width:1.5,color:0x30291f,alpha:.34});
+   g.moveTo(12,-6).lineTo(12,6).stroke({width:1.5,color:0x30291f,alpha:.34});
   }
  }
  if(code==='a'){
