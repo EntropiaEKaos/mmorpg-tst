@@ -184,6 +184,59 @@ try {
   assert.equal(afterLogout.snapshot, undefined, 'Logout must clear stale authoritative snapshot');
   report.push('Online logout: session and cached world snapshot cleared');
 
+  // Crucial mobile parity proof: the earlier quick-play-mobile.png captures
+  // the OFFLINE Eldoria fixture, not the online server-authored 160x160 city.
+  // Use the SAME persisted account and character as the desktop online case.
+  const mobileOnline = await browser.newPage({
+    viewport: { width: 390, height: 844 }, deviceScaleFactor: 1,
+    isMobile: true, hasTouch: true
+  });
+  instrument(mobileOnline, 'online-mobile');
+  await mobileOnline.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
+  await mobileOnline.locator('[autocomplete="username"]').fill(username);
+  await mobileOnline.locator('[autocomplete="current-password"]').fill(password);
+  await mobileOnline.locator('button.moria-button-primary').last().click();
+  await readyIso(mobileOnline);
+  await mobileOnline.getByText('Servidor autoritativo • LIVE').waitFor({ state: 'visible', timeout: 18000 });
+  await mobileOnline.locator('[data-testid="iso-shortcuts-toggle"]').waitFor({ state: 'visible' });
+  assert.equal(await mobileOnline.locator('[data-testid="iso-player-hud"]').count(), 0,
+    'Mobile online must not duplicate the player HUD');
+  assert.equal(await mobileOnline.locator('[data-iso-window="authoritative-minimap"]').count(), 0,
+    'Mobile online minimap should begin collapsed');
+  await mobileOnline.waitForFunction(() => {
+    const snap = window.__MORIA_AUTHORITATIVE_SNAPSHOT__;
+    const pixi = document.querySelector('canvas[data-testid="iso-pixi-canvas"]');
+    const sky = document.querySelector('canvas[data-testid="iso-three-atmosphere"]');
+    return snap?.player?.mapId === 'eldoria'
+      && pixi?.dataset.terrainMap === 'eldoria'
+      && pixi?.dataset.terrainMode === 'authoritative'
+      && pixi?.dataset.terrainBiome === 'plains'
+      && Number(pixi?.dataset.cityLandmarks) > 0
+      && (sky?.dataset.rendererState !== 'active'
+        || (sky.dataset.biome === 'plains' && sky.dataset.worldAtmosphere === 'server-biome'));
+  }, null, { timeout: 16000 });
+  const mobileParity = await mobileOnline.evaluate(() => {
+    const snap = window.__MORIA_AUTHORITATIVE_SNAPSHOT__;
+    const c = document.querySelector('canvas[data-testid="iso-pixi-canvas"]');
+    const [cx, cy] = (c?.dataset.groundCenter || '').split(',').map(Number);
+    return { mapId:snap?.player?.mapId, biome:c?.dataset.terrainBiome,
+      cityLandmarks:Number(c?.dataset.cityLandmarks), cx, cy,
+      heroX:snap?.player?.x, heroY:snap?.player?.y,
+      width:innerWidth, pageWidth:document.documentElement.scrollWidth };
+  });
+  assert.equal(mobileParity.mapId, 'eldoria');
+  assert.equal(mobileParity.biome, 'plains');
+  assert.ok(mobileParity.cityLandmarks >= 1);
+  assert.ok(Math.abs(mobileParity.heroX-mobileParity.cx) <= 1 && Math.abs(mobileParity.heroY-mobileParity.cy) <= 1,
+    'Mobile camera must follow the actual authoritative character');
+  assert.ok(mobileParity.pageWidth <= mobileParity.width + 2,
+    'Online mobile layout must not overflow the viewport');
+  await mobileOnline.screenshot({ path:`${output}/online-mobile.png`, fullPage:false });
+  await writeFile(`${output}/online-mobile-parity.json`, JSON.stringify(mobileParity,null,2));
+  report.push(`Online mobile: same character/server city as desktop, ${mobileParity.cityLandmarks} real buildings, HUD fit and camera tracked`);
+  await mobileOnline.getByRole('button', { name:'Sair', exact:true }).click();
+  await mobileOnline.getByRole('button', { name:/JOGO RÁPIDO OFFLINE/i }).waitFor({state:'visible'});
+
   if (issues.length) throw new Error(`Browser runtime errors:\n${issues.join('\n')}`);
   console.log('MOR\'IA ISO SMOKE PASS:\n' + report.join('\n'));
 } catch (error) {
