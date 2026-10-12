@@ -263,10 +263,9 @@ try {
   const mobileShader=await mobileOnline.locator('canvas[data-testid="iso-three-atmosphere"]').evaluate(canvas=>({
     state:canvas.dataset.rendererState,profile:canvas.dataset.shaderProfile,scale:Number(canvas.dataset.renderScale)
   }));
-  if(mobileShader.state==='active'){
-    assert.equal(mobileShader.profile,'mobile-lite','Mobile must render reduced-cost atmosphere');
-    assert.ok(mobileShader.scale<=.7&&mobileShader.scale>=.5);
-  }
+  assert.equal(mobileShader.state,'css-fallback','Mobile must avoid a second GPU WebGL context');
+  assert.equal(mobileShader.profile,'mobile-css','Mobile atmosphere should use cheap biome CSS tint');
+  report.push('Mobile atmosphere: real authoritative biome tint with no extra WebGL shader context');
   const beforeTouchPaint=Number(await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-drawn-frames'));
   assert.ok(beforeTouchPaint>0,'Mobile online scene must submit at least one GPU draw');
   assert.equal(mobileParity.mapId, 'eldoria');
@@ -306,8 +305,18 @@ try {
   const firstY=mobileParity.heroY;
   await touchSession.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
   try{
-    await mobileOnline.waitForFunction(y=>
-      Number(window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.y)<y,firstY,{timeout:16000});
+    try{
+      await mobileOnline.waitForFunction(y=>
+        Number(window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player?.y)<y,firstY,{timeout:16000});
+    }catch(error){
+      const debug=await mobileOnline.evaluate(()=>{
+        const p=window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player;
+        const pixi=document.querySelector('canvas[data-testid="iso-pixi-canvas"]');
+        return {player:{x:p?.x,y:p?.y,mapId:p?.mapId},touchActive:document.querySelector('[data-testid="iso-touch-dpad"]')?.getAttribute('data-touch-active'),gpuFrames:pixi?.dataset.drawnFrames,scheduler:pixi?.dataset.presentationScheduler};
+      });
+      await mobileOnline.screenshot({path:`${output}/touch-movement-failure.png`,fullPage:false});
+      throw new Error(`Touchscreen authoritative movement timeout: ${JSON.stringify({firstY,debug,error:String(error)})}`);
+    }
     assert.equal(await mobileOnline.locator('[data-testid="iso-touch-dpad"]').getAttribute('data-touch-active'),'ArrowUp');
     await mobileOnline.screenshot({path:`${output}/online-mobile-moving.png`,fullPage:false});
   }finally{
