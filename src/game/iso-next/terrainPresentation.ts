@@ -14,7 +14,7 @@ export function parseIsoTerrainPatch(value: unknown, expectedMapId: string): Iso
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const p = value as Record<string, unknown>;
   if (p.version !== 1 || p.mapId !== expectedMapId || typeof p.biome !== 'string') return null;
-  if (!Number.isInteger(p.originX) || !Number.isInteger(p.originY)) return null;
+  if (typeof p.originX !== 'number' || typeof p.originY !== 'number' || !Number.isInteger(p.originX) || !Number.isInteger(p.originY)) return null;
   if ((p.originX as number) < 0 || (p.originY as number) < 0) return null;
   if (!Array.isArray(p.rows) || p.rows.length < 1 || p.rows.length > 45) return null;
   const rows = p.rows as unknown[];
