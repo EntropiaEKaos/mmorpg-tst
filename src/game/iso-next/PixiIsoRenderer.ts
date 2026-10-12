@@ -84,7 +84,7 @@ private drawGround(l:Container){
 private drawAuthoritativeGround(l:Container,patch:IsoTerrainPatch){
  const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
  const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
- if(this.app){this.app.canvas.dataset.groundCenter=`${cx},${cy}`;this.app.canvas.dataset.terrainTiles=String(patch.rows.length*patch.rows[0].length);}
+ if(this.app){this.app.canvas.dataset.terrainMode='authoritative';this.app.canvas.dataset.terrainMap=patch.mapId;this.app.canvas.dataset.groundCenter=`${cx},${cy}`;this.app.canvas.dataset.terrainTiles=String(patch.rows.length*patch.rows[0].length);}
  const minX=Math.max(patch.originX,cx-13),maxX=Math.min(patch.originX+patch.rows[0].length-1,cx+13);
  const minY=Math.max(patch.originY,cy-13),maxY=Math.min(patch.originY+patch.rows.length-1,cy+13);
  for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
