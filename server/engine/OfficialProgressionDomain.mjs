@@ -4,7 +4,7 @@
 // Persistence and network orchestration stay in OfficialSystems/GameState.
 // ===================================================================
 
-import { ACHIEVEMENTS } from './OfficialCatalogs.mjs';
+import { ACHIEVEMENTS } from './OfficialAchievementsCatalog.mjs';
 
 const clamp = (value, min, max, fallback = min) => {
   const n = Number(value);
@@ -28,9 +28,7 @@ export class OfficialProgressionDomain {
     return mult;
   }
 
-  getDeathLossMultiplier(host, player, now = Date.now()) {
-    return now < state(host, player).blessingsUntil ? 0.5 : 1;
-  }
+  getDeathLossMultiplier(host, player, now = Date.now()) { return now < state(host, player).blessingsUntil ? 0.5 : 1; }
 
   getReputationDiscount(player) {
     const town = int(player.reputation?.town, -100_000, 100_000, 0);
@@ -72,11 +70,24 @@ export class OfficialProgressionDomain {
   refreshAchievements(host, player) {
     const s = state(host, player);
     const unlocked = [];
+    if (!Array.isArray(s.achievements)) s.achievements = [];
+    if (!s.titles || typeof s.titles !== 'object') s.titles = { owned: [], active: null };
+    if (!Array.isArray(s.titles.owned)) s.titles.owned = [];
     for (const achievement of ACHIEVEMENTS) {
       if (s.achievements.includes(achievement.id) || !achievement.test(player)) continue;
+      const reward = achievement.reward || {};
       s.achievements.push(achievement.id);
-      s.coins += achievement.coins;
-      unlocked.push({ id: achievement.id, name: achievement.name, icon: achievement.icon, coins: achievement.coins });
+      s.coins = int(s.coins, 0, 1_000_000_000, 0) + int(achievement.coins, 0, 1_000_000, 0);
+      const xp = int(reward.xp, 0, 100_000_000, 0);
+      const gold = int(reward.gold, 0, 100_000_000, 0);
+      if (xp) player.xp = int(player.xp, 0, 1_000_000_000, 0) + xp;
+      if (gold) {
+        player.gold = int(player.gold, 0, 1_000_000_000, 0) + gold;
+        if (!player.stats || typeof player.stats !== 'object') player.stats = {};
+        player.stats.goldEarned = int(player.stats.goldEarned, 0, 1_000_000_000, 0) + gold;
+      }
+      if (typeof reward.title === 'string' && reward.title && !s.titles.owned.includes(reward.title)) s.titles.owned.push(reward.title);
+      unlocked.push({ id: achievement.id, name: achievement.name, icon: achievement.icon, coins: achievement.coins || 0, reward: { ...reward } });
     }
     return unlocked;
   }
@@ -103,35 +114,24 @@ export class OfficialProgressionDomain {
 
   rest(host, player) {
     if (player.gold < 50) return false;
-    player.gold -= 50;
-    player.hp = player.maxHp;
-    player.mana = player.maxMana;
-    const s = state(host, player);
-    s.stamina = Math.min(2520, s.stamina + 120);
-    return true;
+    player.gold -= 50; player.hp = player.maxHp; player.mana = player.maxMana;
+    const s = state(host, player); s.stamina = Math.min(2520, s.stamina + 120); return true;
   }
 
   train(host, player) {
     const s = state(host, player);
     if (player.gold < 200 || s.training >= 20) return false;
-    player.gold -= 200;
-    s.training++;
-    return true;
+    player.gold -= 200; s.training++; return true;
   }
 
   claimDaily(host, player, now = Date.now()) {
-    const s = state(host, player);
-    const today = dayKey(now);
+    const s = state(host, player); const today = dayKey(now);
     if (s.daily.lastDay === today) return false;
     const previous = s.daily.lastDay ? new Date(`${s.daily.lastDay}T00:00:00Z`).getTime() : 0;
     const consecutive = previous && Math.floor((new Date(`${today}T00:00:00Z`).getTime() - previous) / 86_400_000) === 1;
-    s.daily.streak = consecutive ? Math.min(7, s.daily.streak + 1) : 1;
-    s.daily.lastDay = today;
-    const day = s.daily.streak;
-    const reward = { gold: 50 * day, xp: 30 * day, coins: 2 * day };
-    player.gold += reward.gold;
-    player.xp += reward.xp;
-    s.coins += reward.coins;
+    s.daily.streak = consecutive ? Math.min(7, s.daily.streak + 1) : 1; s.daily.lastDay = today;
+    const day = s.daily.streak; const reward = { gold: 50 * day, xp: 30 * day, coins: 2 * day };
+    player.gold += reward.gold; player.xp += reward.xp; s.coins += reward.coins;
     player.stats.goldEarned = (player.stats.goldEarned || 0) + reward.gold;
     return reward;
   }
