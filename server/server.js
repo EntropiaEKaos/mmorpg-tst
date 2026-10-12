@@ -449,7 +449,8 @@ const server = http.createServer((req, res) => {
 
   let relativePath;
   try {
-    relativePath = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+    // Both SPA entry points share index.html; App.tsx selects ISO Next or /legacy.
+    relativePath = pathname === '/' || pathname === '/legacy' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
   } catch {
     return json(res, 400, { error: 'Invalid path encoding' });
   }
