@@ -9,6 +9,26 @@ export class ThreeIsoAtmosphere {
   private start = typeof performance !== 'undefined' ? performance.now() : 0;
   private canvas: HTMLCanvasElement | null = null;
   private material: THREE.ShaderMaterial | null = null;
+  private biome = 'plains';
+  private biomeActive = false;
+  private readonly biomeColors:Record<string,{color:number,mist:number}>={
+    plains:{color:0x6da47a,mist:.7},snow:{color:0xaecfe3,mist:.77},
+    swamp:{color:0x5c8063,mist:1.25},desert:{color:0xd59b6e,mist:.52},
+    shadow:{color:0x62568e,mist:1.12},
+  };
+  /** The map/biome is server-authored; this tint is purely visual. */
+  setBiome(biome:string,authoritative=false):void{
+    this.biome=this.biomeColors[biome]?biome:'plains';
+    this.biomeActive=authoritative;
+    if(this.canvas){this.canvas.dataset.biome=this.biome;this.canvas.dataset.worldAtmosphere=authoritative?'server-biome':'fixture';}
+    if(this.material){
+      const data=this.biomeColors[this.biome];
+      (this.material.uniforms.uBiomeTint.value as THREE.Color).setHex(data.color);
+      this.material.uniforms.uMistStrength.value=data.mist;
+      this.material.uniforms.uWorldActive.value=authoritative?1:0;
+    }
+  }
+
 
   mount(host: HTMLElement) {
     host.dataset.threeMount='starting';
@@ -23,7 +43,7 @@ export class ThreeIsoAtmosphere {
     host.dataset.threeMount='canvas-attached';
     try {
       const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true, powerPreference:'high-performance',premultipliedAlpha:true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.innerWidth<720?1:1.25));
       renderer.setClearColor(0x000000,0);
       renderer.autoClear=true;
       const width=host.clientWidth || 1280,height=host.clientHeight || 720;
@@ -34,9 +54,12 @@ export class ThreeIsoAtmosphere {
       host.dataset.threeMount='renderer-active';
       this.camera.position.z=5;
       const geometry=new THREE.PlaneGeometry(2,2);
-      const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uResolution:{value:new THREE.Vector2(width,height)}},vertexShader:'void main(){gl_Position=vec4(position,1.0);}',fragmentShader:`
+      const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uResolution:{value:new THREE.Vector2(width,height)},uBiomeTint:{value:new THREE.Color(0x6da47a)},uWorldActive:{value:0},uMistStrength:{value:.7}},vertexShader:'void main(){gl_Position=vec4(position,1.0);}',fragmentShader:`
 uniform float uTime;
 uniform vec2 uResolution;
+uniform vec3 uBiomeTint;
+uniform float uWorldActive;
+uniform float uMistStrength;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
 float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*noise(p);p=p*2.03+vec2(17.1,9.2);a*=.5;}return v;}
@@ -59,21 +82,33 @@ void main(){
  float guildGlow=orb(suv,vec2(.71,.56),.12);
  float arcaneGlow=orb(suv,vec2(.50,.72),.13)*(0.62+0.38*sin(uTime*.72));
  vec3 moon=vec3(.18,.34,.48),eldoria=vec3(.18,.42,.31),gold=vec3(.78,.61,.25),violet=vec3(.47,.29,.72),cyan=vec3(.25,.62,.68),ember=vec3(.73,.34,.20),wine=vec3(.55,.20,.34);
- vec3 color=mix(moon,eldoria,smoothstep(.38,.75,mist));
- float alpha=(mist*.052+fine*.026)*ground+horizon*.022;
+ vec3 color=mix(moon,eldoria,smoothstep(.38,.75,mist));color=mix(color,uBiomeTint,uWorldActive*.80);
+ float alpha=((mist*.052+fine*.026)*ground+horizon*.022)*uMistStrength;
  color+=gold*fireflies*.7;alpha+=fireflies*.22;
- color+=gold*(crownGlow*.13+shafts*.16);alpha+=crownGlow*.022+shafts*.018;
- color+=wine*marketGlow*.055;alpha+=marketGlow*.008;
- color+=cyan*archiveGlow*.052;alpha+=archiveGlow*.008;
- color+=ember*guildGlow*.05;alpha+=guildGlow*.007;
- color+=violet*arcaneGlow*.11+cyan*arcaneGlow*.035;alpha+=arcaneGlow*.018;
+ float localGlow=1.-uWorldActive;
+ color+=gold*(crownGlow*.13+shafts*.16)*localGlow;alpha+=(crownGlow*.022+shafts*.018)*localGlow;
+ color+=wine*marketGlow*.055*localGlow;alpha+=marketGlow*.008*localGlow;
+ color+=cyan*archiveGlow*.052*localGlow;alpha+=archiveGlow*.008*localGlow;
+ color+=ember*guildGlow*.05*localGlow;alpha+=guildGlow*.007*localGlow;
+ color+=(violet*arcaneGlow*.11+cyan*arcaneGlow*.035)*localGlow;alpha+=arcaneGlow*.018*localGlow;
  float edgeMist=fbm(vec2(uv.x*3.2+t*.2,uv.y*4.8-t*.12))*smoothstep(.58,.98,length(uv-.5)*1.25);
  color+=vec3(.13,.29,.23)*edgeMist*.12;alpha+=edgeMist*.022;
  gl_FragColor=vec4(color,clamp(alpha*vignette,0.,.42));
 }`});
       this.material=material;
+      this.setBiome(this.biome,this.biomeActive);
       this.scene.add(new THREE.Mesh(geometry,material));
-      const animate=()=>{if(!this.renderer)return;material.uniforms.uTime.value=(performance.now()-this.start)/1000;renderer.render(this.scene,this.camera);this.raf=requestAnimationFrame(animate)};
+      let lastPaint=0;
+      const animate=(now:number)=>{
+        if(!this.renderer)return;
+        const interval=window.innerWidth<720?33:16;
+        if(now-lastPaint>=interval){
+          material.uniforms.uTime.value=(now-this.start)/1000;
+          renderer.render(this.scene,this.camera);
+          lastPaint=now;
+        }
+        this.raf=requestAnimationFrame(animate);
+      };
       animate();
     } catch (error) {
       canvas.dataset.rendererState='unavailable';
