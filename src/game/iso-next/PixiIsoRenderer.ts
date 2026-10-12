@@ -1,7 +1,7 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import type { IsoCameraState } from './camera';
 import { isoTileColor, parseIsoTerrainPatch, type IsoTerrainPatch } from './terrainPresentation';
-import { buildIsoLandmark, visibleLandmarks } from './cityArchitecture';
+import { buildIsoLandmark, visibleLandmarks, type CityDetailLevel } from './cityArchitecture';
 import { drawBiomeTileDetails } from './biomeScenery';
 import { ISO_LAYER_ORDER, type IsoSceneFrame, type IsoSceneNode } from './sceneModel';
 import type { IsoRenderer, IsoViewport } from './rendererContract';
@@ -84,6 +84,8 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
   }
   if(n==='entities'&&this.terrain){
    if(this.app)this.app.canvas.dataset.entityPaintCount=String(++this.entityPaintCount);
+   const detail:CityDetailLevel=(this.app?.renderer.screen.width??window.innerWidth)<720?'compact':'full';
+   if(this.app)this.app.canvas.dataset.cityDetailLevel=detail;
    const cx=Math.floor(this.camera.x/TILE_W+this.camera.y/TILE_H);
    const cy=Math.floor(this.camera.y/TILE_H-this.camera.x/TILE_W);
    const buildings=visibleLandmarks(this.terrain,cx,cy);
@@ -92,7 +94,7 @@ async mount(host:HTMLElement){const app=new Application();await app.init({resize
     ...frame.entities.map(node=>({depth:node.depth,id:node.id,draw:()=>this.drawNode(node)})),
     ...buildings.map(building=>({depth:building.x+building.y+building.w+building.h-.01,id:`landmark:${building.id}`,draw:()=>{
       let art=this.landmarkGraphics.get(building.id);
-      if(!art){art=buildIsoLandmark(building,this.terrain!);this.landmarkGraphics.set(building.id,art);}
+      if(!art){art=buildIsoLandmark(building,this.terrain!,detail);this.landmarkGraphics.set(building.id,art);}
       return art;
     }})),
    ].sort((a,b)=>a.depth-b.depth||a.id.localeCompare(b.id));
@@ -155,8 +157,11 @@ private drawAuthoritativeGround(l:Container,patch:IsoTerrainPatch){
   const type=patch.rows[y-patch.originY]?.[x-patch.originX]||'?';
   const p=this.iso(x,y),color=isoTileColor(type,patch.biome);
   const alternate=((x*7+y*13)&3)===0;
+  const paved=type==='p'||type==='f'||type==='h'||type==='b';
+  // Urban paving keeps the isometric silhouette, but does not draw a dark
+  // checkerboard grid across every street and market square.
   const g=new Graphics().poly([0,-24,48,0,0,24,-48,0]).fill(color)
-    .stroke({width:.65,color:alternate?0x33423a:0x101922,alpha:.3});
+    .stroke({width:paved?.45:.65,color:alternate?0x33423a:0x101922,alpha:paved?.085:.25});
   drawBiomeTileDetails(g,type,patch.biome,patch.cityStyle,x,y);
   g.position.set(p.x,p.y);l.addChild(g);
  }
