@@ -24,7 +24,21 @@ export class ThreeIsoAtmosphere {
   setBiome(biome:string,authoritative=false):void{
     this.biome=this.biomeColors[biome]?biome:'plains';
     this.biomeActive=authoritative;
-    if(this.canvas){this.canvas.dataset.biome=this.biome;this.canvas.dataset.worldAtmosphere=authoritative?'server-biome':'fixture';}
+    if(this.canvas){
+      this.canvas.dataset.biome=this.biome;
+      this.canvas.dataset.worldAtmosphere=authoritative?'server-biome':'fixture';
+      if(this.mobileProfile&&!this.renderer){
+        const tint:Record<string,string>={
+          plains:'109,164,122',snow:'174,210,230',swamp:'98,139,92',
+          desert:'204,154,103',shadow:'117,101,162'
+        };
+        const rgb=tint[this.biome]||tint.plains;
+        // Static atmospheric glow: no extra WebGL context, pixel shader,
+        // full-screen compositing loop or animation timer on mobile.
+        this.canvas.style.background=
+          `radial-gradient(ellipse at 50% 67%, rgba(${rgb},.18), transparent 66%), linear-gradient(to top, rgba(${rgb},.12), transparent 58%)`;
+      }
+    }
     if(this.material){
       const data=this.biomeColors[this.biome];
       (this.material.uniforms.uBiomeTint.value as THREE.Color).setHex(data.color);
@@ -49,6 +63,14 @@ export class ThreeIsoAtmosphere {
     Object.assign(canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',zIndex:'1',pointerEvents:'none',mixBlendMode:'screen',opacity:'0.82'});
     host.appendChild(canvas);
     host.dataset.threeMount='canvas-attached';
+    if(this.mobileProfile){
+      canvas.dataset.rendererState='css-fallback';
+      canvas.dataset.shaderProfile='mobile-css';
+      canvas.dataset.renderScale='0';
+      host.dataset.threeMount='css-fallback';
+      this.setBiome(this.biome,this.biomeActive);
+      return;
+    }
     try {
       const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true, powerPreference:'high-performance',premultipliedAlpha:true });
       renderer.setPixelRatio(this.mobileProfile?1:Math.min(window.devicePixelRatio||1,1.25));
