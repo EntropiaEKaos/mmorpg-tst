@@ -154,6 +154,10 @@ try {
   const buildings = Number(await online.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-city-landmarks'));
   assert.ok(buildings >= 1 && buildings <= 24, `Landmark count must be bounded, got ${buildings}`);
   report.push(`Online architecture: ${buildings} server-owned buildings depth-sorted with actors`);
+  assert.equal(await online.locator('canvas[data-testid="iso-pixi-canvas"]')
+    .getAttribute('data-city-detail-level'),'full',
+    'Desktop must use complete medieval roof and facade geometry');
+  report.push('Visual 2.6 desktop: detailed roofs, doors, parapets and masonry render at full geometry');
   assert.equal(
     await online.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-entity-update-mode'),
     'snapshot-driven',
@@ -268,6 +272,10 @@ try {
   report.push('Mobile atmosphere: real authoritative biome tint with no extra WebGL shader context');
   const beforeTouchPaint=Number(await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-drawn-frames'));
   assert.ok(beforeTouchPaint>0,'Mobile online scene must submit at least one GPU draw');
+  assert.equal(await mobileOnline.locator('canvas[data-testid="iso-pixi-canvas"]')
+    .getAttribute('data-city-detail-level'),'compact',
+    'Mobile should keep the server buildings with cheaper medieval facade geometry');
+  report.push('Visual 2.6 mobile: compact city mesh detail with identical server footprint');
   assert.equal(mobileParity.mapId, 'eldoria');
   assert.equal(mobileParity.biome, 'plains');
   assert.ok(mobileParity.cityLandmarks >= 1);
