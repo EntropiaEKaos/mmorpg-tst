@@ -128,6 +128,14 @@ try {
   await online.waitForTimeout(400);
   assert.equal(await online.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-terrain-mode'), 'authoritative');
   report.push('Online: terrain is rendered from bounded authoritative server tiles');
+  await online.waitForFunction(() => {
+    const canvas = document.querySelector('canvas[data-testid="iso-pixi-canvas"]');
+    return Number(canvas?.getAttribute('data-city-landmarks')) > 0
+      && canvas?.getAttribute('data-city-style') === 'royal';
+  }, null, { timeout: 12000 });
+  const buildings = Number(await online.locator('canvas[data-testid="iso-pixi-canvas"]').getAttribute('data-city-landmarks'));
+  assert.ok(buildings >= 1 && buildings <= 24, `Landmark count must be bounded, got ${buildings}`);
+  report.push(`Online architecture: ${buildings} server-owned buildings depth-sorted with actors`);
   await online.screenshot({ path: `${output}/online.png`, fullPage: false });
   report.push('Online: real HTTP login, character ownership, WebSocket auth, server snapshot, Pixi mount');
   await online.getByRole('button', { name: 'Sair', exact: true }).click();
