@@ -6,7 +6,12 @@ const base = (process.env.MORIA_SMOKE_BASE_URL || 'http://127.0.0.1:3000').repla
 const output = 'artifacts/moria-iso-smoke';
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ['--enable-webgl', '--enable-unsafe-swiftshader'] });
-const report = [];
+// Faster desktop development loop. Mobile behavior remains frozen and its
+// COMPLETE existing journey is retained for workflow_dispatch/regression use.
+const desktopOnly = process.env.MORIA_DESKTOP_ONLY === '1';
+const report = [desktopOnly
+  ? 'Desktop release track: mobile frozen at Visual 2.7 (full mobile QA available on workflow_dispatch)'
+  : 'Full desktop + mobile regression'];
 const issues = [];
 
 function instrument(page, label) {
@@ -94,9 +99,11 @@ try {
   await desktop.getByRole('button', { name: /JOGO RÁPIDO OFFLINE/i }).waitFor({ state: 'visible' });
   report.push('Logout: clickable and returns to login screen');
 
-  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
-  instrument(mobile, 'mobile');
-  await demo(mobile, 'mobile');
+  if (!desktopOnly) {
+    const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+    instrument(mobile, 'mobile');
+    await demo(mobile, 'mobile');
+  }
 
   const legacy = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   instrument(legacy, 'legacy');
@@ -236,6 +243,7 @@ try {
   // Crucial mobile parity proof: the earlier quick-play-mobile.png captures
   // the OFFLINE Eldoria fixture, not the online server-authored 160x160 city.
   // Use the SAME persisted account and character as the desktop online case.
+  if (!desktopOnly) {
   const mobileOnline = await browser.newPage({
     viewport: { width: 390, height: 844 }, deviceScaleFactor: 1,
     isMobile: true, hasTouch: true
@@ -364,6 +372,8 @@ try {
   report.push(`Online mobile: same character/server city as desktop, ${mobileParity.cityLandmarks} real buildings, HUD fit and camera tracked`);
   await mobileOnline.getByRole('button', { name:'Sair', exact:true }).click();
   await mobileOnline.getByRole('button', { name:/JOGO RÁPIDO OFFLINE/i }).waitFor({state:'visible'});
+  }
+  if (desktopOnly)report.push('Mobile tests intentionally deferred; frozen feature branch retained');
 
   if (issues.length) throw new Error(`Browser runtime errors:\n${issues.join('\n')}`);
   console.log('MOR\'IA ISO SMOKE PASS:\n' + report.join('\n'));
