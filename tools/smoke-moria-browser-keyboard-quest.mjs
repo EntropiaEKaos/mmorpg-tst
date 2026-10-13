@@ -111,7 +111,9 @@ try{
   await page.waitForFunction(()=>document.querySelector('[data-testid="iso-next-canvas"]')
     ?.getAttribute('data-pixi-mount')==='active',null,{timeout:20000});
   const gameCanvas=page.locator('canvas[data-testid="iso-pixi-canvas"]');
-  await gameCanvas.click({position:{x:Math.min(80,(await gameCanvas.boundingBox()).width/4),y:80}});
+  const gameRect=await gameCanvas.boundingBox();
+  assert.ok(gameRect,'Visible game canvas must have browser coordinates');
+  await gameCanvas.click({position:{x:Math.floor(gameRect.width/2),y:Math.floor(gameRect.height/2)}});
 
   const catalog=await until(()=>catalogs.find(c=>Array.isArray(c?.quests)&&Array.isArray(c?.npcs)),
     'server-supplied content_sync',15000);
