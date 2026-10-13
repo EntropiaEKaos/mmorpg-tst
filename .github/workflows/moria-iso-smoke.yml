@@ -56,6 +56,7 @@ jobs:
           PORT=3000 \
           MORIA_ACCOUNT_DB="$RUNNER_TEMP/moria-qa-accounts.json" \
           MORIA_PLAYER_DB="$RUNNER_TEMP/moria-qa-players.json" \
+          MORIA_AUTOSAVE_MS=300000 \
           MORIA_CONTENT_DB="$RUNNER_TEMP/moria-qa-content.json" \
           node server/server.js > "$RUNNER_TEMP/moria-qa-server.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/moria-qa-server.pid"
@@ -68,6 +69,7 @@ jobs:
       - name: Certify real server quest acceptance and PlayerDB recovery over WebSocket
         env:
           MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
+          MORIA_PLAYER_DB: ${{ runner.temp }}/moria-qa-players.json
           MORIA_TEST_BASE: http://127.0.0.1:3000
         run: node server/tools/smoke-desktop-online-quest.mjs
       - name: Smoke desktop release, legacy, HTTP and WebSocket
