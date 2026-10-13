@@ -103,7 +103,7 @@ async function walk(page,map,goal){
   throw Error(`600 Chromium route attempts without reaching the official NPC; rejected=${[...rejectedTiles].join('|')}`);
 }
 const browser=await chromium.launch({headless:true,args:['--enable-webgl','--enable-unsafe-swiftshader']});
-const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:1});
+const page=await browser.newPage({viewport:{width:1024,height:720},deviceScaleFactor:1});
 const errors=[],intents=[],catalogs=[],sockets=[];
 let latestServerPosition=null,wireSnapshotCount=0,lastServerEvent=null;
 page.on('pageerror',error=>errors.push(error.message));
