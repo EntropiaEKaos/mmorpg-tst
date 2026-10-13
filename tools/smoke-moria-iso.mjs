@@ -318,8 +318,9 @@ try {
     'Journal must display current server NPC coordinates, not a client fixture');
   const questBounds=await online.locator('[data-iso-window="legacy-quests"]').boundingBox();
   const statsBounds=await online.locator('[data-testid="iso-authoritative-stats"]').boundingBox();
+  await writeFile(`${output}/desktop-hud-bounds.json`,JSON.stringify({questBounds,statsBounds},null,2));
   assert.ok(questBounds&&statsBounds&&questBounds.y+questBounds.height+8<=statsBounds.y,
-    'Desktop quest journal must scroll internally and never cover HP/mana HUD');
+    `Desktop quest journal must scroll internally and never cover HP/mana HUD: ${JSON.stringify({questBounds,statsBounds})}`);
   const questScroll=await online.locator('[data-iso-window="legacy-quests"] [data-window-scroll="quest-journal"]')
     .evaluate(el=>({total:el.scrollHeight,visible:el.clientHeight}));
   assert.ok(questScroll.total>questScroll.visible,'Long quest catalog must remain independently scrollable');
