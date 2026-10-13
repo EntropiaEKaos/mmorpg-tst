@@ -1,7 +1,8 @@
 // MOR'IA Desktop P0: real HTTP + WebSocket + persistence journey.
 // No browser rendering, synthetic monsters, teleport intents or GM privileges.
-// The player walks on authored tiles, accepts the official quest, disconnects,
-// and a NEW WebSocket session must recover that quest from PlayerDB on disk.
+// The player walks on authored tiles, accepts the quest, kills a naturally
+// spawned Rat and checks PlayerDB while the WebSocket is still connected.
+// A NEW WebSocket session must recover the server-owned progress from disk.
 // This complements (does not replace) the Chromium desktop gameplay E2E.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -107,6 +108,60 @@ async function walkTo(state,map,goal,{maxSteps=450}={}){
   }
   return {moved,rejected};
 }
+
+const distance=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
+// Authored spawn cells guide search, but actual targets and progress always
+// come from live WS snapshots. No synthetic monsters, teleports, GM intents,
+// altered RNG, health/damage fixtures or bypasses of combat cooldowns.
+async function huntOneNaturalRat(state,map,questId){
+  const spawnPoints=WORLD.starterRatSpawns(map,10);
+  assert.equal(spawnPoints.length,10,'Expected ten walkable authored Rat spawn cells');
+  const visited=new Set();
+  const before=state.snapshot.player;
+  const initialKills=Number(before.stats?.monstersKilled)||0;
+  const initialDeaths=Number(before.stats?.deaths)||0;
+  let travel=0,attacks=0,searches=0;
+  for(let iteration=0;iteration<110;iteration++){
+    const player=state.snapshot.player;
+    assert.equal(Number(player.stats?.deaths)||0,initialDeaths,'Natural hunt cannot rely on death/respawn');
+    if((Number(player.stats?.monstersKilled)||0)>initialKills){
+      assert.equal(Number(player.stats.monstersKilled),initialKills+1,'Exactly one real kill is required');
+      const quest=player.quests.active.find(q=>q.questId===questId);
+      assert.equal(quest?.current,1,'Rat kill must advance official starter quest');
+      assert.ok(player.level>before.level||player.xp>before.xp,'Natural kill must grant XP');
+      return {travel,attacks,searches,monsterKills:1,questProgress:quest.current,
+        xpBefore:before.xp,xpAfter:player.xp,levelBefore:before.level,levelAfter:player.level};
+    }
+    const rats=(state.snapshot.monsters||[]).filter(m=>m.name==='Rat'&&m.hp>0);
+    const reachable=rats.map(monster=>({
+      monster,path:route(map,player,p=>distance(p,monster)<=1,observedBlockers(state.snapshot))
+    })).filter(x=>x.path!==null).sort((a,b)=>a.path.length-b.path.length);
+    if(reachable.length){
+      const target=reachable[0].monster;
+      if(distance(player,target)>1){
+        const walked=await walkTo(state,map,p=>distance(p,target)<=1,{maxSteps:350});
+        travel+=walked.moved;
+      }else{
+        send(state,'attack',{monsterId:target.id});
+        attacks++;
+        assert.ok(attacks<=45,'Natural Rat not defeated after 45 normal attack intents');
+        await sleep(1350);
+      }
+      continue;
+    }
+    const options=spawnPoints.map(pos=>({
+      pos,path:route(map,player,p=>distance(p,pos)<=2,observedBlockers(state.snapshot))
+    })).filter(x=>x.path!==null&&!visited.has(key(x.pos.x,x.pos.y)))
+      .sort((a,b)=>a.path.length-b.path.length);
+    assert.ok(options.length,'No reachable natural Rat from authored spawn waypoints');
+    const target=options[0];
+    visited.add(key(target.pos.x,target.pos.y));
+    const walked=await walkTo(state,map,p=>distance(p,target.pos)<=2,{maxSteps:350});
+    travel+=walked.moved;searches++;
+    await sleep(120);
+  }
+  throw Error('Natural Rat hunt ended without an authoritative monster kill');
+}
 async function disconnect(state){
   const socket=state.socket;
   const closed=new Promise((resolve,reject)=>{
@@ -161,13 +216,28 @@ async function run(){
     send(current,'quest_complete',{questId:q.id});
     await sleep(180);
     assert.ok(current.snapshot.player.quests.active.some(entry=>entry.questId===q.id));
-    const beforeLogout={x:accepted.x,y:accepted.y,mapId:accepted.mapId,level:accepted.level,
-      gold:accepted.gold,questId:q.id};
+    const beforeCombat={gold:accepted.gold};
     // A rejected premature hand-in must never pay nor mutate saved state.
     const prematurelySaved=JSON.parse(await fs.readFile(playerDbPath,'utf8'))[characterName];
-    assert.equal(prematurelySaved.gold,beforeLogout.gold);
+    assert.equal(prematurelySaved.gold,beforeCombat.gold);
     assert.equal(prematurelySaved.quests?.completed?.includes(q.id),false);
-    // Server's WebSocket close handler saves to actual isolated PlayerDB file.
+    // This test happens BEFORE close and BEFORE the 300000ms autosave.
+    const combat=await huntOneNaturalRat(current,map,q.id);
+    const killed=current.snapshot.player;
+    const killSaved=JSON.parse(await fs.readFile(playerDbPath,'utf8'))[characterName];
+    assert.ok(killSaved,'PlayerDB must contain natural kill rewards while online');
+    assert.equal(killSaved.stats?.monstersKilled,killed.stats.monstersKilled,
+      'Kill count must be flushed before logout/autosave');
+    assert.equal(killSaved.quests?.active?.find(entry=>entry.questId===q.id)?.progress?.rat,1,
+      'Rat quest objective must be flushed before logout/autosave');
+    assert.equal(killSaved.level,killed.level,'Kill level must persist immediately');
+    assert.equal(killSaved.xp,killed.xp,'Kill XP must persist immediately');
+    assert.equal(killSaved.x,killed.x,'Last server position x must persist with kill');
+    assert.equal(killSaved.y,killed.y,'Last server position y must persist with kill');
+    assert.equal(current.socket.readyState,WebSocket.OPEN,'WebSocket must still be open at durability proof');
+    const beforeLogout={x:killed.x,y:killed.y,mapId:killed.mapId,level:killed.level,
+      xp:killed.xp,gold:killed.gold,monstersKilled:killed.stats.monstersKilled,questId:q.id};
+    // Reconnect is a separate check from the before-logout durability proof.
     await disconnect(current);
     const resumed=await connect(token);
     try{
@@ -178,15 +248,19 @@ async function run(){
       assert.equal(fresh.y,beforeLogout.y);
       assert.equal(fresh.gold,beforeLogout.gold);
       assert.equal(fresh.level,beforeLogout.level);
+      assert.equal(fresh.xp,beforeLogout.xp);
+      assert.equal(fresh.stats.monstersKilled,beforeLogout.monstersKilled);
       assert.ok(fresh.quests.active.some(entry=>entry.questId===q.id),
         'Quest state must have been reloaded from PlayerDB after disconnect/reconnect');
-      assert.equal(fresh.quests.active.find(entry=>entry.questId===q.id).current,0);
+      assert.equal(fresh.quests.active.find(entry=>entry.questId===q.id).current,1);
       assert.equal(fresh.quests.completed.includes(q.id),false);
       const result={kind:'desktop-network-persistence',mode:'real HTTP+WebSocket and PlayerDB',
         character:characterName,questId:q.id,npc:{id:npc.id,mapId:npc.mapId,x:npc.posX,y:npc.posY},
-        movement:moved,position:{x:fresh.x,y:fresh.y},questRecovered:true,
-        immediateQuestFlushBeforeLogout:true,autosaveIntervalMs:300000,
-        rewards:'not claimed',naturalCombat:'separate server integration test',
+        movement:{toNpc:moved,naturalHunt:combat.travel},position:{x:fresh.x,y:fresh.y},
+        questRecovered:true,combatRecovered:true,naturalCombat:combat,
+        immediateQuestFlushBeforeLogout:true,immediateKillFlushBeforeLogout:true,
+        autosaveIntervalMs:300000,
+        rewards:'quest turn-in not claimed; ground-pile durability not certified',
         verifiedAt:new Date().toISOString()};
       await fs.mkdir('artifacts/moria-iso-smoke',{recursive:true});
       await fs.writeFile('artifacts/moria-iso-smoke/online-quest-persistence.json',JSON.stringify(result,null,2));
