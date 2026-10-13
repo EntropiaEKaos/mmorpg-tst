@@ -3,6 +3,7 @@ import { t as tr } from '../i18n';
 
 interface Props {
   id: string;
+  positionKey?: string;
   title: string;
   children: ReactNode;
   className?: string;
@@ -29,6 +30,7 @@ function loadPosition(id: string): SavedPosition | null {
 
 export default function MovableHudWindow({
   id,
+  positionKey,
   title,
   children,
   className = '',
@@ -38,7 +40,8 @@ export default function MovableHudWindow({
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<null | { pointerId: number; startX: number; startY: number; originX: number; originY: number }>(null);
-  const [position, setPosition] = useState<SavedPosition | null>(() => loadPosition(id));
+  const persistentId = positionKey || id;
+  const [position, setPosition] = useState<SavedPosition | null>(() => loadPosition(persistentId));
   const [dragging, setDragging] = useState(false);
 
   const currentPosition = () => {
@@ -93,7 +96,7 @@ export default function MovableHudWindow({
     setDragging(false);
     const next = clamp(position?.x ?? drag.originX, position?.y ?? drag.originY);
     setPosition(next);
-    try { localStorage.setItem(storageKey(id), JSON.stringify(next)); } catch { /* local preference only */ }
+    try { localStorage.setItem(storageKey(persistentId), JSON.stringify(next)); } catch { /* local preference only */ }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
@@ -101,7 +104,7 @@ export default function MovableHudWindow({
     dragRef.current = null;
     setDragging(false);
     setPosition(null);
-    try { localStorage.removeItem(storageKey(id)); } catch { /* local preference only */ }
+    try { localStorage.removeItem(storageKey(persistentId)); } catch { /* local preference only */ }
   };
 
   const anchored: CSSProperties = position
