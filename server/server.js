@@ -712,7 +712,27 @@ wss.on('connection', ws => {
         if (++socialActionsInWindow > 30) return;
       }
       const beforeKills = Number(engine.getPlayer(clientId)?.stats?.monstersKilled) || 0;
+      const diagnosticPlayer = process.env.MORIA_DIAG_MOVEMENT === '1' && intent.type === 'move'
+        ? engine.getPlayer(clientId) : null;
+      const diagnosticOrigin = diagnosticPlayer
+        ? { x: diagnosticPlayer.x, y: diagnosticPlayer.y, lastMove: diagnosticPlayer.lastMove } : null;
       const handled = engine.processIntent(clientId, intent);
+      if (diagnosticOrigin && !handled) {
+        const dx = Number(intent.payload?.dx), dy = Number(intent.payload?.dy);
+        const x = diagnosticOrigin.x + dx, y = diagnosticOrigin.y + dy;
+        const map = WORLD.getMap(diagnosticPlayer.mapId);
+        const monsters = engine.monstersByMap.get(diagnosticPlayer.mapId) || [];
+        console.warn('MORIA QA MOVE REJECT', JSON.stringify({
+          from: { x: diagnosticOrigin.x, y: diagnosticOrigin.y }, target: { x, y }, dx, dy,
+          tileWalkable: Boolean(map?.tiles?.[y]?.[x]?.walkable),
+          houseBlocked: !housingSystem.canStep(diagnosticPlayer, diagnosticPlayer.mapId, x, y, contentDB),
+          monsterBlocked: monsters.some(monster => !monster.dead && monster.x === x && monster.y === y),
+          otherPlayerBlocked: engine.getPlayersOnMap(diagnosticPlayer.mapId)
+            .some(player => player.id !== diagnosticPlayer.id && player.x === x && player.y === y),
+          sinceLastMoveMs: Date.now() - (Number(diagnosticOrigin.lastMove) || 0),
+          playerStillOnline: Boolean(engine.getPlayer(clientId)),
+        }));
+      }
       const afterKills = Number(engine.getPlayer(clientId)?.stats?.monstersKilled) || 0;
       // Lethal combat grants XP and generates world loot; do not lose rewards
       // on a crash just because autosave has not run. Normal repeated hits
