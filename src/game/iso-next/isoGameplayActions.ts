@@ -47,6 +47,7 @@ export type IsoGameplaySnapshot = {
   inventory: unknown[];
   equipment: Record<string, unknown>;
   groundItems: unknown[];
+  playerPos: { x: number; y: number } | null;
   activeQuests: unknown[];
   tasks: unknown[];
   talents: unknown[];
@@ -61,6 +62,8 @@ export function selectIsoGameplaySnapshot(snapshot: any): IsoGameplaySnapshot {
     inventory: Array.isArray(player.inventory) ? player.inventory : [],
     equipment: player.equipment && typeof player.equipment === 'object' ? player.equipment : {},
     groundItems: Array.isArray(snapshot?.groundItems) ? snapshot.groundItems : [],
+    playerPos: Number.isFinite(player.x??player.pos?.x)&&Number.isFinite(player.y??player.pos?.y)
+      ?{x:Number(player.x??player.pos.x),y:Number(player.y??player.pos.y)}:null,
     activeQuests: Array.isArray(player.quests?.active) ? player.quests.active : Array.isArray(player.activeQuests) ? player.activeQuests : [],
     tasks: Array.isArray(player.tasks) ? player.tasks : Array.isArray(snapshot?.tasks) ? snapshot.tasks : [],
     talents: Array.isArray(player.talents) ? player.talents : [],
