@@ -19,6 +19,7 @@ on:
       - 'src/game/ServerSync.ts'
       - 'server/server.js'
       - 'tools/smoke-moria-iso.mjs'
+      - 'tools/smoke-moria-desktop-quest-transport.mjs'
       - 'docs/MORIA_DESKTOP_RELEASE_TRACK.md'
       - '.github/workflows/moria-iso-smoke.yml'
 
@@ -64,6 +65,8 @@ jobs:
           done
           cat "$RUNNER_TEMP/moria-qa-server.log"
           exit 1
+      - name: Certify real desktop quest acceptance and persisted re-login via HTTP and WebSocket
+        run: node tools/smoke-moria-desktop-quest-transport.mjs
       - name: Smoke desktop release, legacy, HTTP and WebSocket
         env:
           MORIA_DESKTOP_ONLY: ${{ (github.event_name == 'pull_request' || inputs.include_mobile == false) && '1' || '0' }}
