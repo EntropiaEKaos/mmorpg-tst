@@ -58,6 +58,11 @@ test('desktop natural journey: walk to real quest NPC, hunt spawned rats, collec
   const map=WORLD.getMap(npc.mapId);
   assert.ok(map);
   assert.equal(String(quest.target).toLowerCase(),'rat');
+  const reachableSpawns=WORLD.starterRatSpawns(map,10);
+  assert.equal(reachableSpawns.length,10,'Starter quest must have ten separated, connected rat spawn cells');
+  const firstBoot=WORLD.spawnMonsters(npc.mapId).filter(m=>m.name==='Rat').map(m=>[m.x,m.y]);
+  const secondBoot=WORLD.spawnMonsters(npc.mapId).filter(m=>m.name==='Rat').map(m=>[m.x,m.y]);
+  assert.deepEqual(firstBoot,secondBoot,'Starter rat positions must not depend on boot-time randomness');
   const id=`desktop_natural_${process.pid}_${Date.now()}`;
   const player=engine.playerConnect(id,'NaturalJourney','knight',null);
   const monsters=engine.monstersByMap.get(npc.mapId)||[];
