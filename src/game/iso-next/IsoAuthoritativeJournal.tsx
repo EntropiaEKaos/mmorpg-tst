@@ -4,9 +4,11 @@ import { IsoSpellTooltip } from './IsoTooltip';
 type QuestRecord={
   id?:string;questId?:string;name?:string;title?:string;description?:string;
   current?:number;needed?:number;count?:number;levelRequired?:number;
-  progress?:Record<string,number>;target?:string;requires?:string[];
+  progress?:Record<string,number>;target?:string;requires?:string[];npcId?:string;
 };
 const asQuestList=(value:unknown):QuestRecord[]=>Array.isArray(value)?value:[];
+type NpcRecord={id?:string;name?:string;mapId?:string;posX?:number;posY?:number};
+const asNpcList=(value:unknown):NpcRecord[]=>Array.isArray(value)?value:[];
 
 export function IsoAuthoritativeQuestLog({snapshot}:{snapshot:any}){
   const player=snapshot?.player||{};
@@ -16,6 +18,25 @@ export function IsoAuthoritativeQuestLog({snapshot}:{snapshot:any}){
   // Quest catalog arrives once via authenticated content_sync. Do not invent
   // client quests, progression, NPC distance or successful server rewards.
   const catalog=asQuestList(snapshot?.quests);
+  const npcs=asNpcList(snapshot?.npcs);
+  const questGiver=(quest:QuestRecord)=>{
+    const full=catalog.find(c=>(c.id||c.questId)===(quest.id||quest.questId))||quest;
+    const npc=npcs.find(n=>n.id===full.npcId);
+    if(!npc)return null;
+    const x=Number(npc.posX),y=Number(npc.posY);
+    if(!Number.isFinite(x)||!Number.isFinite(y))return null;
+    const px=Number(player.x??player.pos?.x),py=Number(player.y??player.pos?.y);
+    const sameMap=Boolean(player.mapId&&npc.mapId===player.mapId);
+    const near=sameMap&&Number.isFinite(px)&&Number.isFinite(py)&&Math.abs(px-x)<=2&&Math.abs(py-y)<=2;
+    const dx=x-px,dy=y-py;
+    const direction=!sameMap?'outra região':[
+      dy<0?'norte':dy>0?'sul':'',dx<0?'oeste':dx>0?'leste':''
+    ].filter(Boolean).join(' / ')||'aqui';
+    return <div data-testid="iso-quest-giver" data-quest-id={quest.id||quest.questId}
+      data-quest-near={near?'yes':'no'} style={{fontSize:11,marginTop:6,opacity:.82}}>
+      📍 {npc.name||npc.id} · {npc.mapId||'mapa'} ({x}, {y}) · {near?'NPC ao alcance':`Dirija-se: ${direction}`}
+    </div>;
+  };
   const activeIds=new Set(active.map(q=>q.questId||q.id));
   const completedIds=new Set(completed);
   const available=catalog.filter(q=>{
@@ -36,6 +57,7 @@ export function IsoAuthoritativeQuestLog({snapshot}:{snapshot:any}){
       return <div key={id||i} data-testid="iso-quest-active" style={{padding:9,marginTop:6,border:'1px solid rgba(238,203,126,.15)',borderRadius:9}}>
         <b>{q.title||q.name||id}</b>
         {q.description&&<div style={{fontSize:11,opacity:.7}}>{q.description}</div>}
+        {questGiver(q)}
         <div style={{fontSize:11,marginTop:4}}>{current}/{needed} · {ready?'Objetivo concluído':'Em andamento'}</div>
         <button data-testid="iso-quest-complete" data-quest-id={id} disabled={!id||!ready}
           onClick={()=>dispatchIsoAction({kind:'quest-complete',questId:id})}>
@@ -49,7 +71,7 @@ export function IsoAuthoritativeQuestLog({snapshot}:{snapshot:any}){
       const id=q.id||q.questId||'',required=Math.max(1,Number(q.levelRequired||1));
       const locked=Number(player.level||1)<required;
       return <div key={id||i} data-testid="iso-quest-available" style={{padding:9,marginTop:6,border:'1px solid rgba(105,206,147,.18)',borderRadius:9}}>
-        <b>{q.title||q.name||id}</b>{q.description&&<div style={{fontSize:11,opacity:.7}}>{q.description}</div>}
+        <b>{q.title||q.name||id}</b>{q.description&&<div style={{fontSize:11,opacity:.7}}>{q.description}</div>}{questGiver(q)}
         <div style={{fontSize:11,marginTop:3,opacity:.72}}>Nível {required} · Aceitação depende de proximidade e pré-requisitos no servidor</div>
         <button data-testid="iso-quest-accept" data-quest-id={id} disabled={!id||locked}
           onClick={()=>dispatchIsoAction({kind:'quest-accept',questId:id})}>
