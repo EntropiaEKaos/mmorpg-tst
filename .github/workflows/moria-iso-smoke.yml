@@ -59,6 +59,7 @@ jobs:
           MORIA_PLAYER_DB="$RUNNER_TEMP/moria-qa-players.json" \
           MORIA_AUTOSAVE_MS=300000 \
           MORIA_DIAG_MOVEMENT=1 \
+          MORIA_QA_SNAPSHOT_MS=125 \
           MORIA_CONTENT_DB="$RUNNER_TEMP/moria-qa-content.json" \
           node server/server.js > "$RUNNER_TEMP/moria-qa-server.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/moria-qa-server.pid"
