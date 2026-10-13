@@ -13,7 +13,7 @@ import { IsoAuthoritativeEconomy } from './IsoAuthoritativeEconomy';
 import { dispatchIsoAction, selectIsoGameplaySnapshot, type IsoGameplaySnapshot } from './isoGameplayActions';
 
 type Tab='quests'|'progress'|'world'|'social';type Preset='combat'|'exploration'|'social';type SavedLayout={positions:Record<string,{x:number;y:number}>;open:LegacyWindowId[];inventory:boolean;dock:boolean;minimap?:boolean;chat?:boolean};
-const EMPTY:IsoGameplaySnapshot={inventory:[],equipment:{},groundItems:[],activeQuests:[],tasks:[],talents:[],professions:[],reputation:{},mounts:[]};
+const EMPTY:IsoGameplaySnapshot={inventory:[],equipment:{},groundItems:[],playerPos:null,activeQuests:[],tasks:[],talents:[],professions:[],reputation:{},mounts:[]};
 const KEY_TO_WINDOW:Map<string,LegacyWindowId>=new Map(ISO_LEGACY_WINDOWS.map(([id,,key])=>[`Key${key}`,id]));
 const PRESETS:Record<Preset,LegacyWindowId[]>={combat:['character','spellbook','dps','bestiary'],exploration:['quests','map','crafting','mounts','events'],social:['social','mail','auction','housing','pets']};
 export function IsoSystemsOverlay(){
