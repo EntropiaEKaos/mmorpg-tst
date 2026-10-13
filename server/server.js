@@ -46,6 +46,14 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
 const AUTOSAVE_INTERVAL_MS = Math.max(1000, Math.min(300_000, Math.floor(Number(process.env.MORIA_AUTOSAVE_MS) || 15_000)));
 const CRITICAL_SOCIAL_ACTIONS = new Set(['trade_confirm', 'guild_create']);
+// Accepted quest/progression/economy changes should survive an unexpected
+// process death without waiting for the 15s autosave or a graceful WS close.
+// Frequent movement and non-lethal combat must NOT fsync every input tick.
+const CRITICAL_GAMEPLAY_INTENTS = new Set([
+  'quest_accept','quest_complete','pickup','drop',
+  'equip','unequip','use_item','task','adventure_claim',
+  'talent','talent_reset','mount','appearance','housing','travel',
+]);
 const PERSISTENCE_STATE = { lastAutosaveAt: 0, lastCriticalFlushAt: 0, lastSavedPlayers: 0 };
 
 // ContentDB is persistent; reconcile server-owned catalogs into the already-
@@ -603,6 +611,7 @@ function persistOnlinePlayers(reason = 'autosave') {
 function shouldFlushCriticalIntent(intent) {
   if (!intent || typeof intent !== 'object') return false;
   if (intent.type === 'official') return true;
+  if (CRITICAL_GAMEPLAY_INTENTS.has(intent.type)) return true;
   if (intent.type !== 'social') return false;
   const action = intent.payload && typeof intent.payload === 'object' && !Array.isArray(intent.payload) ? intent.payload.action : '';
   return CRITICAL_SOCIAL_ACTIONS.has(action);
@@ -702,8 +711,15 @@ wss.on('connection', ws => {
         if (now - socialWindowStart >= 10_000) { socialWindowStart = now; socialActionsInWindow = 0; }
         if (++socialActionsInWindow > 30) return;
       }
+      const beforeKills = Number(engine.getPlayer(clientId)?.stats?.monstersKilled) || 0;
       const handled = engine.processIntent(clientId, intent);
-      if (handled && shouldFlushCriticalIntent(intent)) persistCriticalState();
+      const afterKills = Number(engine.getPlayer(clientId)?.stats?.monstersKilled) || 0;
+      // Lethal combat grants XP and generates world loot; do not lose rewards
+      // on a crash just because autosave has not run. Normal repeated hits
+      // and keyboard movement remain cheap and snapshot-driven.
+      const killedMonster = (intent.type === 'attack' || intent.type === 'cast')
+        && afterKills > beforeKills;
+      if (handled && (shouldFlushCriticalIntent(intent) || killedMonster)) persistCriticalState();
       return;
     }
 
