@@ -55,19 +55,33 @@ async function walk(page,map,goal){
     assert.ok(route?.length,`No authored path from (${p.x},${p.y}) to NPC`);
     const code=route[0],direction=directions.find(d=>d[2]===code);
     const target={x:p.x+direction[0],y:p.y+direction[1]};
+    // Keep the real key held until an authoritative position change is seen.
+    // A 46ms tap can be shorter than a browser rendering/input interval.
+    let changed=false;
     await page.keyboard.down(code);
-    try{await page.waitForTimeout(46)}finally{await page.keyboard.up(code)}
     try{
-      await page.waitForFunction(next=>{
+      await page.waitForFunction(previous=>{
         const hero=window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player;
-        return hero?.x===next.x&&hero?.y===next.y;
-      },target,{timeout:600});
-      legalSteps++;
-    }catch{
-      const fresh=(await readSnapshot(page))?.player;
-      if(fresh?.x!==p.x||fresh?.y!==p.y)legalSteps++;
-      else retries++;
-      assert.ok(retries<45,`Movement not accepted at (${p.x},${p.y})`);
+        return hero&&(hero.x!==previous.x||hero.y!==previous.y);
+      },{x:p.x,y:p.y},{timeout:1600});
+      changed=true;
+    }catch{}finally{await page.keyboard.up(code)}
+    const fresh=(await readSnapshot(page))?.player;
+    if(changed||(fresh?.x!==p.x||fresh?.y!==p.y))legalSteps++;
+    else{
+      retries++;
+      if(retries===5||retries===15||retries===30){
+        const focus=await page.evaluate(()=>({
+          activeElement:document.activeElement?.tagName,
+          hidden:document.hidden,
+          pixi:document.querySelector('[data-testid="iso-next-canvas"]')?.getAttribute('data-pixi-mount')
+        }));
+        console.log('CHROMIUM KEYBOARD MOVE RETRY',JSON.stringify({
+          retries,from:{x:p.x,y:p.y},wanted:target,key:code,
+          moveIntents:intents.filter(x=>x.type==='move').length,focus
+        }));
+      }
+      assert.ok(retries<35,`Movement not accepted at (${p.x},${p.y}); move intents=${intents.filter(x=>x.type==='move').length}`);
     }
   }
   throw Error('600 Chromium route attempts without reaching the official NPC');
@@ -94,6 +108,11 @@ try{
   await page.locator('[data-testid="iso-next-root"]').waitFor({state:'visible'});
   await page.getByText('Servidor autoritativo • LIVE').waitFor({state:'visible',timeout:20000});
   await page.locator('canvas[data-testid="iso-pixi-canvas"]').waitFor({state:'visible',timeout:20000});
+  await page.waitForFunction(()=>document.querySelector('[data-testid="iso-next-canvas"]')
+    ?.getAttribute('data-pixi-mount')==='active',null,{timeout:20000});
+  const gameCanvas=page.locator('canvas[data-testid="iso-pixi-canvas"]');
+  await gameCanvas.click({position:{x:Math.min(80,(await gameCanvas.boundingBox()).width/4),y:80}});
+
   const catalog=await until(()=>catalogs.find(c=>Array.isArray(c?.quests)&&Array.isArray(c?.npcs)),
     'server-supplied content_sync',15000);
   const quest=catalog.quests.find(q=>q.id==='quest_rats');
