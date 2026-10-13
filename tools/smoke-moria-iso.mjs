@@ -297,6 +297,14 @@ try {
   assert.ok(guideText.includes(questNpc.name),'Journal must identify its authoritative NPC');
   assert.ok(guideText.includes(`(${questNpc.posX}, ${questNpc.posY})`),
     'Journal must display current server NPC coordinates, not a client fixture');
+  const questBounds=await online.locator('[data-iso-window="legacy-quests"]').boundingBox();
+  const statsBounds=await online.locator('[data-testid="iso-authoritative-stats"]').boundingBox();
+  assert.ok(questBounds&&statsBounds&&questBounds.y+questBounds.height+8<=statsBounds.y,
+    'Desktop quest journal must scroll internally and never cover HP/mana HUD');
+  const questScroll=await online.locator('[data-iso-window="legacy-quests"] [data-window-scroll="quest-journal"]')
+    .evaluate(el=>({total:el.scrollHeight,visible:el.clientHeight}));
+  assert.ok(questScroll.total>questScroll.visible,'Long quest catalog must remain independently scrollable');
+  report.push('Desktop quest layout: scrollable log does not overlap authoritative HP/mana HUD');
   report.push(`Desktop quest navigation: ${questNpc.name} at (${questNpc.posX},${questNpc.posY}) from authenticated server content`);
   await online.screenshot({path:`${output}/online-desktop-quests.png`,fullPage:false});
   const questStart=desktopIntents.length;
