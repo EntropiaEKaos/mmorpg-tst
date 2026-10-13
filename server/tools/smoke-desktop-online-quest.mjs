@@ -145,12 +145,28 @@ async function run(){
     const accepted=current.snapshot.player;
     assert.equal(accepted.quests.active.find(entry=>entry.questId===q.id).current,0);
     assert.equal(accepted.quests.active.length,1);
+    // Prove durability BEFORE disconnect, while the player is still online.
+    // The CI realm deliberately sets autosave to 300s; quest acceptance must
+    // synchronously flush its real PlayerDB JSON independently of autosave.
+    const playerDbPath=process.env.MORIA_PLAYER_DB;
+    assert.ok(playerDbPath,'Expected isolated PlayerDB path for crash-window certification');
+    const persisted=JSON.parse(await fs.readFile(playerDbPath,'utf8'));
+    const stored=persisted[characterName];
+    assert.ok(stored,'Accepted quest must create a durable player record immediately');
+    assert.ok(stored.quests?.active?.some(entry=>entry.questId===q.id),
+      'Quest must be saved immediately while WebSocket is still connected');
+    assert.equal(stored.x,accepted.x,'Immediate durable save must include latest player x');
+    assert.equal(stored.y,accepted.y,'Immediate durable save must include latest player y');
     // No fake quest_completion; this must remain incomplete until server kills.
     send(current,'quest_complete',{questId:q.id});
     await sleep(180);
     assert.ok(current.snapshot.player.quests.active.some(entry=>entry.questId===q.id));
     const beforeLogout={x:accepted.x,y:accepted.y,mapId:accepted.mapId,level:accepted.level,
       gold:accepted.gold,questId:q.id};
+    // A rejected premature hand-in must never pay nor mutate saved state.
+    const prematurelySaved=JSON.parse(await fs.readFile(playerDbPath,'utf8'))[characterName];
+    assert.equal(prematurelySaved.gold,beforeLogout.gold);
+    assert.equal(prematurelySaved.quests?.completed?.includes(q.id),false);
     // Server's WebSocket close handler saves to actual isolated PlayerDB file.
     await disconnect(current);
     const resumed=await connect(token);
@@ -169,6 +185,7 @@ async function run(){
       const result={kind:'desktop-network-persistence',mode:'real HTTP+WebSocket and PlayerDB',
         character:characterName,questId:q.id,npc:{id:npc.id,mapId:npc.mapId,x:npc.posX,y:npc.posY},
         movement:moved,position:{x:fresh.x,y:fresh.y},questRecovered:true,
+        immediateQuestFlushBeforeLogout:true,autosaveIntervalMs:300000,
         rewards:'not claimed',naturalCombat:'separate server integration test',
         verifiedAt:new Date().toISOString()};
       await fs.mkdir('artifacts/moria-iso-smoke',{recursive:true});
