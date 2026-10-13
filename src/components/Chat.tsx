@@ -47,7 +47,8 @@ function ChatInner({ messages, onSendMessage, social, placement }: Props) {
 
   return (
     <MovableHudWindow
-      id={placement === 'iso-desktop' ? 'iso-desktop-chat' : 'chat'}
+      id="chat"
+      positionKey={placement === 'iso-desktop' ? 'iso-desktop-chat' : undefined}
       title={tr('Chat')}
       className={`${expanded ? 'h-[390px] w-[520px]' : 'h-[204px] w-[330px]'} max-w-[calc(100vw-16px)]`}
       contentClassName="flex h-[calc(100%-28px)] flex-col"
