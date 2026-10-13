@@ -159,6 +159,25 @@ try {
   await readyIso(online);
   await online.getByText('Servidor autoritativo • LIVE').waitFor({ state: 'visible', timeout: 16000 });
   await online.locator('[data-testid="iso-player-hud"]').waitFor({ state: 'visible' });
+  await online.locator('[data-testid="iso-authoritative-stats"]').waitFor({state:'visible'});
+  await online.locator('[data-hud-window="iso-desktop-chat"]').waitFor({state:'visible'});
+  const playerHudRect=await online.locator('[data-testid="iso-player-hud"]').boundingBox();
+  const statsHudRect=await online.locator('[data-testid="iso-authoritative-stats"]').boundingBox();
+  const chatHudRect=await online.locator('[data-hud-window="iso-desktop-chat"]').boundingBox();
+  const hotbarRect=await online.locator('[data-iso-window="authoritative-action-bar"]').boundingBox();
+  const overlaps=(a,b)=>Boolean(a&&b&&Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x)>4
+    &&Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y)>4);
+  assert.ok(playerHudRect&&statsHudRect&&chatHudRect&&hotbarRect,
+    'Desktop HUD geometry must be measurable in the real browser');
+  for(const [first,a,second,b] of [
+    ['player HUD',playerHudRect,'stats',statsHudRect],
+    ['player HUD',playerHudRect,'chat',chatHudRect],
+    ['stats',statsHudRect,'chat',chatHudRect],
+    ['hotbar',hotbarRect,'chat',chatHudRect]
+  ]){
+    assert.equal(overlaps(a,b),false,`Desktop ${first} must not overlap ${second}`);
+  }
+  report.push('Desktop HUD: player vitals, authoritative stats, hotbar and chat occupy separate default regions');
   await online.waitForFunction(() => {
     const player = window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player;
     const center = document.querySelector('canvas[data-testid="iso-pixi-canvas"]')?.getAttribute('data-ground-center');
