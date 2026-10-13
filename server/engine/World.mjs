@@ -592,6 +592,47 @@ class WorldManager {
     return map?.spawnPoint ? { ...map.spawnPoint } : { x: 40, y: 40 };
   }
 
+  starterRatSpawns(map, count) {
+    // A starter quest needs accessible enemies every time the server boots.
+    // The historical random scatter could strand rats behind world geometry.
+    // This selection is deterministic and uses ONLY walkable cells connected
+    // to the real starter spawn. It does not move the quest NPC or change rules.
+    const origin=this.findNearestWalkable(map,map.spawnPoint,14);
+    if(!origin)return [];
+    const key=(x,y)=>`${x},${y}`;
+    const queue=[{x:origin.x,y:origin.y,d:0}];
+    const seen=new Set([key(origin.x,origin.y)]);
+    const portalCells=new Set((map.portals||[]).map(p=>key(p.pos.x,p.pos.y)));
+    const neighbors=[[0,1],[1,0],[0,-1],[-1,0]];
+    const candidates=[];
+    for(let head=0;head<queue.length;head++){
+      const point=queue[head];
+      const walks=neighbors.filter(([dx,dy])=>map.tiles?.[point.y+dy]?.[point.x+dx]?.walkable).length;
+      // Avoid camping the starter spawn or filling one-cell corridors with enemies.
+      if(point.d>=9&&point.d<=65&&walks>=3&&!portalCells.has(key(point.x,point.y))){
+        candidates.push(point);
+      }
+      for(const [dx,dy] of neighbors){
+        const x=point.x+dx,y=point.y+dy,k=key(x,y);
+        if(seen.has(k)||portalCells.has(k)||!map.tiles?.[y]?.[x]?.walkable)continue;
+        seen.add(k);queue.push({x,y,d:point.d+1});
+      }
+    }
+    // Stable spread throughout the accessible starter component. For a
+    // given authored map and seed, repeated boots spawn rats at the same tiles.
+    const seed=Number(map.seed)||42;
+    const score=({x,y})=>(Math.imul(x+seed,73856093)^Math.imul(y+seed,19349663))>>>0;
+    candidates.sort((a,b)=>score(a)-score(b)||a.d-b.d);
+    const chosen=[];
+    for(const point of candidates){
+      if(chosen.every(other=>Math.abs(other.x-point.x)+Math.abs(other.y-point.y)>=5)){
+        chosen.push({x:point.x,y:point.y});
+        if(chosen.length===count)break;
+      }
+    }
+    return chosen;
+  }
+
   spawnMonsters(mapId) {
     const templates = {
       eldoria: [
@@ -619,10 +660,13 @@ class WorldManager {
     if (!map) return [];
     const list = templates[mapId] || [];
     const monsters = [];
+    const reachableStarterRats=mapId==='eldoria'?this.starterRatSpawns(map,10):[];
     let id = 0;
     for (const template of list) {
       for (let i = 0; i < template.count; i++) {
-        const pos = this.findWalkableSpawn(map);
+        const pos = mapId==='eldoria'&&template.name==='Rat'
+          ?(reachableStarterRats[i]||this.findWalkableSpawn(map))
+          :this.findWalkableSpawn(map);
         monsters.push({
           id: `${mapId}_m_${id++}`, name: template.name, emoji: template.emoji,
           x: pos.x, y: pos.y, spawnX: pos.x, spawnY: pos.y,
