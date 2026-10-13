@@ -128,12 +128,21 @@ try {
   // Observe real outbound WebSocket frames WITHOUT mocking, intercepting or
   // changing any server traffic. This distinguishes an intent from a reward.
   const desktopIntents=[];
-  online.on('websocket',socket=>socket.on('framesent',frame=>{
+  const serverContent=[];
+  online.on('websocket',socket=>{
+    socket.on('framereceived',frame=>{
+      try{
+        const packet=JSON.parse(String(frame.payload));
+        if(packet.kind==='content_sync')serverContent.push(packet.payload);
+      }catch{}
+    });
+    socket.on('framesent',frame=>{
     try {
       const packet=JSON.parse(String(frame.payload));
       if(packet.kind==='intent')desktopIntents.push(packet.payload);
     }catch{}
-  }));
+    });
+  });
   const waitForIntent=async(type,start,timeout=12000)=>{
     const began=Date.now();
     while(Date.now()-began<timeout){
@@ -279,6 +288,16 @@ try {
   await questButton.waitFor({state:'visible'});
   const questId=await questButton.getAttribute('data-quest-id');
   assert.ok(questId,'Server quest catalog must expose a stable quest ID');
+  const rawQuest=serverContent.flatMap(c=>c.quests||[]).find(q=>q.id===questId);
+  const questNpc=serverContent.flatMap(c=>c.npcs||[]).find(n=>n.id===rawQuest?.npcId);
+  assert.ok(questNpc,'Visible quest must link to a server-supplied NPC');
+  const giver=questLog.locator(`[data-testid="iso-quest-giver"][data-quest-id="${questId}"]`);
+  await giver.waitFor({state:'visible'});
+  const guideText=await giver.innerText();
+  assert.ok(guideText.includes(questNpc.name),'Journal must identify its authoritative NPC');
+  assert.ok(guideText.includes(`(${questNpc.posX}, ${questNpc.posY})`),
+    'Journal must display current server NPC coordinates, not a client fixture');
+  report.push(`Desktop quest navigation: ${questNpc.name} at (${questNpc.posX},${questNpc.posY}) from authenticated server content`);
   await online.screenshot({path:`${output}/online-desktop-quests.png`,fullPage:false});
   const questStart=desktopIntents.length;
   await questButton.click();
