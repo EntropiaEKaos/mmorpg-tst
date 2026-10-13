@@ -1,8 +1,8 @@
 // MOR'IA Desktop P0: real HTTP + WebSocket + persistence journey.
 // No browser rendering, synthetic monsters, teleport intents or GM privileges.
-// The player walks on authored tiles, accepts the quest, kills a naturally
-// spawned Rat and checks PlayerDB while the WebSocket is still connected.
-// A NEW WebSocket session must recover the server-owned progress from disk.
+// The player walks to a real quest NPC, kills naturally spawned Rats, picks up
+// actual world loot, delivers the official reward and verifies persistence.
+// All mutations use public WebSocket intents, never GM or mock game state.
 // This complements (does not replace) the Chromium desktop gameplay E2E.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -113,7 +113,7 @@ const distance=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
 // Authored spawn cells guide search, but actual targets and progress always
 // come from live WS snapshots. No synthetic monsters, teleports, GM intents,
 // altered RNG, health/damage fixtures or bypasses of combat cooldowns.
-async function huntOneNaturalRat(state,map,questId){
+async function huntNaturalRat(state,map,questId,targetProgress){
   const spawnPoints=WORLD.starterRatSpawns(map,10);
   assert.equal(spawnPoints.length,10,'Expected ten walkable authored Rat spawn cells');
   const visited=new Set();
@@ -127,7 +127,7 @@ async function huntOneNaturalRat(state,map,questId){
     if((Number(player.stats?.monstersKilled)||0)>initialKills){
       assert.equal(Number(player.stats.monstersKilled),initialKills+1,'Exactly one real kill is required');
       const quest=player.quests.active.find(q=>q.questId===questId);
-      assert.equal(quest?.current,1,'Rat kill must advance official starter quest');
+      assert.equal(quest?.current,targetProgress,'Each natural Rat kill must advance quest by exactly one');
       assert.ok(player.level>before.level||player.xp>before.xp,'Natural kill must grant XP');
       return {travel,attacks,searches,monsterKills:1,questProgress:quest.current,
         xpBefore:before.xp,xpAfter:player.xp,levelBefore:before.level,levelAfter:player.level};
@@ -161,6 +161,41 @@ async function huntOneNaturalRat(state,map,questId){
     await sleep(120);
   }
   throw Error('Natural Rat hunt ended without an authoritative monster kill');
+}
+// Ground piles are selected exclusively from live WS snapshots. A successful
+// pickup must also be in the isolated PlayerDB while the socket remains OPEN.
+async function collectVisibleLoot(state,map,playerDbPath){
+  const piles=[...(state.snapshot.groundItems||[])].filter(pile=>Array.isArray(pile.items)&&pile.items.length);
+  const result={piles:0,gold:0,items:0};
+  for(const pile of piles){
+    if(!(state.snapshot.groundItems||[]).some(g=>g.id===pile.id))continue;
+    if(distance(state.snapshot.player,pile)>2){
+      await walkTo(state,map,point=>distance(point,pile)<=2,{maxSteps:350});
+    }
+    assert.ok(Math.hypot(state.snapshot.player.x-pile.x,state.snapshot.player.y-pile.y)<=2,
+      'Ground pile must be in natural pickup range');
+    const before=state.snapshot.player;
+    const startVersion=state.version;
+    send(state,'pickup',{groundId:pile.id});
+    await until(()=>state.version>startVersion&&!(state.snapshot.groundItems||[]).some(g=>g.id===pile.id),
+      'authoritative ground pile removal after official pickup',11000);
+    const after=state.snapshot.player;
+    assert.ok(after.gold>before.gold||after.inventory.length>before.inventory.length,
+      'Real pickup must grant gold or inventory contents');
+    const saved=JSON.parse(await fs.readFile(playerDbPath,'utf8'))[characterName];
+    assert.equal(saved.gold,after.gold,'Pickup gold must flush immediately before logout');
+    assert.deepEqual(saved.inventory,after.inventory,'Pickup inventory must flush immediately before logout');
+    const gold=after.gold,inventoryCount=after.inventory.length;
+    send(state,'pickup',{groundId:pile.id});
+    await sleep(170);
+    assert.equal(state.snapshot.player.gold,gold,'Duplicate pickup may not pay gold twice');
+    assert.equal(state.snapshot.player.inventory.length,inventoryCount,
+      'Duplicate pickup may not grant inventory twice');
+    result.piles++;
+    result.gold+=gold-before.gold;
+    result.items+=inventoryCount-before.inventory.length;
+  }
+  return result;
 }
 async function disconnect(state){
   const socket=state.socket;
@@ -222,7 +257,7 @@ async function run(){
     assert.equal(prematurelySaved.gold,beforeCombat.gold);
     assert.equal(prematurelySaved.quests?.completed?.includes(q.id),false);
     // This test happens BEFORE close and BEFORE the 300000ms autosave.
-    const combat=await huntOneNaturalRat(current,map,q.id);
+    const combat=await huntNaturalRat(current,map,q.id,1);
     const killed=current.snapshot.player;
     const killSaved=JSON.parse(await fs.readFile(playerDbPath,'utf8'))[characterName];
     assert.ok(killSaved,'PlayerDB must contain natural kill rewards while online');
@@ -254,13 +289,80 @@ async function run(){
         'Quest state must have been reloaded from PlayerDB after disconnect/reconnect');
       assert.equal(fresh.quests.active.find(entry=>entry.questId===q.id).current,1);
       assert.equal(fresh.quests.completed.includes(q.id),false);
+      const hunts=[combat],loot=[];
+      loot.push(await collectVisibleLoot(resumed,map,playerDbPath));
+      for(let progress=2;progress<=Number(q.count);progress++){
+        hunts.push(await huntNaturalRat(resumed,map,q.id,progress));
+        loot.push(await collectVisibleLoot(resumed,map,playerDbPath));
+      }
+      assert.equal(resumed.snapshot.player.quests.active.find(entry=>entry.questId===q.id)?.current,
+        Number(q.count),'Five real server-owned Rat kills must satisfy the starter objective');
+      // Real loot is random. On the improbable no-drop run, keep hunting naturally
+      // up to four more rats rather than forging loot or seeding server RNG.
+      for(let extra=1;extra<=4&&loot.every(entry=>entry.piles===0);extra++){
+        hunts.push(await huntNaturalRat(resumed,map,q.id,Number(q.count)+extra));
+        loot.push(await collectVisibleLoot(resumed,map,playerDbPath));
+      }
+      const collected=loot.reduce((total,entry)=>({
+        piles:total.piles+entry.piles,gold:total.gold+entry.gold,items:total.items+entry.items
+      }),{piles:0,gold:0,items:0});
+      assert.ok(collected.piles>0,'Natural hunt must generate at least one collectible world loot pile');
+      const nearNpc=pos=>Math.abs(pos.x-Number(npc.posX))<=2&&Math.abs(pos.y-Number(npc.posY))<=2;
+      const returned=await walkTo(resumed,map,nearNpc);
+      assert.ok(nearNpc(resumed.snapshot.player),'Quest hand-in requires real NPC proximity');
+      const beforeTurnIn=resumed.snapshot.player;
+      const turnInVersion=resumed.version;
+      send(resumed,'quest_complete',{questId:q.id});
+      await until(()=>resumed.version>turnInVersion
+        &&resumed.snapshot.player.quests.completed.includes(q.id)
+        &&!resumed.snapshot.player.quests.active.some(entry=>entry.questId===q.id),
+        'official quest hand-in and committed completion',12000);
+      const rewarded=resumed.snapshot.player;
+      assert.equal(rewarded.gold,beforeTurnIn.gold+Number(q.rewardGold||0),
+        'Quest must pay its authored gold exactly once');
+      assert.ok(rewarded.level>beforeTurnIn.level||rewarded.xp!==beforeTurnIn.xp,
+        'Quest must award authored experience');
+      const completionSaved=JSON.parse(await fs.readFile(playerDbPath,'utf8'))[characterName];
+      assert.equal(completionSaved.gold,rewarded.gold,'Quest gold must flush before logout');
+      assert.equal(completionSaved.xp,rewarded.xp,'Quest XP must flush before logout');
+      assert.equal(completionSaved.level,rewarded.level,'Quest level must flush before logout');
+      assert.ok(completionSaved.quests.completed.includes(q.id),
+        'Completed quest must persist immediately while WebSocket is open');
+      assert.equal(completionSaved.quests.active.some(entry=>entry.questId===q.id),false);
+      const awardedGold=rewarded.gold,awardedLevel=rewarded.level,awardedXp=rewarded.xp;
+      send(resumed,'quest_complete',{questId:q.id});
+      send(resumed,'quest_accept',{questId:q.id});
+      await sleep(250);
+      assert.equal(resumed.snapshot.player.gold,awardedGold,'Duplicate hand-in must not pay again');
+      assert.equal(resumed.snapshot.player.level,awardedLevel,'Duplicate hand-in must not level again');
+      assert.equal(resumed.snapshot.player.xp,awardedXp,'Duplicate hand-in must not pay extra XP');
+      assert.equal(resumed.snapshot.player.quests.completed.filter(id=>id===q.id).length,1,
+        'Starter quest must remain completed exactly once');
+      const finalBeforeLogout={gold:rewarded.gold,xp:rewarded.xp,level:rewarded.level,
+        x:rewarded.x,y:rewarded.y,mapId:rewarded.mapId,inventory:rewarded.inventory,
+        monstersKilled:rewarded.stats.monstersKilled};
+      await disconnect(resumed);
+      const verified=await connect(token);
+      try{
+        const final=verified.snapshot.player;
+        for(const k of ['gold','xp','level','x','y','mapId'])
+          assert.equal(final[k],finalBeforeLogout[k],`Persisted post-quest ${k} must survive relogin`);
+        assert.deepEqual(final.inventory,finalBeforeLogout.inventory,
+          'Loot inventory must survive the final reconnection');
+        assert.equal(final.stats.monstersKilled,finalBeforeLogout.monstersKilled);
+        assert.ok(final.quests.completed.includes(q.id),'Completed quest must survive final relogin');
+        assert.equal(final.quests.active.some(entry=>entry.questId===q.id),false);
+      }finally{await disconnect(verified)}
       const result={kind:'desktop-network-persistence',mode:'real HTTP+WebSocket and PlayerDB',
         character:characterName,questId:q.id,npc:{id:npc.id,mapId:npc.mapId,x:npc.posX,y:npc.posY},
         movement:{toNpc:moved,naturalHunt:combat.travel},position:{x:fresh.x,y:fresh.y},
         questRecovered:true,combatRecovered:true,naturalCombat:combat,
         immediateQuestFlushBeforeLogout:true,immediateKillFlushBeforeLogout:true,
+        immediatePickupAndHandInFlushBeforeLogout:true,
         autosaveIntervalMs:300000,
-        rewards:'quest turn-in not claimed; ground-pile durability not certified',
+        naturalHunts:hunts.length,realLootCollected:collected,returnToNpc:returned,
+        questHandInCompleted:true,duplicateRewardBlocked:true,finalReloginRecovered:true,
+        rewards:'official quest reward granted once; ground piles remain transient (not persisted)',
         verifiedAt:new Date().toISOString()};
       await fs.mkdir('artifacts/moria-iso-smoke',{recursive:true});
       await fs.writeFile('artifacts/moria-iso-smoke/online-quest-persistence.json',JSON.stringify(result,null,2));
