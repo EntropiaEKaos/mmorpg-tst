@@ -102,10 +102,11 @@ try{
   WORLD.syncContentMaps(contentDB.get('maps'));
   const map=WORLD.getMap(npc.mapId);
   assert.ok(map,'Authored terrain map required for route planning');
-  const near=p=>p.mapId===npc.mapId&&Math.abs(p.x-Number(npc.posX))<=2
+  const near=p=>Math.abs(p.x-Number(npc.posX))<=2
     &&Math.abs(p.y-Number(npc.posY))<=2;
   const start=await readSnapshot(page);
-  assert.ok(start?.player&&!near(start.player),'Player should spawn away from quest giver');
+  assert.equal(start?.player?.mapId,npc.mapId,'Hero must spawn on authored NPC map');
+  assert.ok(!near(start.player),'Player should spawn away from quest giver');
   const walked=await walk(page,map,near);
   assert.ok(walked.legalSteps>0,'Browser must move with actual keyboard, not injected WS frames');
   assert.ok(intents.some(x=>x.type==='move'),'Arrow keydown must emit real client move intents');
@@ -122,6 +123,7 @@ try{
     ?.quests?.active?.some(q=>q.questId===questId),quest.id,{timeout:14000});
   const snapshot=await readSnapshot(page),active=snapshot.player.quests.active.find(q=>q.questId===quest.id);
   assert.equal(active.current,0);
+  assert.equal(snapshot.player.mapId,npc.mapId);
   assert.ok(near(snapshot.player),'NPC proximity must be confirmed by the server');
   assert.equal(errors.length,0,`Uncaught page errors: ${errors.join('; ')}`);
   await fs.mkdir('artifacts/moria-iso-smoke',{recursive:true});
