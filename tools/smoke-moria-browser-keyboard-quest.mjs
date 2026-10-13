@@ -94,7 +94,7 @@ async function walk(page,map,goal){
           retries,from:{x:p.x,y:p.y},wanted:target,key:code,
           moveIntents:intents.filter(x=>x.type==='move').length,
           firstMoves:intents.filter(x=>x.type==='move').slice(0,8).map(x=>x.payload),
-          wireSnapshotCount,latestServerPosition,lastServerEvent,focus
+          wireSnapshotCount,latestServerPosition,lastServerEvent,sockets,focus
         }));
       }
       assert.ok(rejectedTiles.size<24&&retries<70,`Navigation cannot find server-accepted route at (${p.x},${p.y}); rejected=${[...rejectedTiles].join('|')}; move intents=${intents.filter(x=>x.type==='move').length}; latest server=${JSON.stringify(latestServerPosition)}`);
@@ -104,16 +104,20 @@ async function walk(page,map,goal){
 }
 const browser=await chromium.launch({headless:true,args:['--enable-webgl','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:1});
-const errors=[],intents=[],catalogs=[];
+const errors=[],intents=[],catalogs=[],sockets=[];
 let latestServerPosition=null,wireSnapshotCount=0,lastServerEvent=null;
 page.on('pageerror',error=>errors.push(error.message));
 page.on('websocket',ws=>{
+  const tracker={id:sockets.length+1,authSent:0,authOk:0,authError:0,moves:0,snapshots:0};sockets.push(tracker);
   ws.on('framereceived',frame=>{
     try{const p=JSON.parse(String(frame.payload));if(p.kind==='content_sync')catalogs.push(p.payload);
-      if(p.kind==='snapshot'){wireSnapshotCount++;const hero=p.payload?.player;if(hero)latestServerPosition={x:hero.x,y:hero.y,mapId:hero.mapId};lastServerEvent=p.payload?.events?.slice(-2)}}catch{}
+      if(p.kind==='auth_ok')tracker.authOk++;
+      if(p.kind==='auth_error')tracker.authError++;
+      if(p.kind==='snapshot'){tracker.snapshots++;wireSnapshotCount++;const hero=p.payload?.player;if(hero)latestServerPosition={x:hero.x,y:hero.y,mapId:hero.mapId};lastServerEvent=p.payload?.events?.slice(-2)}}catch{}
   });
   ws.on('framesent',frame=>{
-    try{const p=JSON.parse(String(frame.payload));if(p.kind==='intent')intents.push(p.payload)}catch{}
+    try{const p=JSON.parse(String(frame.payload));if(p.kind==='auth')tracker.authSent++;
+      if(p.kind==='intent'){intents.push(p.payload);if(p.payload?.type==='move')tracker.moves++}}catch{}
   });
 });
 try{
