@@ -45,6 +45,10 @@ const AUTH_RATE_LIMITS = new BoundedWindowRateLimiter({
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
 const AUTOSAVE_INTERVAL_MS = Math.max(1000, Math.min(300_000, Math.floor(Number(process.env.MORIA_AUTOSAVE_MS) || 15_000)));
+// QA-only: reduce snapshot transport pressure for software-rendered Chromium.
+// The authoritative engine tick remains 20Hz; production stays at 50ms.
+const SNAPSHOT_INTERVAL_MS = process.env.MORIA_DIAG_MOVEMENT === '1'
+  ? Math.max(50, Math.min(200, Math.floor(Number(process.env.MORIA_QA_SNAPSHOT_MS) || 50))) : 50;
 const CRITICAL_SOCIAL_ACTIONS = new Set(['trade_confirm', 'guild_create']);
 // Accepted quest/progression/economy changes should survive an unexpected
 // process death without waiting for the 15s autosave or a graceful WS close.
@@ -837,7 +841,7 @@ setInterval(() => {
     }
   }
   for (const mapId of mapsDelivered) engine.consumeEvents(mapId);
-}, 50);
+}, SNAPSHOT_INTERVAL_MS);
 
 function broadcastContentUpdate() {
   // Invalidate cached terrain when Studio content changes, including footprint edits.
