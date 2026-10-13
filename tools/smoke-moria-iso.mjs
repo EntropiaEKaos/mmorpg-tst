@@ -160,10 +160,10 @@ try {
   await online.getByText('Servidor autoritativo • LIVE').waitFor({ state: 'visible', timeout: 16000 });
   await online.locator('[data-testid="iso-player-hud"]').waitFor({ state: 'visible' });
   await online.locator('[data-testid="iso-authoritative-stats"]').waitFor({state:'visible'});
-  await online.locator('[data-hud-window="iso-desktop-chat"]').waitFor({state:'visible'});
+  await online.locator('[data-hud-window="chat"]').waitFor({state:'visible'});
   const playerHudRect=await online.locator('[data-testid="iso-player-hud"]').boundingBox();
   const statsHudRect=await online.locator('[data-testid="iso-authoritative-stats"]').boundingBox();
-  const chatHudRect=await online.locator('[data-hud-window="iso-desktop-chat"]').boundingBox();
+  const chatHudRect=await online.locator('[data-hud-window="chat"]').boundingBox();
   const hotbarRect=await online.locator('[data-iso-window="authoritative-action-bar"]').boundingBox();
   const overlaps=(a,b)=>Boolean(a&&b&&Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x)>4
     &&Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y)>4);
