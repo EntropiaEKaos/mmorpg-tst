@@ -6,7 +6,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { WORLD } from '../server/engine/World.mjs';
-import { contentDB } from '../server/engine/ContentDB.mjs';
 
 const base=(process.env.MORIA_SMOKE_BASE_URL||'http://127.0.0.1:3000').replace(/\/$/,'');
 const wsUrl=base.replace(/^http/,'ws')+'/ws';
@@ -152,7 +151,7 @@ async function main(){
     assert.equal(near(start),false,'No prepositioning beside NPC');
     report.start=start;
     // Read-only map import; path actions go through real server WebSocket.
-    WORLD.syncContentMaps(contentDB.get('maps'));
+    WORLD.syncContentMaps(client.catalog.maps);
     const map=WORLD.getMap(npc.mapId);
     assert.ok(map,'Real authored quest map');
     const temporaryBlocked=new Set();
