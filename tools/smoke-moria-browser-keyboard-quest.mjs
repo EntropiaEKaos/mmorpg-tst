@@ -46,13 +46,14 @@ function pathfind(map,from,goal,blocked){
 async function readSnapshot(page){return page.evaluate(()=>window.__MORIA_AUTHORITATIVE_SNAPSHOT__)}
 async function walk(page,map,goal){
   let legalSteps=0,retries=0;
+  const rejectedTiles=new Set(),failuresByTile=new Map();
   for(let i=0;i<600;i++){
     const snapshot=await readSnapshot(page),p=snapshot?.player;
     assert.ok(Number.isFinite(p?.x)&&Number.isFinite(p?.y),'Real snapshot must contain player x/y');
-    if(goal(p))return {legalSteps,retries,position:{x:p.x,y:p.y}};
-    const blocked=new Set((snapshot.monsters||[]).filter(m=>m.hp>0).map(m=>key(m.x,m.y)));
+    if(goal(p))return {legalSteps,retries,position:{x:p.x,y:p.y},rejectedTiles:[...rejectedTiles]};
+    const blocked=new Set([...rejectedTiles,...(snapshot.monsters||[]).filter(m=>m.hp>0).map(m=>key(m.x,m.y))]);
     const route=pathfind(map,p,goal,blocked);
-    assert.ok(route?.length,`No authored path from (${p.x},${p.y}) to NPC`);
+    assert.ok(route?.length,`No server-accepted path from (${p.x},${p.y}) to NPC; rejected=${[...rejectedTiles].join('|')}`);
     const code=route[0],direction=directions.find(d=>d[2]===code);
     const target={x:p.x+direction[0],y:p.y+direction[1]};
     // Keep the real key held until an authoritative position change is seen.
@@ -67,9 +68,22 @@ async function walk(page,map,goal){
       changed=true;
     }catch{}finally{await page.keyboard.up(code)}
     const fresh=(await readSnapshot(page))?.player;
-    if(changed||(fresh?.x!==p.x||fresh?.y!==p.y))legalSteps++;
-    else{
+    if(changed||(fresh?.x!==p.x||fresh?.y!==p.y)){
+      legalSteps++;failuresByTile.clear();
+    }else{
       retries++;
+      const tile=key(target.x,target.y),failures=(failuresByTile.get(tile)||0)+1;
+      failuresByTile.set(tile,failures);
+      if(failures===2){
+        // Real server can reject destinations that are walkable in the static
+        // tile map (ownership gates, occupancy, dynamic collision). Learn from
+        // actual ACK snapshots rather than retrying the same cell forever.
+        rejectedTiles.add(tile);failuresByTile.delete(tile);
+        console.log('CHROMIUM SERVER-BLOCKED TILE',JSON.stringify({
+          tile,from:{x:p.x,y:p.y},key:code,reason:'No authoritative movement after real intents',
+          blockedTiles:[...rejectedTiles]
+        }));
+      }
       if(retries===3||retries===5){
         const focus=await page.evaluate(()=>({
           activeElement:document.activeElement?.tagName,
@@ -83,10 +97,10 @@ async function walk(page,map,goal){
           wireSnapshotCount,latestServerPosition,lastServerEvent,focus
         }));
       }
-      assert.ok(retries<6,`Movement not accepted at (${p.x},${p.y}); move intents=${intents.filter(x=>x.type==='move').length}; latest server=${JSON.stringify(latestServerPosition)}; first intents=${JSON.stringify(intents.filter(x=>x.type==='move').slice(0,3).map(x=>x.payload))}`);
+      assert.ok(rejectedTiles.size<24&&retries<70,`Navigation cannot find server-accepted route at (${p.x},${p.y}); rejected=${[...rejectedTiles].join('|')}; move intents=${intents.filter(x=>x.type==='move').length}; latest server=${JSON.stringify(latestServerPosition)}`);
     }
   }
-  throw Error('600 Chromium route attempts without reaching the official NPC');
+  throw Error(`600 Chromium route attempts without reaching the official NPC; rejected=${[...rejectedTiles].join('|')}`);
 }
 const browser=await chromium.launch({headless:true,args:['--enable-webgl','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:1});
