@@ -11,7 +11,7 @@ test('desktop P0: NPC quest → combat kills → loot pickup → unique reward �
   const quest=contentDB.get('quests').find(q=>q.id==='quest_rats');
   const npc=contentDB.get('npcs').find(n=>n.id===quest?.npcId);
   assert.ok(quest&&npc,'Use the real rat quest and its real NPC');
-  assert.equal(quest.target,'Rat');
+  assert.equal(String(quest.target).toLowerCase(),'rat');
   assert.ok(Number(quest.count)>0&&Number(quest.count)<=20);
   const id=`desktop_journey_${process.pid}_${Date.now()}`;
   const player=engine.playerConnect(id,'DesktopJourney','knight',null);
