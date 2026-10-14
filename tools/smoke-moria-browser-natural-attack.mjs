@@ -61,7 +61,7 @@ function monsterBlocked(snapshot,padding=0){
 }
 async function walk(page,map,goal){
   let legalSteps=0,retries=0,totalRetries=0,skipped=0,attempted=0;
-  const rejected=new Map();
+  const rejected=new Map(),refusals=new Map();
   const began=Date.now();
   for(let i=0;i<420;i++){
     const snapshot=latestWireSnapshot,p=snapshot?.player;
@@ -94,7 +94,7 @@ async function walk(page,map,goal){
         const hero=serverHero();
         return hero&&(hero.x!==p.x||hero.y!==p.y);
       },'server-authorized keyboard position update',1800);
-      legalSteps++;retries=0;
+      legalSteps++;retries=0;refusals.clear();
       if(legalSteps%12===0)console.log('CHROMIUM WALK PROGRESS',JSON.stringify({legalSteps,position:serverHero()&&{x:serverHero().x,y:serverHero().y},attempted,retries}));
     }catch{
       retries++;totalRetries++;
@@ -104,8 +104,14 @@ async function walk(page,map,goal){
       // Only learn a blocked cell when the fresh server snapshot shows an
       // actual monster/player occupying it; never invent new world walls.
       const last=latestWireSnapshot;
-      const occupied=monsterBlocked(last).has(key(destination.x,destination.y));
-      if(occupied)rejected.set(key(destination.x,destination.y),i+6);
+      const cell=key(destination.x,destination.y);
+      const occupied=monsterBlocked(last).has(cell);
+      const count=(refusals.get(cell)||0)+1;
+      refusals.set(cell,count);
+      // The wire snapshot can miss moving collision occupants. Two actual
+      // non-progressing public intents justify a brief alternative path,
+      // never a permanent map mutation. Evict after eight iterations.
+      if(occupied||count>=2){rejected.set(cell,i+8);refusals.delete(cell);}
       if(retries%3===0)console.log('CHROMIUM WALK REROUTE',JSON.stringify({
         from:{x:p.x,y:p.y},destination,retries,attempted,monsters:snapshot.monsters?.length||0,
         latestServerPosition,sockets
@@ -183,7 +189,7 @@ try{
         monsterBlocked(latestWireSnapshot))
     })).filter(entry=>entry.path!==null).sort((a,b)=>a.path.length-b.path.length);
     for(const {pos} of candidates.slice(0,4)){
-      const travelled=await walk(page,map,p=>manhattan(p,pos)<=5);
+      const travelled=await walk(page,map,p=>manhattan(p,pos)<=5||Boolean(findTarget()));
       waypointRuns.push({pos,travelled});
       target=findTarget();
       if(target)break;
