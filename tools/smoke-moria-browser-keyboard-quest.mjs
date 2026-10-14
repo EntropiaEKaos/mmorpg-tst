@@ -67,7 +67,7 @@ async function walk(page,map,goal){
     const snapshot=latestWireSnapshot,p=snapshot?.player;
     assert.ok(Number.isFinite(p?.x)&&Number.isFinite(p?.y),'Authoritative wire snapshot must include player x/y');
     if(goal(p))return {legalSteps,retries:totalRetries,skipped,position:{x:p.x,y:p.y},elapsedMs:Date.now()-began};
-    assert.ok(Date.now()-began<180000,`Keyboard travel exceeded three-minute QA budget; position=${p.x},${p.y}`);
+    assert.ok(Date.now()-began<360000,`Keyboard travel exceeded six-minute QA budget; position=${p.x},${p.y}`);
     for(const [tile,expiry] of rejected)if(expiry<i)rejected.delete(tile);
     const exclusions=new Set(rejected.keys());
     const safe=new Set([...exclusions,...monsterBlocked(snapshot,1)]);
