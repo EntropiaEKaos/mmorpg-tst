@@ -60,28 +60,25 @@ function monsterBlocked(snapshot,padding=0){
   return result;
 }
 async function walk(page,map,goal){
-  let legalSteps=0,retries=0,totalRetries=0,skipped=0,attempted=0;
-  const rejected=new Map(), failuresByTile=new Map();
+  let legalSteps=0,retries=0,skipped=0,attempted=0;
+  const rejected=new Map();
   const began=Date.now();
-  for(let i=0;i<750;i++){
+  for(let i=0;i<420;i++){
     const snapshot=latestWireSnapshot,p=snapshot?.player;
     assert.ok(Number.isFinite(p?.x)&&Number.isFinite(p?.y),'Authoritative wire snapshot must include player x/y');
-    if(goal(p))return {legalSteps,retries:totalRetries,skipped,position:{x:p.x,y:p.y},elapsedMs:Date.now()-began};
-    assert.ok(Date.now()-began<420000,`Keyboard travel exceeded seven-minute QA budget; position=${p.x},${p.y}; accepted=${legalSteps}; attempted=${attempted}; retries=${totalRetries}`);
+    if(goal(p))return {legalSteps,retries,skipped,position:{x:p.x,y:p.y},elapsedMs:Date.now()-began};
+    assert.ok(Date.now()-began<180000,`Keyboard travel exceeded three-minute QA budget; position=${p.x},${p.y}`);
     for(const [tile,expiry] of rejected)if(expiry<i)rejected.delete(tile);
     const exclusions=new Set(rejected.keys());
     const safe=new Set([...exclusions,...monsterBlocked(snapshot,1)]);
     const primary=pathfind(map,p,goal,safe);
     const fallback=pathfind(map,p,goal,new Set([...exclusions,...monsterBlocked(snapshot)]));
-    // The one-tile danger margin is optional: on narrow authored roads it can
-    // turn a short valid path into an enormous detour through another district.
-    // Never walk into occupied cells, but prefer a much shorter 0-margin path.
-    const route=primary&&(!fallback||primary.length<=fallback.length+8)?primary:fallback;
+    const route=primary||fallback;
     if(!route?.length){
       // Lack of an immediate ACK is not proof of a permanent wall.
       // Clear learned transient denials before deciding there is no route.
       if(rejected.size){console.log('CHROMIUM ROUTE RESET',JSON.stringify({position:{x:p.x,y:p.y},stale:[...rejected.keys()]}));rejected.clear();await sleep(200);continue;}
-      retries++;totalRetries++;
+      retries++;
       if(retries>20)throw Error(`No collision-legal route to NPC from ${p.x},${p.y}; monsters=${snapshot.monsters?.length||0}`);
       await sleep(350);
       continue;
@@ -97,10 +94,10 @@ async function walk(page,map,goal){
         const hero=serverHero();
         return hero&&(hero.x!==p.x||hero.y!==p.y);
       },'server-authorized keyboard position update',1800);
-      legalSteps++;retries=0;failuresByTile.clear();
+      legalSteps++;
       if(legalSteps%12===0)console.log('CHROMIUM WALK PROGRESS',JSON.stringify({legalSteps,position:serverHero()&&{x:serverHero().x,y:serverHero().y},attempted,retries}));
     }catch{
-      retries++;totalRetries++;
+      retries++;
       const sent=intents.filter(x=>x.type==='move').length-previousCount;
       if(sent===0){skipped++;await sleep(110);continue;}
       // Missing ACK can be a slow Chromium frame or a rejected server move.
@@ -108,22 +105,16 @@ async function walk(page,map,goal){
       // actual monster/player occupying it; never invent new world walls.
       const last=latestWireSnapshot;
       const occupied=monsterBlocked(last).has(key(destination.x,destination.y));
-      const destinationKey=key(destination.x,destination.y);
-      const tileMisses=(failuresByTile.get(destinationKey)||0)+1;
-      failuresByTile.set(destinationKey,tileMisses);
-      // Dynamically occupied world cells can be omitted from a proximity
-      // snapshot. After repeated real server rejections, avoid them briefly;
-      // expiration and route-reset prevent inventing permanent walls.
-      if(occupied||tileMisses>=3)rejected.set(destinationKey,i+12);
+      if(occupied)rejected.set(key(destination.x,destination.y),i+6);
       if(retries%3===0)console.log('CHROMIUM WALK REROUTE',JSON.stringify({
         from:{x:p.x,y:p.y},destination,retries,attempted,monsters:snapshot.monsters?.length||0,
         latestServerPosition,sockets
       }));
-      assert.ok(retries<24,`Consecutive keyboard movements did not receive server-confirmed progress at (${p.x},${p.y}); last target ${key(destination.x,destination.y)}, occupied=${occupied}, sent=${sent}, misses=${tileMisses}`);
+      assert.ok(retries<30,`Keyboard movement did not receive server-confirmed progress at (${p.x},${p.y}); last target ${key(destination.x,destination.y)}, occupied=${occupied}, sent=${sent}`);
     }
     await sleep(105);
   }
-  throw Error(`750 Chromium keyboard iterations exceeded; latest position=${JSON.stringify(latestServerPosition)}`);
+  throw Error(`420 Chromium keyboard iterations exceeded; latest position=${JSON.stringify(latestServerPosition)}`);
 }
 const browser=await chromium.launch({headless:true,args:['--enable-webgl','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:1024,height:720},deviceScaleFactor:1});
