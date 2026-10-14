@@ -61,7 +61,7 @@ async function walk(page,map,goal){
     // browser paints the first one, which overshoots waypoints and walls.
     // Playwright sends a bounded physical keydown/keyup, then waits released.
     const beforeMoveCount=intents.filter(x=>x.type==='move').length;
-    await page.keyboard.press(code,{delay:105});
+    await page.keyboard.press(code,{delay:35});
     let changed=false;
     try{
       await page.waitForFunction(previous=>{
