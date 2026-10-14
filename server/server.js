@@ -14,6 +14,7 @@ import { playerDB } from './engine/PlayerDB.mjs';
 import { contentDB } from './engine/ContentDB.mjs';
 import { VOCATIONS } from './engine/Vocations.mjs';
 import { WORLD } from './engine/World.mjs';
+import { buildTerrainPatch, shouldSendTerrainPatch } from './engine/TerrainPatch.mjs';
 import { questEngine } from './engine/QuestEngine.mjs';
 import { adventureEngine } from './engine/AdventureEngine.mjs';
 import { tibiaTaskEngine } from './engine/TibiaTaskEngine.mjs';
@@ -44,7 +45,19 @@ const AUTH_RATE_LIMITS = new BoundedWindowRateLimiter({
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TRUST_PROXY = /^(1|true|yes)$/i.test(String(process.env.TRUST_PROXY || ''));
 const AUTOSAVE_INTERVAL_MS = Math.max(1000, Math.min(300_000, Math.floor(Number(process.env.MORIA_AUTOSAVE_MS) || 15_000)));
+// QA-only: reduce snapshot transport pressure for software-rendered Chromium.
+// The authoritative engine tick remains 20Hz; production stays at 50ms.
+const SNAPSHOT_INTERVAL_MS = process.env.MORIA_DIAG_MOVEMENT === '1'
+  ? Math.max(50, Math.min(200, Math.floor(Number(process.env.MORIA_QA_SNAPSHOT_MS) || 50))) : 50;
 const CRITICAL_SOCIAL_ACTIONS = new Set(['trade_confirm', 'guild_create']);
+// Accepted quest/progression/economy changes should survive an unexpected
+// process death without waiting for the 15s autosave or a graceful WS close.
+// Frequent movement and non-lethal combat must NOT fsync every input tick.
+const CRITICAL_GAMEPLAY_INTENTS = new Set([
+  'quest_accept','quest_complete','pickup','drop',
+  'equip','unequip','use_item','task','adventure_claim',
+  'talent','talent_reset','mount','appearance','housing','travel',
+]);
 const PERSISTENCE_STATE = { lastAutosaveAt: 0, lastCriticalFlushAt: 0, lastSavedPlayers: 0 };
 
 // ContentDB is persistent; reconcile server-owned catalogs into the already-
@@ -449,7 +462,8 @@ const server = http.createServer((req, res) => {
 
   let relativePath;
   try {
-    relativePath = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+    // Both SPA entry points share index.html; App.tsx selects ISO Next or /legacy.
+    relativePath = pathname === '/' || pathname === '/legacy' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
   } catch {
     return json(res, 400, { error: 'Invalid path encoding' });
   }
@@ -601,6 +615,7 @@ function persistOnlinePlayers(reason = 'autosave') {
 function shouldFlushCriticalIntent(intent) {
   if (!intent || typeof intent !== 'object') return false;
   if (intent.type === 'official') return true;
+  if (CRITICAL_GAMEPLAY_INTENTS.has(intent.type)) return true;
   if (intent.type !== 'social') return false;
   const action = intent.payload && typeof intent.payload === 'object' && !Array.isArray(intent.payload) ? intent.payload.action : '';
   return CRITICAL_SOCIAL_ACTIONS.has(action);
@@ -700,8 +715,35 @@ wss.on('connection', ws => {
         if (now - socialWindowStart >= 10_000) { socialWindowStart = now; socialActionsInWindow = 0; }
         if (++socialActionsInWindow > 30) return;
       }
+      const beforeKills = Number(engine.getPlayer(clientId)?.stats?.monstersKilled) || 0;
+      const diagnosticPlayer = process.env.MORIA_DIAG_MOVEMENT === '1' && intent.type === 'move'
+        ? engine.getPlayer(clientId) : null;
+      const diagnosticOrigin = diagnosticPlayer
+        ? { x: diagnosticPlayer.x, y: diagnosticPlayer.y, lastMove: diagnosticPlayer.lastMove } : null;
       const handled = engine.processIntent(clientId, intent);
-      if (handled && shouldFlushCriticalIntent(intent)) persistCriticalState();
+      if (diagnosticOrigin && !handled) {
+        const dx = Number(intent.payload?.dx), dy = Number(intent.payload?.dy);
+        const x = diagnosticOrigin.x + dx, y = diagnosticOrigin.y + dy;
+        const map = WORLD.getMap(diagnosticPlayer.mapId);
+        const monsters = engine.monstersByMap.get(diagnosticPlayer.mapId) || [];
+        console.warn('MORIA QA MOVE REJECT', JSON.stringify({
+          from: { x: diagnosticOrigin.x, y: diagnosticOrigin.y }, target: { x, y }, dx, dy,
+          tileWalkable: Boolean(map?.tiles?.[y]?.[x]?.walkable),
+          houseBlocked: !housingSystem.canStep(diagnosticPlayer, diagnosticPlayer.mapId, x, y, contentDB),
+          monsterBlocked: monsters.some(monster => !monster.dead && monster.x === x && monster.y === y),
+          otherPlayerBlocked: engine.getPlayersOnMap(diagnosticPlayer.mapId)
+            .some(player => player.id !== diagnosticPlayer.id && player.x === x && player.y === y),
+          sinceLastMoveMs: Date.now() - (Number(diagnosticOrigin.lastMove) || 0),
+          playerStillOnline: Boolean(engine.getPlayer(clientId)),
+        }));
+      }
+      const afterKills = Number(engine.getPlayer(clientId)?.stats?.monstersKilled) || 0;
+      // Lethal combat grants XP and generates world loot; do not lose rewards
+      // on a crash just because autosave has not run. Normal repeated hits
+      // and keyboard movement remain cheap and snapshot-driven.
+      const killedMonster = (intent.type === 'attack' || intent.type === 'cast')
+        && afterKills > beforeKills;
+      if (handled && (shouldFlushCriticalIntent(intent) || killedMonster)) persistCriticalState();
       return;
     }
 
@@ -784,14 +826,26 @@ setInterval(() => {
     if (snapshot) {
       const vocData = VOCATIONS[snapshot.player.vocation];
       if (vocData) snapshot.player.spells = engine.getSpellList(snapshot.player.vocation);
+      // Read-only terrain window is emitted only when the player changes 4-tile
+      // cells or maps. The client holds the last patch across 20Hz snapshots.
+      const terrain = shouldSendTerrainPatch(entry.lastTerrainKey, snapshot.player);
+      if (terrain.send) {
+        const patch = buildTerrainPatch(WORLD.getMap(snapshot.player.mapId), snapshot.player.x, snapshot.player.y);
+        if (patch) {
+          snapshot.terrainPatch = patch;
+          entry.lastTerrainKey = terrain.key;
+        }
+      }
       entry.ws.send(JSON.stringify({ kind: 'snapshot', payload: snapshot, time: Date.now() }));
       mapsDelivered.add(snapshot.player.mapId);
     }
   }
   for (const mapId of mapsDelivered) engine.consumeEvents(mapId);
-}, 50);
+}, SNAPSHOT_INTERVAL_MS);
 
 function broadcastContentUpdate() {
+  // Invalidate cached terrain when Studio content changes, including footprint edits.
+  for (const entry of wsClients.values()) entry.lastTerrainKey = null;
   const data = JSON.stringify({ kind: 'content_sync', payload: contentDB.getAllContent(), time: Date.now() });
   for (const [, entry] of wsClients) if (entry.ws.readyState === WebSocket.OPEN) entry.ws.send(data);
   console.log('📡 Content update broadcast to all clients');
