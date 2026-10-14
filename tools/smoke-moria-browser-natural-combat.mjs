@@ -166,4 +166,16 @@ try{
     completedAt:new Date().toISOString()};
   await fs.writeFile('artifacts/moria-iso-smoke/desktop-natural-rat-combat-loot.json',JSON.stringify(proof,null,2));
   console.log('MORIA CHROMIUM NATURAL RAT COMBAT AND LOOT PASS:',JSON.stringify(proof));
+}catch(error){
+  // Evidence must survive CI failure too: show what the actual client painted
+  // and the last legitimate WS state, never substitute a fabricated screenshot.
+  await fs.mkdir('artifacts/moria-iso-smoke',{recursive:true}).catch(()=>{});
+  await page.screenshot({path:'artifacts/moria-iso-smoke/desktop-natural-rat-failure.png'}).catch(()=>{});
+  await fs.writeFile('artifacts/moria-iso-smoke/desktop-natural-rat-failure.json',
+    JSON.stringify({message:String(error?.stack||error),position:live?.player&&{
+      x:live.player.x,y:live.player.y,hp:live.player.hp,xp:live.player.xp,
+      kills:live.player.stats?.monstersKilled},nearbyRats:(live?.monsters||[])
+      .filter(m=>m.name==='Rat').map(m=>({id:m.id,x:m.x,y:m.y,hp:m.hp})),
+      intents:intents.slice(-24),snapshots:messages,errors,recordedAt:new Date().toISOString()},null,2)).catch(()=>{});
+  throw error;
 }finally{await browser.close();}
