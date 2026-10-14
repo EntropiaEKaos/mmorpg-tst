@@ -20,6 +20,7 @@ on:
       - 'server/server.js'
       - 'tools/smoke-moria-iso.mjs'
       - 'tools/smoke-moria-browser-keyboard-quest.mjs'
+      - 'tools/smoke-moria-browser-natural-attack.mjs'
       - 'server/tools/smoke-desktop-online-quest.mjs'
       - 'docs/MORIA_DESKTOP_RELEASE_TRACK.md'
       - '.github/workflows/moria-iso-smoke.yml'
@@ -84,6 +85,11 @@ jobs:
           MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
           MORIA_TEST_BASE: http://127.0.0.1:3000
         run: node tools/smoke-moria-browser-keyboard-quest.mjs
+      - name: Prove a natural Rat loses real HP after Chromium UI attack
+        env:
+          MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
+          MORIA_TEST_BASE: http://127.0.0.1:3000
+        run: node tools/smoke-moria-browser-natural-attack.mjs
       - name: Print server log on failure
         if: failure()
         run: cat "$RUNNER_TEMP/moria-qa-server.log" || true
