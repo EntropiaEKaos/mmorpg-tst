@@ -75,8 +75,11 @@ async function walk(page,map,goal){
     const fallback=pathfind(map,p,goal,new Set([...exclusions,...monsterBlocked(snapshot)]));
     const route=primary||fallback;
     if(!route?.length){
+      // Lack of an immediate ACK is not proof of a permanent wall.
+      // Clear learned transient denials before deciding there is no route.
+      if(rejected.size){console.log('CHROMIUM ROUTE RESET',JSON.stringify({position:{x:p.x,y:p.y},stale:[...rejected.keys()]}));rejected.clear();await sleep(200);continue;}
       retries++;
-      if(retries>16)throw Error(`No safe route to NPC from ${p.x},${p.y}; monsters=${snapshot.monsters?.length||0}`);
+      if(retries>20)throw Error(`No collision-legal route to NPC from ${p.x},${p.y}; monsters=${snapshot.monsters?.length||0}`);
       await sleep(350);
       continue;
     }
@@ -97,14 +100,17 @@ async function walk(page,map,goal){
       retries++;
       const sent=intents.filter(x=>x.type==='move').length-previousCount;
       if(sent===0){skipped++;await sleep(110);continue;}
-      // A physical move arrived but the server rejected it. Treat the cell
-      // as temporarily blocked, not as a permanent map mutation.
-      rejected.set(key(destination.x,destination.y),i+32);
+      // Missing ACK can be a slow Chromium frame or a rejected server move.
+      // Only learn a blocked cell when the fresh server snapshot shows an
+      // actual monster/player occupying it; never invent new world walls.
+      const last=latestWireSnapshot;
+      const occupied=monsterBlocked(last).has(key(destination.x,destination.y));
+      if(occupied)rejected.set(key(destination.x,destination.y),i+6);
       if(retries%3===0)console.log('CHROMIUM WALK REROUTE',JSON.stringify({
         from:{x:p.x,y:p.y},destination,retries,attempted,monsters:snapshot.monsters?.length||0,
         latestServerPosition,sockets
       }));
-      assert.ok(retries<30,`Thirty refused keyboard moves at (${p.x},${p.y}); last target ${key(destination.x,destination.y)}`);
+      assert.ok(retries<30,`Keyboard movement did not receive server-confirmed progress at (${p.x},${p.y}); last target ${key(destination.x,destination.y)}, occupied=${occupied}, sent=${sent}`);
     }
     await sleep(105);
   }
