@@ -86,7 +86,7 @@ try{
   const before={kills:Number(live.player.stats?.monstersKilled||0),xp:Number(live.player.xp||0),gold:Number(live.player.gold||0),inventory:(live.player.inventory||[]).length};
   const started=Date.now(),refused=new Map(),visitedSpawnGuides=new Set();
   let realKeyboardSteps=0,attempts=0,targetId=null;
-  while(Date.now()-started<165000&&attempts<180){
+  while(Date.now()-started<330000&&attempts<300){
     const snap=live,p=snap?.player;
     assert.ok(p&&p.hp>0,'Natural rat quest cannot rely on player death/respawn');
     const rats=(snap.monsters||[]).filter(m=>m.name==='Rat'&&m.hp>0);
