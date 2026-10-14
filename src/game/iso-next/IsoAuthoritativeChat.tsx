@@ -18,5 +18,6 @@ export function IsoAuthoritativeChat({snapshot}:{snapshot:any}){
     }
     broadcastChat(playerName,text.trim(),'#ffffff','world');
   };
-  return <Chat messages={messages} social={social} onSendMessage={send}/>;
+  return <Chat messages={messages} social={social} onSendMessage={send}
+    placement={window.innerWidth>=720?'iso-desktop':undefined}/>;
 }

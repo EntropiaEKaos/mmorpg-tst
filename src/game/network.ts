@@ -68,6 +68,13 @@ class NetworkClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setInterval> | null = null;
   private authPayload: { sessionToken: string; characterName: string } | null = null;
+  // Coalesce 20Hz server state into the next browser frame. A slow renderer must
+  // not replay stale world positions while queued keyboard input keeps moving.
+  private pendingSnapshot: NetMessage | null = null;
+  private snapshotFrame: number | null = null;
+  private pendingEvents: any[] = [];
+  private pendingTerrainPatch: any = null;
+  private pendingTerrainMapId = '';
   private manuallyDisconnected = false;
   public mode: 'offline' | 'local' | 'online' = 'offline';
   public serverUrl: string | null = null;
@@ -85,6 +92,53 @@ class NetworkClient {
     for (const h of this.handlers) {
       try { h(msg); } catch {}
     }
+  }
+
+  private clearQueuedSnapshot() {
+    if (this.snapshotFrame !== null) cancelAnimationFrame(this.snapshotFrame);
+    this.snapshotFrame = null;
+    this.pendingSnapshot = null;
+    this.pendingEvents = [];
+    this.pendingTerrainPatch = null;
+    this.pendingTerrainMapId = '';
+  }
+
+  private queueSnapshot(msg: NetMessage) {
+    const payload = msg.payload;
+    const mapId = String(payload?.player?.mapId || '');
+    if (this.pendingSnapshot && String(this.pendingSnapshot.payload?.player?.mapId || '') !== mapId) {
+      // A world transition invalidates events and terrain from the old map.
+      this.pendingEvents = [];
+      this.pendingTerrainPatch = null;
+      this.pendingTerrainMapId = '';
+    }
+    if (Array.isArray(payload?.events)) {
+      this.pendingEvents.push(...payload.events);
+      if (this.pendingEvents.length > 200) this.pendingEvents = this.pendingEvents.slice(-200);
+    }
+    if (payload?.terrainPatch) {
+      this.pendingTerrainPatch = payload.terrainPatch;
+      this.pendingTerrainMapId = mapId;
+    }
+    this.pendingSnapshot = msg;
+    if (this.snapshotFrame !== null) return;
+    this.snapshotFrame = requestAnimationFrame(() => {
+      this.snapshotFrame = null;
+      const latest = this.pendingSnapshot;
+      if (!latest) return;
+      const latestMap = String(latest.payload?.player?.mapId || '');
+      const patch = this.pendingTerrainMapId === latestMap ? this.pendingTerrainPatch : null;
+      const events = this.pendingEvents;
+      this.pendingSnapshot = null;
+      this.pendingTerrainPatch = null;
+      this.pendingTerrainMapId = '';
+      this.pendingEvents = [];
+      this.emit({ ...latest, payload: {
+        ...latest.payload,
+        ...(patch ? { terrainPatch: patch } : {}),
+        events,
+      } });
+    });
   }
 
   connectLocal(): boolean {
@@ -123,15 +177,19 @@ class NetworkClient {
           finish(true);
         };
         socket.onmessage = ev => {
+          if (this.ws !== socket) return;
           try {
             const msg = JSON.parse(ev.data) as NetMessage;
             if (msg.kind === 'auth_error') setSnapshot(null);
-            this.emit(msg);
+            if (msg.kind === 'snapshot') this.queueSnapshot(msg);
+            else this.emit(msg);
           } catch {}
         };
         socket.onerror = () => finish(false);
         socket.onclose = () => {
-          if (this.ws === socket) this.ws = null;
+          if (this.ws !== socket) return;
+          this.ws = null;
+          this.clearQueuedSnapshot();
           setSnapshot(null);
           this.mode = this.channel ? 'local' : 'offline';
         };
@@ -181,6 +239,7 @@ class NetworkClient {
 
   disconnect() {
     this.manuallyDisconnected = true;
+    this.clearQueuedSnapshot();
     this.send({ kind: 'player:leave', payload: { id: this.clientId } });
     try { this.channel?.close(); } catch {}
     try { this.ws?.close(); } catch {}
