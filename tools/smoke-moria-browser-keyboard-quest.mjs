@@ -56,18 +56,24 @@ async function walk(page,map,goal){
     assert.ok(route?.length,`No server-accepted path from (${p.x},${p.y}) to NPC; rejected=${[...rejectedTiles].join('|')}`);
     const code=route[0],direction=directions.find(d=>d[2]===code);
     const target={x:p.x+direction[0],y:p.y+direction[1]};
-    // Keep the real key held until an authoritative position change is seen.
-    // A 46ms tap can be shorter than a browser rendering/input interval.
+    // The renderer can be slow under SwiftShader. Never hold a key while
+    // waiting for a snapshot: the server can move many cells before the
+    // browser paints the first one, which overshoots waypoints and walls.
+    // Playwright sends a bounded physical keydown/keyup, then waits released.
+    const beforeMoveCount=intents.filter(x=>x.type==='move').length;
+    await page.keyboard.press(code,{delay:105});
     let changed=false;
-    await page.keyboard.down(code);
     try{
       await page.waitForFunction(previous=>{
         const hero=window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player;
         return hero&&(hero.x!==previous.x||hero.y!==previous.y);
-      },{x:p.x,y:p.y},{timeout:1600});
+      },{x:p.x,y:p.y},{timeout:5000});
       changed=true;
-    }catch{}finally{await page.keyboard.up(code)}
+    }catch{}
     const fresh=(await readSnapshot(page))?.player;
+    if(!changed&&intents.filter(x=>x.type==='move').length===beforeMoveCount){
+      console.warn('CHROMIUM KEY NOT SAMPLED',JSON.stringify({code,from:{x:p.x,y:p.y}}));
+    }
     if(changed||(fresh?.x!==p.x||fresh?.y!==p.y)){
       legalSteps++;failuresByTile.clear();
     }else{
