@@ -345,6 +345,32 @@ try {
   const cast=await waitForIntent('cast',castStart);
   assert.equal(cast.payload.spellIndex,slot);
   report.push(`Desktop numbered hotbar: keyboard slot ${slot+1} sent official server-bound cast intent`);
+  // The combat chooser is deliberately opt-in: screenshots of the default HUD
+  // remain unchanged, while the menu uses only real server monster snapshots.
+  await online.locator('[data-testid="iso-shortcuts-toggle"]').click();
+  const hostileToggle=online.locator('[data-testid="iso-open-nearby-hostiles"]');
+  await hostileToggle.waitFor({state:'visible'});
+  await hostileToggle.click();
+  const hostilePanel=online.locator('[data-testid="iso-nearby-hostiles"]');
+  await hostilePanel.waitFor({state:'visible'});
+  const hostileRows=hostilePanel.locator('[data-testid="iso-nearby-enemy"]');
+  const hostileCount=await hostileRows.count();
+  assert.ok(hostileCount>0||await hostilePanel.locator('[data-testid="iso-nearby-no-hostiles"]').isVisible(),
+    'Combat panel must render authoritative nearby monsters or a true empty state');
+  if(hostileCount>0){
+    const attackButton=hostilePanel.locator('[data-testid="iso-nearby-attack"]').first();
+    const targetId=await attackButton.getAttribute('data-monster-id');
+    assert.ok(targetId,'Attack button must reference a real monster id from server snapshot');
+    const attackStart=desktopIntents.length;
+    await attackButton.click();
+    const attackIntent=await waitForIntent('attack',attackStart);
+    assert.equal(attackIntent.payload.monsterId,targetId,
+      'Desktop attack UI must issue the public authoritative target id, not fake combat damage');
+  }
+  await online.screenshot({path:`${output}/online-desktop-nearby-combat.png`,fullPage:false});
+  report.push(`Desktop nearby enemies: ${hostileCount} server-rendered targets, public attack control ${hostileCount?'sent real attack intent':'shows safe empty state'}`);
+  await hostileToggle.click();
+  await online.locator('[data-testid="iso-shortcuts-toggle"]').click();
   await online.getByRole('button', { name: 'Sair', exact: true }).click();
   await online.getByRole('button', { name: /JOGO RÁPIDO OFFLINE/i }).waitFor({ state: 'visible' });
   const afterLogout = await online.evaluate(() => ({
