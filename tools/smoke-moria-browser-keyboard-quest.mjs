@@ -60,13 +60,13 @@ function monsterBlocked(snapshot,padding=0){
   return result;
 }
 async function walk(page,map,goal){
-  let legalSteps=0,retries=0,skipped=0,attempted=0;
+  let legalSteps=0,retries=0,totalRetries=0,skipped=0,attempted=0;
   const rejected=new Map();
   const began=Date.now();
   for(let i=0;i<420;i++){
     const snapshot=latestWireSnapshot,p=snapshot?.player;
     assert.ok(Number.isFinite(p?.x)&&Number.isFinite(p?.y),'Authoritative wire snapshot must include player x/y');
-    if(goal(p))return {legalSteps,retries,skipped,position:{x:p.x,y:p.y},elapsedMs:Date.now()-began};
+    if(goal(p))return {legalSteps,retries:totalRetries,skipped,position:{x:p.x,y:p.y},elapsedMs:Date.now()-began};
     assert.ok(Date.now()-began<180000,`Keyboard travel exceeded three-minute QA budget; position=${p.x},${p.y}`);
     for(const [tile,expiry] of rejected)if(expiry<i)rejected.delete(tile);
     const exclusions=new Set(rejected.keys());
@@ -78,7 +78,7 @@ async function walk(page,map,goal){
       // Lack of an immediate ACK is not proof of a permanent wall.
       // Clear learned transient denials before deciding there is no route.
       if(rejected.size){console.log('CHROMIUM ROUTE RESET',JSON.stringify({position:{x:p.x,y:p.y},stale:[...rejected.keys()]}));rejected.clear();await sleep(200);continue;}
-      retries++;
+      retries++;totalRetries++;
       if(retries>20)throw Error(`No collision-legal route to NPC from ${p.x},${p.y}; monsters=${snapshot.monsters?.length||0}`);
       await sleep(350);
       continue;
@@ -94,10 +94,10 @@ async function walk(page,map,goal){
         const hero=serverHero();
         return hero&&(hero.x!==p.x||hero.y!==p.y);
       },'server-authorized keyboard position update',1800);
-      legalSteps++;
+      legalSteps++;retries=0;
       if(legalSteps%12===0)console.log('CHROMIUM WALK PROGRESS',JSON.stringify({legalSteps,position:serverHero()&&{x:serverHero().x,y:serverHero().y},attempted,retries}));
     }catch{
-      retries++;
+      retries++;totalRetries++;
       const sent=intents.filter(x=>x.type==='move').length-previousCount;
       if(sent===0){skipped++;await sleep(110);continue;}
       // Missing ACK can be a slow Chromium frame or a rejected server move.
@@ -110,7 +110,7 @@ async function walk(page,map,goal){
         from:{x:p.x,y:p.y},destination,retries,attempted,monsters:snapshot.monsters?.length||0,
         latestServerPosition,sockets
       }));
-      assert.ok(retries<30,`Keyboard movement did not receive server-confirmed progress at (${p.x},${p.y}); last target ${key(destination.x,destination.y)}, occupied=${occupied}, sent=${sent}`);
+      assert.ok(retries<12,`Consecutive keyboard movements did not receive server-confirmed progress at (${p.x},${p.y}); last target ${key(destination.x,destination.y)}, occupied=${occupied}, sent=${sent}`);
     }
     await sleep(105);
   }
