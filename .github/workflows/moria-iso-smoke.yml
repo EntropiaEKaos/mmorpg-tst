@@ -20,6 +20,7 @@ on:
       - 'server/server.js'
       - 'tools/smoke-moria-iso.mjs'
       - 'tools/smoke-moria-browser-keyboard-quest.mjs'
+      - 'tools/smoke-moria-browser-natural-combat.mjs'
       - 'server/tools/smoke-desktop-online-quest.mjs'
       - 'docs/MORIA_DESKTOP_RELEASE_TRACK.md'
       - '.github/workflows/moria-iso-smoke.yml'
@@ -84,6 +85,11 @@ jobs:
         env:
           MORIA_DESKTOP_ONLY: ${{ (github.event_name == 'pull_request' || inputs.include_mobile == false) && '1' || '0' }}
         run: node tools/smoke-moria-iso.mjs
+      - name: Prove real Chromium Rat combat, XP and ground loot through desktop UI
+        env:
+          MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
+          MORIA_TEST_BASE: http://127.0.0.1:3000
+        run: node tools/smoke-moria-browser-natural-combat.mjs
       - name: Print server log on failure
         if: failure()
         run: cat "$RUNNER_TEMP/moria-qa-server.log" || true
