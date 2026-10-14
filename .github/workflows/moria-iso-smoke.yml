@@ -76,6 +76,11 @@ jobs:
           MORIA_PLAYER_DB: ${{ runner.temp }}/moria-qa-players.json
           MORIA_TEST_BASE: http://127.0.0.1:3000
         run: node server/tools/smoke-desktop-online-quest.mjs
+      - name: Prove real Chromium Rat combat, XP and ground loot through desktop UI
+        env:
+          MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
+          MORIA_TEST_BASE: http://127.0.0.1:3000
+        run: node tools/smoke-moria-browser-natural-combat.mjs
       - name: Prove desktop arrow-key walk and UI quest acceptance in Chromium
         env:
           MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
@@ -85,11 +90,6 @@ jobs:
         env:
           MORIA_DESKTOP_ONLY: ${{ (github.event_name == 'pull_request' || inputs.include_mobile == false) && '1' || '0' }}
         run: node tools/smoke-moria-iso.mjs
-      - name: Prove real Chromium Rat combat, XP and ground loot through desktop UI
-        env:
-          MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
-          MORIA_TEST_BASE: http://127.0.0.1:3000
-        run: node tools/smoke-moria-browser-natural-combat.mjs
       - name: Print server log on failure
         if: failure()
         run: cat "$RUNNER_TEMP/moria-qa-server.log" || true
