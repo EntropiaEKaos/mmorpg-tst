@@ -80,16 +80,16 @@ jobs:
         env:
           MORIA_DESKTOP_ONLY: ${{ (github.event_name == 'pull_request' || inputs.include_mobile == false) && '1' || '0' }}
         run: node tools/smoke-moria-iso.mjs
-      - name: Prove desktop arrow-key walk and UI quest acceptance in Chromium
-        env:
-          MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
-          MORIA_TEST_BASE: http://127.0.0.1:3000
-        run: node tools/smoke-moria-browser-keyboard-quest.mjs
       - name: Prove a natural Rat loses real HP after Chromium UI attack
         env:
           MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
           MORIA_TEST_BASE: http://127.0.0.1:3000
         run: node tools/smoke-moria-browser-natural-attack.mjs
+      - name: Prove desktop arrow-key walk and UI quest acceptance in Chromium
+        env:
+          MORIA_CONTENT_DB: ${{ runner.temp }}/moria-qa-content.json
+          MORIA_TEST_BASE: http://127.0.0.1:3000
+        run: node tools/smoke-moria-browser-keyboard-quest.mjs
       - name: Print server log on failure
         if: failure()
         run: cat "$RUNNER_TEMP/moria-qa-server.log" || true
