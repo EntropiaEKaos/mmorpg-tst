@@ -84,7 +84,7 @@ try{
   const authored=WORLD.starterRatSpawns(map,10);
   assert.ok(authored.length===10,'Rats must be reachable from authored spawn terrain');
   const before={kills:Number(live.player.stats?.monstersKilled||0),xp:Number(live.player.xp||0),gold:Number(live.player.gold||0),inventory:(live.player.inventory||[]).length};
-  const started=Date.now(),refused=new Map();
+  const started=Date.now(),refused=new Map(),visitedSpawnGuides=new Set();
   let realKeyboardSteps=0,attempts=0,targetId=null;
   while(Date.now()-started<165000&&attempts<180){
     const snap=live,p=snap?.player;
@@ -92,18 +92,30 @@ try{
     const rats=(snap.monsters||[]).filter(m=>m.name==='Rat'&&m.hp>0);
     const blocked=occupied(snap);
     // Live server monsters always take precedence over authored spawn guides.
-    const goals=rats.length?rats.map(m=>({at:m,goal:q=>dist(q,m)<=1})):
-      authored.map(pos=>({at:pos,goal:q=>dist(q,pos)<=3}));
+    // Try live Rat coordinates first, but also explore the server-authored
+    // spawn guides when nearby monsters have already wandered out of view.
+    const goals=[
+      ...rats.map(m=>({at:m,kind:'rat',goal:q=>dist(q,m)<=1})),
+      ...authored.filter(pos=>!visitedSpawnGuides.has(coords(pos.x,pos.y)))
+        .map(pos=>({at:pos,kind:'guide',goal:q=>dist(q,pos)<=3}))
+    ];
     const possible=goals.map(item=>({...item,path:route(map,p,item.goal,new Set([...blocked,...refused.keys()]))}))
       .filter(x=>x.path).sort((a,b)=>a.path.length-b.path.length);
     if(!possible.length){refused.clear();await sleep(250);continue;}
     const selected=possible[0];
-    if(rats.length&&selected.path.length===0){
+    if(selected.kind==='rat'&&selected.path.length===0){
       targetId=String(selected.at.id);
       assert.ok(dist(p,selected.at)<=1,'Hero reached a live, naturally spawned Rat');
       break;
     }
-    if(selected.path.length===0){await sleep(300);continue;}
+    if(selected.path.length===0){
+      // The spawn coordinate may be empty because natural AI moved the Rat.
+      // Mark it explored instead of waiting forever on the same empty tile.
+      visitedSpawnGuides.add(coords(selected.at.x,selected.at.y));
+      console.log('CHROMIUM RAT SPAWN EXPLORED',JSON.stringify({position:{x:p.x,y:p.y},guide:selected.at,explored:visitedSpawnGuides.size}));
+      await sleep(120);
+      continue;
+    }
     const code=selected.path[0],d=directions.find(x=>x[2]===code),cell=coords(p.x+d[0],p.y+d[1]);
     const oldIntents=intents.filter(x=>x.type==='move').length;
     await page.keyboard.press(code,{delay:35});attempts++;
@@ -117,7 +129,7 @@ try{
     }
     for(const [k,expiry] of refused)if(expiry<attempts)refused.delete(k);
   }
-  assert.ok(targetId,`No naturally spawned Rat reached via physical keyboard; steps=${realKeyboardSteps}, position=${JSON.stringify(live?.player&&{x:live.player.x,y:live.player.y})}`);
+  assert.ok(targetId,`No naturally spawned Rat reached via physical keyboard; steps=${realKeyboardSteps}, exploredSpawnGuides=${visitedSpawnGuides.size}, position=${JSON.stringify(live?.player&&{x:live.player.x,y:live.player.y})}`);
   assert.ok(realKeyboardSteps>0,'Real keyboard travel must occur before fighting');
   await page.locator('[data-testid="iso-shortcuts-toggle"]').click();
   await page.locator('[data-testid="iso-open-nearby-hostiles"]').click();
