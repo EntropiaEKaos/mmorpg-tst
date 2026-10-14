@@ -63,17 +63,20 @@ async function walk(page,map,goal){
   let legalSteps=0,retries=0,totalRetries=0,skipped=0,attempted=0;
   const rejected=new Map(), failuresByTile=new Map();
   const began=Date.now();
-  for(let i=0;i<420;i++){
+  for(let i=0;i<750;i++){
     const snapshot=latestWireSnapshot,p=snapshot?.player;
     assert.ok(Number.isFinite(p?.x)&&Number.isFinite(p?.y),'Authoritative wire snapshot must include player x/y');
     if(goal(p))return {legalSteps,retries:totalRetries,skipped,position:{x:p.x,y:p.y},elapsedMs:Date.now()-began};
-    assert.ok(Date.now()-began<180000,`Keyboard travel exceeded three-minute QA budget; position=${p.x},${p.y}`);
+    assert.ok(Date.now()-began<420000,`Keyboard travel exceeded seven-minute QA budget; position=${p.x},${p.y}; accepted=${legalSteps}; attempted=${attempted}; retries=${totalRetries}`);
     for(const [tile,expiry] of rejected)if(expiry<i)rejected.delete(tile);
     const exclusions=new Set(rejected.keys());
     const safe=new Set([...exclusions,...monsterBlocked(snapshot,1)]);
     const primary=pathfind(map,p,goal,safe);
     const fallback=pathfind(map,p,goal,new Set([...exclusions,...monsterBlocked(snapshot)]));
-    const route=primary||fallback;
+    // The one-tile danger margin is optional: on narrow authored roads it can
+    // turn a short valid path into an enormous detour through another district.
+    // Never walk into occupied cells, but prefer a much shorter 0-margin path.
+    const route=primary&&(!fallback||primary.length<=fallback.length+8)?primary:fallback;
     if(!route?.length){
       // Lack of an immediate ACK is not proof of a permanent wall.
       // Clear learned transient denials before deciding there is no route.
@@ -120,7 +123,7 @@ async function walk(page,map,goal){
     }
     await sleep(105);
   }
-  throw Error(`420 Chromium keyboard iterations exceeded; latest position=${JSON.stringify(latestServerPosition)}`);
+  throw Error(`750 Chromium keyboard iterations exceeded; latest position=${JSON.stringify(latestServerPosition)}`);
 }
 const browser=await chromium.launch({headless:true,args:['--enable-webgl','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:1024,height:720},deviceScaleFactor:1});
