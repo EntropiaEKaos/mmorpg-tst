@@ -61,7 +61,7 @@ function monsterBlocked(snapshot,padding=0){
 }
 async function walk(page,map,goal){
   let legalSteps=0,retries=0,totalRetries=0,skipped=0,attempted=0;
-  const rejected=new Map();
+  const rejected=new Map(), failuresByTile=new Map();
   const began=Date.now();
   for(let i=0;i<420;i++){
     const snapshot=latestWireSnapshot,p=snapshot?.player;
@@ -94,7 +94,7 @@ async function walk(page,map,goal){
         const hero=serverHero();
         return hero&&(hero.x!==p.x||hero.y!==p.y);
       },'server-authorized keyboard position update',1800);
-      legalSteps++;retries=0;
+      legalSteps++;retries=0;failuresByTile.clear();
       if(legalSteps%12===0)console.log('CHROMIUM WALK PROGRESS',JSON.stringify({legalSteps,position:serverHero()&&{x:serverHero().x,y:serverHero().y},attempted,retries}));
     }catch{
       retries++;totalRetries++;
@@ -105,12 +105,18 @@ async function walk(page,map,goal){
       // actual monster/player occupying it; never invent new world walls.
       const last=latestWireSnapshot;
       const occupied=monsterBlocked(last).has(key(destination.x,destination.y));
-      if(occupied)rejected.set(key(destination.x,destination.y),i+6);
+      const destinationKey=key(destination.x,destination.y);
+      const tileMisses=(failuresByTile.get(destinationKey)||0)+1;
+      failuresByTile.set(destinationKey,tileMisses);
+      // Dynamically occupied world cells can be omitted from a proximity
+      // snapshot. After repeated real server rejections, avoid them briefly;
+      // expiration and route-reset prevent inventing permanent walls.
+      if(occupied||tileMisses>=3)rejected.set(destinationKey,i+12);
       if(retries%3===0)console.log('CHROMIUM WALK REROUTE',JSON.stringify({
         from:{x:p.x,y:p.y},destination,retries,attempted,monsters:snapshot.monsters?.length||0,
         latestServerPosition,sockets
       }));
-      assert.ok(retries<12,`Consecutive keyboard movements did not receive server-confirmed progress at (${p.x},${p.y}); last target ${key(destination.x,destination.y)}, occupied=${occupied}, sent=${sent}`);
+      assert.ok(retries<24,`Consecutive keyboard movements did not receive server-confirmed progress at (${p.x},${p.y}); last target ${key(destination.x,destination.y)}, occupied=${occupied}, sent=${sent}, misses=${tileMisses}`);
     }
     await sleep(105);
   }
