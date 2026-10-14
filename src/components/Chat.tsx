@@ -9,13 +9,14 @@ interface Props {
   messages: ChatMessage[];
   onSendMessage?: (text: string, channel: SendChannel) => void;
   social?: any;
+  placement?: 'iso-desktop';
 }
 
 type Filter = 'all' | ChatMessage['channel'];
 
 const CHANNEL_LABELS: Record<string, string> = { all:'TODOS', world:'MUNDO', say:'FALAR', party:'GRUPO', guild:'GUILDA', trade:'COMÉRCIO', battle:'BATALHA', loot:'SAQUE', quest:'MISSÃO', system:'SISTEMA' };
 
-function ChatInner({ messages, onSendMessage, social }: Props) {
+function ChatInner({ messages, onSendMessage, social, placement }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [sendChannel, setSendChannel] = useState<SendChannel>('world');
   const [input, setInput] = useState('');
@@ -47,10 +48,11 @@ function ChatInner({ messages, onSendMessage, social }: Props) {
   return (
     <MovableHudWindow
       id="chat"
+      positionKey={placement === 'iso-desktop' ? 'iso-desktop-chat' : undefined}
       title={tr('Chat')}
       className={`${expanded ? 'h-[390px] w-[520px]' : 'h-[204px] w-[330px]'} max-w-[calc(100vw-16px)]`}
       contentClassName="flex h-[calc(100%-28px)] flex-col"
-      defaultStyle={{ left: 8, bottom: 8 }}
+      defaultStyle={placement === 'iso-desktop' ? { right: 8, bottom: 8 } : { left: 8, bottom: 8 }}
     >
       <div className="flex shrink-0 items-center gap-1 border-b border-amber-200/10 px-2 py-1.5">
         <div className="moria-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto">
@@ -83,6 +85,7 @@ function ChatInner({ messages, onSendMessage, social }: Props) {
 }
 
 function areEqual(prev: Props, next: Props) {
+  if (prev.placement !== next.placement) return false;
   if (prev.messages === next.messages && prev.onSendMessage === next.onSendMessage && prev.social === next.social) return true;
   if (prev.messages.length !== next.messages.length) return false;
   const lastPrev = prev.messages[prev.messages.length - 1];

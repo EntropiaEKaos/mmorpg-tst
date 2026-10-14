@@ -84,3 +84,16 @@ test('login endpoint throttles brute-force attempts', async t => {
   const spoofed = await post(port, '/api/auth/login', { username, password: 'wrong-password-spoof' }, { 'X-Forwarded-For': '203.0.113.99' });
   assert.equal(spoofed.status, 429);
 });
+
+test('legacy route serves the built SPA while missing assets stay 404', async t => {
+  const { port, ready } = startServer(t);
+  await ready;
+
+  const legacy = await fetch(`http://127.0.0.1:${port}/legacy`);
+  assert.equal(legacy.status, 200);
+  assert.match(legacy.headers.get('content-type') || '', /text\/html/);
+  assert.match(await legacy.text(), /id=["']root["']/);
+
+  const missingAsset = await fetch(`http://127.0.0.1:${port}/assets/moria-nonexistent-file.js`);
+  assert.equal(missingAsset.status, 404);
+});
