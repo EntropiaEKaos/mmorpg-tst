@@ -43,75 +43,77 @@ function pathfind(map,from,goal,blocked){
   const path=[];for(let k=destination;parents.get(k);){const p=parents.get(k);path.push(p.code);k=p.id}
   return path.reverse();
 }
+// Use the latest genuinely received WebSocket snapshot for navigation.
+// This is read-only observation; every move still originates from a physical
+// Playwright keyboard event in the actual ISO client.
 async function readSnapshot(page){return page.evaluate(()=>window.__MORIA_AUTHORITATIVE_SNAPSHOT__)}
-async function walk(page,map,goal){
-  let legalSteps=0,retries=0;
-  const rejectedTiles=new Set(),failuresByTile=new Map();
-  for(let i=0;i<600;i++){
-    const snapshot=await readSnapshot(page),p=snapshot?.player;
-    assert.ok(Number.isFinite(p?.x)&&Number.isFinite(p?.y),'Real snapshot must contain player x/y');
-    if(goal(p))return {legalSteps,retries,position:{x:p.x,y:p.y},rejectedTiles:[...rejectedTiles]};
-    const blocked=new Set([...rejectedTiles,...(snapshot.monsters||[]).filter(m=>m.hp>0).map(m=>key(m.x,m.y))]);
-    const route=pathfind(map,p,goal,blocked);
-    assert.ok(route?.length,`No server-accepted path from (${p.x},${p.y}) to NPC; rejected=${[...rejectedTiles].join('|')}`);
-    const code=route[0],direction=directions.find(d=>d[2]===code);
-    const target={x:p.x+direction[0],y:p.y+direction[1]};
-    // The renderer can be slow under SwiftShader. Never hold a key while
-    // waiting for a snapshot: the server can move many cells before the
-    // browser paints the first one, which overshoots waypoints and walls.
-    // Playwright sends a bounded physical keydown/keyup, then waits released.
-    const beforeMoveCount=intents.filter(x=>x.type==='move').length;
-    await page.keyboard.press(code,{delay:35});
-    let changed=false;
-    try{
-      await page.waitForFunction(previous=>{
-        const hero=window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player;
-        return hero&&(hero.x!==previous.x||hero.y!==previous.y);
-      },{x:p.x,y:p.y},{timeout:5000});
-      changed=true;
-    }catch{}
-    const fresh=(await readSnapshot(page))?.player;
-    if(!changed&&intents.filter(x=>x.type==='move').length===beforeMoveCount){
-      console.warn('CHROMIUM KEY NOT SAMPLED',JSON.stringify({code,from:{x:p.x,y:p.y}}));
-    }
-    if(changed||(fresh?.x!==p.x||fresh?.y!==p.y)){
-      legalSteps++;failuresByTile.clear();
-    }else{
-      retries++;
-      const tile=key(target.x,target.y),failures=(failuresByTile.get(tile)||0)+1;
-      failuresByTile.set(tile,failures);
-      if(failures===2){
-        // Real server can reject destinations that are walkable in the static
-        // tile map (ownership gates, occupancy, dynamic collision). Learn from
-        // actual ACK snapshots rather than retrying the same cell forever.
-        rejectedTiles.add(tile);failuresByTile.delete(tile);
-        console.log('CHROMIUM SERVER-BLOCKED TILE',JSON.stringify({
-          tile,from:{x:p.x,y:p.y},key:code,reason:'No authoritative movement after real intents',
-          blockedTiles:[...rejectedTiles]
-        }));
-      }
-      if(retries===3||retries===5){
-        const focus=await page.evaluate(()=>({
-          activeElement:document.activeElement?.tagName,
-          hidden:document.hidden,
-          pixi:document.querySelector('[data-testid="iso-next-canvas"]')?.getAttribute('data-pixi-mount')
-        }));
-        console.log('CHROMIUM KEYBOARD MOVE RETRY',JSON.stringify({
-          retries,from:{x:p.x,y:p.y},wanted:target,key:code,
-          moveIntents:intents.filter(x=>x.type==='move').length,
-          firstMoves:intents.filter(x=>x.type==='move').slice(0,8).map(x=>x.payload),
-          wireSnapshotCount,latestServerPosition,lastServerEvent,sockets,focus
-        }));
-      }
-      assert.ok(rejectedTiles.size<24&&retries<70,`Navigation cannot find server-accepted route at (${p.x},${p.y}); rejected=${[...rejectedTiles].join('|')}; move intents=${intents.filter(x=>x.type==='move').length}; latest server=${JSON.stringify(latestServerPosition)}`);
-    }
+function serverHero(){return latestWireSnapshot?.player}
+function monsterBlocked(snapshot,padding=0){
+  const result=new Set();
+  for(const monster of snapshot?.monsters||[]){
+    if(monster.dead||monster.hp<=0)continue;
+    for(let dy=-padding;dy<=padding;dy++)
+      for(let dx=-padding;dx<=padding;dx++)
+        if(Math.abs(dx)+Math.abs(dy)<=padding)result.add(key(monster.x+dx,monster.y+dy));
   }
-  throw Error(`600 Chromium route attempts without reaching the official NPC; rejected=${[...rejectedTiles].join('|')}`);
+  for(const other of snapshot?.nearbyPlayers||[])result.add(key(other.x,other.y));
+  return result;
+}
+async function walk(page,map,goal){
+  let legalSteps=0,retries=0,skipped=0,attempted=0;
+  const rejected=new Map();
+  const began=Date.now();
+  for(let i=0;i<420;i++){
+    const snapshot=latestWireSnapshot,p=snapshot?.player;
+    assert.ok(Number.isFinite(p?.x)&&Number.isFinite(p?.y),'Authoritative wire snapshot must include player x/y');
+    if(goal(p))return {legalSteps,retries,skipped,position:{x:p.x,y:p.y},elapsedMs:Date.now()-began};
+    assert.ok(Date.now()-began<180000,`Keyboard travel exceeded three-minute QA budget; position=${p.x},${p.y}`);
+    for(const [tile,expiry] of rejected)if(expiry<i)rejected.delete(tile);
+    const exclusions=new Set(rejected.keys());
+    const safe=new Set([...exclusions,...monsterBlocked(snapshot,1)]);
+    const primary=pathfind(map,p,goal,safe);
+    const fallback=pathfind(map,p,goal,new Set([...exclusions,...monsterBlocked(snapshot)]));
+    const route=primary||fallback;
+    if(!route?.length){
+      retries++;
+      if(retries>16)throw Error(`No safe route to NPC from ${p.x},${p.y}; monsters=${snapshot.monsters?.length||0}`);
+      await sleep(350);
+      continue;
+    }
+    const code=route[0],direction=directions.find(d=>d[2]===code);
+    const destination={x:p.x+direction[0],y:p.y+direction[1]};
+    const previousCount=intents.filter(x=>x.type==='move').length;
+    // New desktop keydown sends one real intent immediately; releasing quickly
+    // prevents SwiftShader delays from causing multi-tile key holds.
+    await page.keyboard.press(code,{delay:35});attempted++;
+    try{
+      await until(()=>{
+        const hero=serverHero();
+        return hero&&(hero.x!==p.x||hero.y!==p.y);
+      },'server-authorized keyboard position update',1800);
+      legalSteps++;
+      if(legalSteps%12===0)console.log('CHROMIUM WALK PROGRESS',JSON.stringify({legalSteps,position:serverHero()&&{x:serverHero().x,y:serverHero().y},attempted,retries}));
+    }catch{
+      retries++;
+      const sent=intents.filter(x=>x.type==='move').length-previousCount;
+      if(sent===0){skipped++;await sleep(110);continue;}
+      // A physical move arrived but the server rejected it. Treat the cell
+      // as temporarily blocked, not as a permanent map mutation.
+      rejected.set(key(destination.x,destination.y),i+32);
+      if(retries%3===0)console.log('CHROMIUM WALK REROUTE',JSON.stringify({
+        from:{x:p.x,y:p.y},destination,retries,attempted,monsters:snapshot.monsters?.length||0,
+        latestServerPosition,sockets
+      }));
+      assert.ok(retries<30,`Thirty refused keyboard moves at (${p.x},${p.y}); last target ${key(destination.x,destination.y)}`);
+    }
+    await sleep(105);
+  }
+  throw Error(`420 Chromium keyboard iterations exceeded; latest position=${JSON.stringify(latestServerPosition)}`);
 }
 const browser=await chromium.launch({headless:true,args:['--enable-webgl','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:1024,height:720},deviceScaleFactor:1});
 const errors=[],intents=[],catalogs=[],sockets=[];
-let latestServerPosition=null,wireSnapshotCount=0,lastServerEvent=null;
+let latestServerPosition=null,latestWireSnapshot=null,wireSnapshotCount=0,lastServerEvent=null;
 page.on('pageerror',error=>errors.push(error.message));
 page.on('websocket',ws=>{
   const tracker={id:sockets.length+1,authSent:0,authOk:0,authError:0,moves:0,snapshots:0};sockets.push(tracker);
@@ -119,7 +121,7 @@ page.on('websocket',ws=>{
     try{const p=JSON.parse(String(frame.payload));if(p.kind==='content_sync')catalogs.push(p.payload);
       if(p.kind==='auth_ok')tracker.authOk++;
       if(p.kind==='auth_error')tracker.authError++;
-      if(p.kind==='snapshot'){tracker.snapshots++;wireSnapshotCount++;const hero=p.payload?.player;if(hero)latestServerPosition={x:hero.x,y:hero.y,mapId:hero.mapId};lastServerEvent=p.payload?.events?.slice(-2)}}catch{}
+      if(p.kind==='snapshot'){tracker.snapshots++;wireSnapshotCount++;latestWireSnapshot=p.payload;const hero=p.payload?.player;if(hero)latestServerPosition={x:hero.x,y:hero.y,mapId:hero.mapId};lastServerEvent=p.payload?.events?.slice(-2)}}catch{}
   });
   ws.on('framesent',frame=>{
     try{const p=JSON.parse(String(frame.payload));if(p.kind==='auth')tracker.authSent++;
@@ -151,9 +153,8 @@ try{
   WORLD.syncContentMaps(contentDB.get('maps'));
   const map=WORLD.getMap(npc.mapId);
   assert.ok(map,'Authored terrain map required for route planning');
-  const near=p=>Math.abs(p.x-Number(npc.posX))<=2
-    &&Math.abs(p.y-Number(npc.posY))<=2;
-  const start=await readSnapshot(page);
+  const near=p=>Math.abs(p.x-Number(npc.posX))+Math.abs(p.y-Number(npc.posY))<=2;
+  const start=latestWireSnapshot;
   assert.equal(start?.player?.mapId,npc.mapId,'Hero must spawn on authored NPC map');
   assert.ok(!near(start.player),'Player should spawn away from quest giver');
   const walked=await walk(page,map,near);
@@ -168,9 +169,9 @@ try{
   await accept.click();
   await until(()=>intents.slice(before).some(x=>x.type==='quest_accept'&&x.payload?.questId===quest.id),
     'UI-issued public quest_accept intent');
-  await page.waitForFunction(questId=>window.__MORIA_AUTHORITATIVE_SNAPSHOT__?.player
-    ?.quests?.active?.some(q=>q.questId===questId),quest.id,{timeout:14000});
-  const snapshot=await readSnapshot(page),active=snapshot.player.quests.active.find(q=>q.questId===quest.id);
+  await until(()=>latestWireSnapshot?.player?.quests?.active?.some(q=>q.questId===quest.id),
+    'server-confirmed active quest after browser button click',14000);
+  const snapshot=latestWireSnapshot,active=snapshot.player.quests.active.find(q=>q.questId===quest.id);
   assert.equal(active.current,0);
   assert.equal(snapshot.player.mapId,npc.mapId);
   assert.ok(near(snapshot.player),'NPC proximity must be confirmed by the server');
