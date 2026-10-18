@@ -49,12 +49,13 @@ function occupied(snapshot){
 }
 const browser=await chromium.launch({headless:true,args:['--enable-webgl','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:1024,height:720},deviceScaleFactor:1});
-let live=null,messages=0;
+let live=null,messages=0,authenticatedSessions=0;
 const intents=[],errors=[];
 page.on('pageerror',err=>errors.push(err.message));
 page.on('websocket',ws=>{
   ws.on('framereceived',frame=>{try{
     const p=JSON.parse(String(frame.payload));
+    if(p.kind==='auth_ok')authenticatedSessions++;
     if(p.kind==='snapshot'){live=p.payload;messages++;}
   }catch{}});
   ws.on('framesent',frame=>{try{
@@ -169,15 +170,67 @@ try{
   const pickupIntent=await until(()=>intents.slice(pickupIntentBefore).find(x=>x.type==='pickup'),'official pickup intent from inventory UI',3500);
   await until(()=>Number(live?.player?.gold||0)>before.gold||(live?.player?.inventory||[]).length>before.inventory,'server-issued loot collection',8000);
   await page.screenshot({path:'artifacts/moria-iso-smoke/desktop-natural-rat-loot-collected.png'});
+  // Verify the actual collected reward survives leaving the browser session.
+  // A new authenticated WebSocket + page reload must recover persisted server
+  // state; no direct save API, localStorage injection or fake responses.
+  const persistedBeforeLogout={
+    kills:Number(live.player.stats?.monstersKilled||0),
+    xp:Number(live.player.xp||0),
+    gold:Number(live.player.gold||0),
+    inventory:JSON.stringify(live.player.inventory||[]),
+    level:Number(live.player.level||1)
+  };
+  assert.ok(persistedBeforeLogout.gold>before.gold||
+    JSON.parse(persistedBeforeLogout.inventory).length>before.inventory,
+    'The browser must own genuinely collected server loot before testing relogin');
+  const firstSessions=authenticatedSessions;
+  await page.keyboard.press('i'); // close the inventory before using the account menu
+  await page.getByRole('button',{name:'Sair',exact:true}).click();
+  await page.getByRole('button',{name:/JOGO RÁPIDO OFFLINE/i}).waitFor({state:'visible'});
+  await page.reload({waitUntil:'domcontentloaded'});
+  live=null;
+  await page.locator('[autocomplete="username"]').fill(username);
+  await page.locator('[autocomplete="current-password"]').fill(password);
+  await page.locator('button.moria-button-primary').last().click();
+  await page.locator('[data-testid="iso-next-root"]').waitFor({state:'visible'});
+  await page.getByText('Servidor autoritativo • LIVE').waitFor({state:'visible',timeout:20000});
+  await until(()=>authenticatedSessions>firstSessions&&live?.player?.stats,
+    'fresh authenticated browser session with authoritative persisted player',16000);
+  const afterRelogin=live.player;
+  const persistenceProof={
+    freshAuthConfirmed:authenticatedSessions>firstSessions,
+    killsBefore:persistedBeforeLogout.kills,
+    killsAfter:Number(afterRelogin.stats?.monstersKilled||0),
+    xpBefore:persistedBeforeLogout.xp,
+    xpAfter:Number(afterRelogin.xp||0),
+    goldBefore:persistedBeforeLogout.gold,
+    goldAfter:Number(afterRelogin.gold||0),
+    inventoryUnchanged:JSON.stringify(afterRelogin.inventory||[])===persistedBeforeLogout.inventory,
+    levelBefore:persistedBeforeLogout.level,
+    levelAfter:Number(afterRelogin.level||1)
+  };
+  assert.equal(persistenceProof.killsAfter,persistenceProof.killsBefore,
+    'Server-recovered monster kills must match the real previous browser session');
+  assert.equal(persistenceProof.xpAfter,persistenceProof.xpBefore,
+    'XP from the natural Rat kill must be persisted through browser relogin');
+  assert.equal(persistenceProof.goldAfter,persistenceProof.goldBefore,
+    'Loot collected by UI must survive browser logout, refresh and relogin');
+  assert.equal(persistenceProof.inventoryUnchanged,true,
+    'Loot and inventory from the browser must survive player DB persistence');
+  assert.equal(persistenceProof.levelAfter,persistenceProof.levelBefore,
+    'Player progression must survive relogin');
+  await page.screenshot({path:'artifacts/moria-iso-smoke/desktop-natural-rat-after-relogin.png'});
   assert.equal(errors.length,0,`Uncaught page exceptions: ${errors.join('; ')}`);
   const proof={mode:'real Chromium UI + authenticated public HTTP/WS',monsterId:targetId,
     firstMonsterHp:startingHp,realKeyboardSteps,moveAttempts:attempts,attackClicks,
     damageObserved:damageProven,monsterKills:1,xpBefore:before.xp,xpAfter:live.player.xp,
     groundPilesBeforePickup:piles.length,pickupGroundId:pickupIntent.payload?.groundId,
-    goldBefore:before.gold,goldAfter:live.player.gold,websocketSnapshots:messages,
+    goldBefore:before.gold,goldAfter:persistedBeforeLogout.gold,websocketSnapshots:messages,
+    persistence:persistenceProof,authenticatedSessions,
     completedAt:new Date().toISOString()};
   await fs.writeFile('artifacts/moria-iso-smoke/desktop-natural-rat-combat-loot.json',JSON.stringify(proof,null,2));
   console.log('MORIA CHROMIUM NATURAL RAT COMBAT AND LOOT PASS:',JSON.stringify(proof));
+  console.log('MORIA CHROMIUM RAT LOOT AND XP RELOGIN PASS:',JSON.stringify(persistenceProof));
 }catch(error){
   // Evidence must survive CI failure too: show what the actual client painted
   // and the last legitimate WS state, never substitute a fabricated screenshot.
